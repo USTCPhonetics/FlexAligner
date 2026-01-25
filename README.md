@@ -127,8 +127,8 @@ config = AlignmentConfig(
 aligner = FlexAligner(config=vars(config))
 ```
 # 3. Align
-# Returns a list of 'Chunk' objects containing tensors and timestamps
 ```python
+# Returns a list of 'Chunk' objects containing tensors and timestamps
 chunks = aligner.align("corpus/SP01.wav", "corpus/SP01.txt", "output/SP01.TextGrid")
 
 print(f"Aligned {len(chunks)} valid segments.")
