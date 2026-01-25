@@ -2,3 +2,11 @@ __MACOSX
 src/flexaligner/models
 src/flexaligner/test
 Toolkit
+models
+*.out
+*.pyc
+*.out
+*.sh
+.vscode
+.github
+src/flexaligner.egg-info

@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flexaligner"
+version = "0.1.0"
+description = "Robust speech-text alignment framework with CTC Chunking and CE local alignment."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    {name = "Wang Yiming", email = "your_email@example.com"}
+]
+# 核心运行依赖
+dependencies = [
+    "torch>=2.0.0",
+    "torchaudio",
+    "transformers",
+    "soundfile",
+    "numpy",
+    "praatio",  # 处理 TextGrid 的工业级标准库
+    "tqdm",
+]
+
+# 定义可选依赖（用于开发和测试）
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+    "pytest-cov",
+]
+dev = [
+    "ruff",    # 现代化的代码检查工具
+]
+
+# 命令行工具：安装后直接输入 flex-align 就能跑
+[project.scripts]
+flex-align = "flexaligner.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
