@@ -9,7 +9,8 @@ description = "Robust speech-text alignment framework with CTC Chunking and CE l
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
-    {name = "Wang Yiming", email = "your_email@example.com"}
+    {name = "Wang Yiming", email = "wangyiming0369@gmail.com"},
+    {name = "Jiahong Yuan", email = "jiahongyuan@ustc.edu.cn"}
 ]
 # 核心运行依赖
 dependencies = [

@@ -1,12 +1,51 @@
-__MACOSX
-src/flexaligner/models
-src/flexaligner/test
-Toolkit
-models
+# ==========================================
+# 🌌 FlexAligner Project Ignore List
+# ==========================================
+
+# --- 系统残骸 ---
+.DS_Store
+__MACOSX/
+Thumbs.db
+
+# --- Python 运行缓存 ---
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- 编译与打包 (非常重要，防止把本地安装信息传上去) ---
+build/
+dist/
+*.egg-info/
+src/*.egg-info/
+.eggs/
+
+# --- 核心数据与模型 (绝对不要传到 GitHub，这些该去 HuggingFace) ---
+# 忽略所有存放模型权重的文件夹
+models/
+src/flexaligner/models/
+# 忽略实验产生的大规模音频或结果
+assets/examples/*.TextGrid
+*.wav
+*.mp4
+
+# --- 开发环境配置 ---
+.vscode/
+.idea/
+.env
+.venv
+env/
+venv/
+
+# --- 临时文件 ---
 *.out
-*.pyc
-*.out
-*.sh
-.vscode
-.github
-src/flexaligner.egg-info
+*.log
+temp/
+tests/outputs/
+
+# --- 修正：.github 文件夹必须保留！ ---
+# 因为我们刚写的 CI/CD 工作流文件就在 .github/workflows/ 里面
+# 如果你忽略了它，云端自动化测试就永远不会启动。
+!.github/
