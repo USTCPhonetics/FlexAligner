@@ -1,0 +1,10 @@
+Some weights of the model checkpoint at models/hf_phs were not used when initializing Wav2Vec2ForCTC: ['wav2vec2.encoder.pos_conv_embed.conv.weight_g', 'wav2vec2.encoder.pos_conv_embed.conv.weight_v']
+- This IS expected if you are initializing Wav2Vec2ForCTC from the checkpoint of a model trained on another task or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPreTraining model).
+- This IS NOT expected if you are initializing Wav2Vec2ForCTC from the checkpoint of a model that you expect to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model).
+Some weights of Wav2Vec2ForCTC were not initialized from the model checkpoint at models/hf_phs and are newly initialized: ['wav2vec2.encoder.pos_conv_embed.conv.parametrizations.weight.original0', 'wav2vec2.encoder.pos_conv_embed.conv.parametrizations.weight.original1']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[INFO] Using device: cpu
+[OK] SP01_001: wrote SP01_001.phones.ctm
+[OK] Combined TextGrid written: ./test/SP01_001.TextGrid
+[OK] TSV written: ./test/SP01_001.words.tsv (tier=words)
+[OK] TSV written: ./test/SP01_001.phones.tsv (tier=phones)
