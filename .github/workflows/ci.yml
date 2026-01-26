@@ -35,17 +35,17 @@ jobs:
         # 补全生成模拟数据和音频处理所需的库
         pip install numpy scipy soundfile hf_transfer
 
-    - name: Generate Mock Assets for CI
-      run: |
-        mkdir -p assets/examples
-        # 生成 1 秒的模拟音频 (16kHz, Mono)
-        python -c "import numpy as np; from scipy.io import wavfile; data=np.zeros(16000, dtype=np.int16); wavfile.write('assets/examples/SP01_001.wav', 16000, data)"
+    # - name: Generate Mock Assets for CI
+    #   run: |
+    #     mkdir -p assets/examples
+    #     # 生成 1 秒的模拟音频 (16kHz, Mono)
+    #     python -c "import numpy as np; from scipy.io import wavfile; data=np.zeros(16000, dtype=np.int16); wavfile.write('assets/examples/SP01_001.wav', 16000, data)"
         
-        # ⚠️ 关键修改：使用 Lexicon 中肯定存在的词，防止 OOV 报错
-        # 如果你的词典是中文音素，就写对应的拼音或音素；如果是英文，写简单单词
-        # 这里建议写一个最通用的单词，或者根据你 lexicon 的内容来
-        echo "hello" > assets/examples/SP01_001.txt
-        echo "✅ Mock assets (hello) generated successfully."
+    #     # ⚠️ 关键修改：使用 Lexicon 中肯定存在的词，防止 OOV 报错
+    #     # 如果你的词典是中文音素，就写对应的拼音或音素；如果是英文，写简单单词
+    #     # 这里建议写一个最通用的单词，或者根据你 lexicon 的内容来
+    #     echo "hello" > assets/examples/SP01_001.txt
+    #     echo "✅ Mock assets (hello) generated successfully."
 
     - name: Run Pytest
       env:
