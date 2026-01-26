@@ -21,12 +21,34 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Install dependencies
+    - name: Install System Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libsndfile1
+
+    - name: Install Python Dependencies
       run: |
         python -m pip install --upgrade pip
         pip install .[test]
+        # 补全生成模拟数据和音频处理所需的库
+        pip install numpy scipy soundfile
+
+    - name: Generate Mock Assets for CI
+      run: |
+        # 创建测试所需的目录结构
+        mkdir -p assets/examples
+        # 编写并运行一个极简脚本生成 1 秒的模拟音频 (16kHz, Mono)
+        python -c "import numpy as np; from scipy.io import wavfile; data=np.zeros(16000, dtype=np.int16); wavfile.write('assets/examples/SP01_001.wav', 16000, data)"
+        # 生成对应的文本文件
+        echo "测试音频内容" > assets/examples/SP01_001.txt
+        echo "✅ Mock assets generated successfully."
 
     - name: Run Pytest
+      env:
+        # 强制环境变量，让代码在国内/国外环境都能自适应（GitHub Actions 环境走原站通常没问题）
+        # 如果你想让 CI 跑得更快，可以试着指向镜像，但通常没必要
+        HF_ENDPOINT: https://huggingface.co
       run: |
-        # 即使没有 GPU 也能跑 CPU 推理测试
+        # 启动胜利测试
+        # 如果内存爆了 (OOM)，请将此命令改为: pytest tests/test_victory_lap.py -v --maxfail=1
         pytest tests/test_victory_lap.py
