@@ -98,7 +98,7 @@ def test_pipeline_real_run_ctc(check_assets, clean_output):
     # 4. 运行对齐
     output_tg = clean_output / "SP01_001.TextGrid"
     
-    print(f"\n[Test] 开始运行 CTC 推理，加载模型可能需要几秒钟...")
+    print("\n[Test] 开始运行 CTC 推理，加载模型可能需要几秒钟...")
     chunks = aligner.align(str(WAV_PATH), str(TXT_PATH), str(output_tg))
 
     # 5. 验证结果 (Assertions)
@@ -139,8 +139,8 @@ def test_pipeline_dynamic_precision(check_assets, clean_output):
     aligner = FlexAligner(config=asdict(config))
     output_tg = clean_output / "SP01_001_dynamic.TextGrid"
     
-    print(f"\n[Test] 正在运行高精度模式 (Dynamic Hop)...")
-    chunks = aligner.align(str(WAV_PATH), str(TXT_PATH), str(output_tg))
+    print("\n[Test] 正在运行高精度模式 (Dynamic Hop)...")
+    _chunks = aligner.align(str(WAV_PATH), str(TXT_PATH), str(output_tg))
 
     # 3. 验证
     assert output_tg.exists()

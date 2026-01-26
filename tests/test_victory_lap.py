@@ -65,12 +65,12 @@ def test_stage_2_high_precision_victory(victory_env, tmp_path):
     aligner = FlexAligner(config=asdict(config))
     output_tg = tmp_path / "dynamic.TextGrid"
     
-    chunks = aligner.align(str(WAV_PATH), str(TXT_PATH), str(output_tg))
+    _chunks = aligner.align(str(WAV_PATH), str(TXT_PATH), str(output_tg))
     
     # 终极物理逻辑检查
     # 这里我们模拟 diff 里的发现：最后一个 NULL 的开始时间
     # 应该和最后一个音素的结束时间实现微秒级的闭合
-    print(f"[V] Dynamic 对齐成功，自校准逻辑已生效")
+    print("[V] Dynamic 对齐成功，自校准逻辑已生效")
 
 def test_final_symbolic_emergence(victory_env):
     """象征性断言：宣告 FlexAligner 从信号到符号的涌现主线完成"""

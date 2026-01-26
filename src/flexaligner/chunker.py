@@ -1,9 +1,7 @@
 import torch
 import json
-import math
-import re
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple, Any
+from typing import List, Dict
 from dataclasses import dataclass
 from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
 
@@ -108,7 +106,7 @@ class CTCChunker:
             except OSError:
                 # 如果失败，尝试作为 repo_id + subfolder="hf_phs" 加载
                 # (这是为了适配你说的 USTCPhonetics/FlexAligner/hf_phs 结构)
-                print(f"[CTCChunker] Direct load failed. Trying with subfolder='hf_phs'...")
+                print("[CTCChunker] Direct load failed. Trying with subfolder='hf_phs'...")
                 self.processor = Wav2Vec2Processor.from_pretrained(model_path, subfolder="hf_phs")
                 self.model = Wav2Vec2ForCTC.from_pretrained(model_path, subfolder="hf_phs").to(self.device)
 
@@ -245,7 +243,7 @@ class CTCChunker:
                     new_phones = cand.phones + pron
                     try:
                         new_ids = [self.phone_to_id[p] for p in new_phones]
-                    except KeyError as e:
+                    except KeyError:
                          # 某些生僻音素不在模型词表中
                         continue
                     
@@ -325,7 +323,8 @@ class CTCChunker:
 
     def _pad_chunks(self, chunks, words, audio_dur):
         """向两侧安全地填充静音"""
-        if not chunks: return []
+        if not chunks: 
+            return []
         out = []
         
         # 为了快速查找，建立 word map
@@ -375,7 +374,7 @@ def build_trellis(log_probs: torch.Tensor, targets: List[int], blank_id: int) ->
 
 def backtrace(trellis: torch.Tensor, log_probs: torch.Tensor, targets: List[int], blank_id: int) -> List[Point]:
     """回溯寻找最佳路径点"""
-    T = trellis.size(0) - 1
+    _T = trellis.size(0) - 1
     N = trellis.size(1) - 1
     j = N
     t = int(torch.argmax(trellis[:, j]).item())
@@ -397,7 +396,8 @@ def backtrace(trellis: torch.Tensor, log_probs: torch.Tensor, targets: List[int]
 
 def points_to_segments(points: List[Point], labels: List[str]) -> List[Segment]:
     """将点转换为区间"""
-    if not points: return []
+    if not points: 
+        return []
     segs = []
     for i, p in enumerate(points):
         start = p.time_index

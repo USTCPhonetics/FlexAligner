@@ -56,7 +56,7 @@ def main():
     
     # 打印启动信息
     print("="*60)
-    print(f"🚀 FlexAligner (v0.1.0)")
+    print("🚀 FlexAligner (v0.1.0)")
     print(f"   Mode:    {'✨ Dynamic Precision' if args.dynamic else '📜 Baseline (Classic)'}")
     print(f"   Device:  {config.device}")
     print(f"   Output:  {output_path.name}")
@@ -72,7 +72,7 @@ def main():
         
         t_end = time.time()
         print("-" * 60)
-        print(f"✅ Alignment Successful!")
+        print("✅ Alignment Successful!")
         print(f"   - Chunks: {len(chunks)}")
         print(f"   - Time:   {t_end - t0:.2f}s")
         print(f"   - Saved:  {output_path.absolute()}")

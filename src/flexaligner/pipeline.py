@@ -1,6 +1,4 @@
-import torch
 from pathlib import Path
-from typing import List, Tuple
 from .io import load_audio, load_text
 # 延迟导入防止循环依赖，但在函数内部导入是安全的
 # from .chunker import CTCChunker
@@ -81,9 +79,9 @@ class FlexAligner:
 
         def format_tier(name, segments):
             lines = []
-            lines.append(f'        class = "IntervalTier"')
+            lines.append('        class = "IntervalTier"')
             lines.append(f'        name = "{name}"')
-            lines.append(f'        xmin = 0') 
+            lines.append('        xmin = 0') 
             lines.append(f'        xmax = {fmt(duration)}') 
             lines.append(f'        intervals: size = {len(segments)}')
             

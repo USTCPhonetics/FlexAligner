@@ -79,9 +79,11 @@ class PronouncingDictionary:
         with open(path, "r", encoding="utf-8") as f:
             for ln in f:
                 ln = ln.strip()
-                if not ln or ln.startswith("#"): continue
+                if not ln or ln.startswith("#"): 
+                    continue
                 parts = ln.split()
-                if len(parts) < 2: continue
+                if len(parts) < 2: 
+                    continue
                 # 同时也存一份原始大小写，以防万一
                 w = parts[0]
                 pd.add(w, parts[1:])
@@ -346,7 +348,7 @@ def align_beam_viterbi(
 ) -> AlignmentResult:
     # ... (搬运你的 align_beam_viterbi 逻辑) ...
     T, V = logp.shape
-    S = len(graph.states)
+    # S = len(graph.states)
     
     lp_stay = math.log(p_stay)
     lp_move = math.log(1.0 - p_stay)

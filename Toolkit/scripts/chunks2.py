@@ -31,15 +31,13 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Iterable
+from typing import Dict, List, Tuple, Optional
 # 在文件最开头的 import 区域加入：
 import soundfile as sf
 import torch
-import torchaudio
 from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
 
 
@@ -161,7 +159,7 @@ def backtrace(trellis: torch.Tensor, log_probs: torch.Tensor, targets: List[int]
     Backtrace best path from trellis.
     Returns list of Points with (token_index, time_index) when token was consumed.
     """
-    T = trellis.size(0) - 1
+    _T = trellis.size(0) - 1
     N = trellis.size(1) - 1
 
     j = N
@@ -408,7 +406,8 @@ def read_ctm_words(ctm_path: Path) -> List[WordSeg]:
                 continue
             _utt, _ch, start, dur, word = parts[:5]
             try:
-                s = float(start); d = float(dur)
+                s = float(start)
+                d = float(dur)
             except ValueError:
                 continue
             if d <= 0:
@@ -548,7 +547,7 @@ def save_chunk_wavs_and_manifests(
     else:
         wav = wav.t()          # (T, C) -> (C, T)
 
-    audio_dur_s = wav.size(1) / sr
+    # audio_dur_s = wav.size(1) / sr
 
     jsonl_path = out_dir / f"{base}.chunks.jsonl"
     tsv_path = out_dir / f"{base}.chunks.tsv"

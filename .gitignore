@@ -6,6 +6,8 @@
 .DS_Store
 __MACOSX/
 Thumbs.db
+Toolkit
+models_hidden
 
 # --- Python 运行缓存 ---
 __pycache__/
@@ -49,3 +51,5 @@ tests/outputs/
 # 因为我们刚写的 CI/CD 工作流文件就在 .github/workflows/ 里面
 # 如果你忽略了它，云端自动化测试就永远不会启动。
 !.github/
+robust_upload.py
+Toolkit/scripts
