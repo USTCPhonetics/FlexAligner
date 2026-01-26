@@ -1,0 +1,8 @@
+# --- FlexAligner Minimum Runtime ---
+torch>=2.0.0
+torchaudio
+transformers
+huggingface-hub<1.0
+numpy
+soundfile
+tqdm

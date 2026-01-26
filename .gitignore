@@ -54,3 +54,4 @@ tests/outputs/
 robust_upload.py
 Toolkit/scripts
 hf.sh
+generate_requirement.py
