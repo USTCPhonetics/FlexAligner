@@ -128,14 +128,24 @@ class LocalAligner:
             return 
 
         print(f"[LocalAligner] Loading model from {model_path}...")
+        
+        # 核心逻辑：智能路由子文件夹
+        # 如果 model_path 指向本地已存在的文件夹，通常不需要 subfolder
+        # 如果是 Hugging Face 的 Repo ID (如 USTCPhonetics/FlexAligner)，必须进入 ce2
+        is_local_dir = os.path.isdir(model_path)
+        load_kwargs = {}
+        if not is_local_dir:
+             load_kwargs["subfolder"] = "ce2"
+
         try:
-            # 使用 AutoModelForCTC，和你的脚本保持一致
+            # 策略 A: 尝试带 subfolder 加载（如果是云端 ID）或直接加载（如果是本地路径）
+            self.processor = AutoProcessor.from_pretrained(model_path, **load_kwargs)
+            self.model = AutoModelForCTC.from_pretrained(model_path, **load_kwargs).to(self.device)
+        except (OSError, ValueError) as e:
+            # 策略 B: Fallback - 如果策略 A 失败，尝试完全不带 subfolder（兼容本地已进入 ce2 内部的情况）
+            print(f"[LocalAligner] Subfolder routing failed ({e}), falling back to root...")
             self.processor = AutoProcessor.from_pretrained(model_path)
             self.model = AutoModelForCTC.from_pretrained(model_path).to(self.device)
-        except OSError:
-            # Fallback
-            self.processor = AutoProcessor.from_pretrained(model_path, subfolder="ce2")
-            self.model = AutoModelForCTC.from_pretrained(model_path, subfolder="ce2").to(self.device)
             
         self.model.eval()
         self.phone_to_id = self.processor.tokenizer.get_vocab()

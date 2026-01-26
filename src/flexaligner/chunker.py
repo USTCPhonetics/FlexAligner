@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import List, Dict
 from dataclasses import dataclass
 from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
-
+import os
 # 引入我们在 io.py 定义的数据结构
 from .io import AudioChunk
 
@@ -89,33 +89,34 @@ class CTCChunker:
             with open(phone_path, "r", encoding="utf-8") as f:
                 self.phone_to_id = json.load(f)
         
-        # 3. 加载模型 (Lazy Loading 也可以，这里为了简单直接加载)
-        model_path = self.config.get("chunk_model_path")
+        # 3. 加载模型
         model_path = self.config.get("chunk_model_path")
         
         if model_path:
             print(f"[CTCChunker] Loading model from {model_path}...")
             
-            # 智能判断：如果路径里不包含 "/" (不太可能) 或者是本地存在的目录 -> 直接加载
-            # 如果是 HF Repo ID 且我们需要子文件夹 -> 加参数
-            
+            # 探测逻辑：如果是云端 Repo ID (非本地存在路径)，则默认加上 subfolder
+            is_local_dir = os.path.isdir(model_path)
+            load_kwargs = {}
+            if not is_local_dir:
+                load_kwargs["subfolder"] = "hf_phs"
+
             try:
-                # 尝试直接加载 (适用于本地路径 或 标准HF仓库)
+                # 尝试加载 (根据探测结果决定是否带 subfolder)
+                self.processor = Wav2Vec2Processor.from_pretrained(model_path, **load_kwargs)
+                self.model = Wav2Vec2ForCTC.from_pretrained(model_path, **load_kwargs).to(self.device)
+            except (OSError, ValueError) as e:
+                # Fallback: 捕获由于目录结构不匹配导致的错误 (OSError) 或 AutoConfig 识别失败 (ValueError)
+                print(f"[CTCChunker] Routing logic failed ({e}). Trying fallback to root...")
                 self.processor = Wav2Vec2Processor.from_pretrained(model_path)
                 self.model = Wav2Vec2ForCTC.from_pretrained(model_path).to(self.device)
-            except OSError:
-                # 如果失败，尝试作为 repo_id + subfolder="hf_phs" 加载
-                # (这是为了适配你说的 USTCPhonetics/FlexAligner/hf_phs 结构)
-                print("[CTCChunker] Direct load failed. Trying with subfolder='hf_phs'...")
-                self.processor = Wav2Vec2Processor.from_pretrained(model_path, subfolder="hf_phs")
-                self.model = Wav2Vec2ForCTC.from_pretrained(model_path, subfolder="hf_phs").to(self.device)
 
             self.model.eval()
             
             # 确定 blank_id
             blank_token = self.config.get("blank_token", "<pad>")
             if blank_token not in self.phone_to_id:
-                # 尝试自动获取
+                # 尝试从 processor 自动获取
                 blank_token = self.processor.tokenizer.pad_token or "<pad>"
             self.blank_id = self.phone_to_id.get(blank_token, 0)
 
