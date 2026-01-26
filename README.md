@@ -29,7 +29,7 @@
 
 ## 📖 Introduction
 
-**FlexAligner** is a robust speech-text alignment framework designed to supersede traditional HMM-GMM approaches (like MFA) in the deep learning era.
+**FlexAligner** is a neural-based speech-text alignment framework designed to complement and extend traditional HMM-GMM approaches (such as MFA) by leveraging the powerful representation capabilities of self-supervised learning models.
 
 In real-world linguistics research, audio and transcription are rarely strictly matched. Insertions (laughter/noise), deletions (missing words), and transcription drift often cause "domino effect" errors in traditional aligners.
 
