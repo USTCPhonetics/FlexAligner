@@ -29,26 +29,31 @@ jobs:
     - name: Install Python Dependencies
       run: |
         python -m pip install --upgrade pip
+        # 强制安装兼容版本，解决 transformers 冲突
+        pip install "huggingface-hub<1.0"
         pip install .[test]
         # 补全生成模拟数据和音频处理所需的库
-        pip install numpy scipy soundfile
+        pip install numpy scipy soundfile hf_transfer
 
     - name: Generate Mock Assets for CI
       run: |
-        # 创建测试所需的目录结构
+        # 创建测试所需的目录结构，解决测试断言报错
         mkdir -p assets/examples
-        # 编写并运行一个极简脚本生成 1 秒的模拟音频 (16kHz, Mono)
+        # 生成 1 秒的静音模拟音频 (16kHz, Mono)
         python -c "import numpy as np; from scipy.io import wavfile; data=np.zeros(16000, dtype=np.int16); wavfile.write('assets/examples/SP01_001.wav', 16000, data)"
-        # 生成对应的文本文件
+        # 生成对应的转写文本
         echo "测试音频内容" > assets/examples/SP01_001.txt
         echo "✅ Mock assets generated successfully."
 
     - name: Run Pytest
       env:
-        # 强制环境变量，让代码在国内/国外环境都能自适应（GitHub Actions 环境走原站通常没问题）
-        # 如果你想让 CI 跑得更快，可以试着指向镜像，但通常没必要
+        # 核心：从 GitHub Secrets 中安全注入你的 HF 令牌
+        HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        # GitHub Actions 运行环境直连原站鉴权最稳
         HF_ENDPOINT: https://huggingface.co
+        # 强制 CPU 推理模式，防止云端找不到 GPU 报错
+        CUDA_VISIBLE_DEVICES: ""
       run: |
-        # 启动胜利测试
-        # 如果内存爆了 (OOM)，请将此命令改为: pytest tests/test_victory_lap.py -v --maxfail=1
-        pytest tests/test_victory_lap.py
+        # 执行点火测试
+        # 增加了 -v (详细) 和 -s (显示输出)，方便我们在 Actions 日志里看模型下载进度
+        pytest -v -s tests/test_victory_lap.py
