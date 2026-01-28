@@ -6,7 +6,7 @@
 .DS_Store
 __MACOSX/
 Thumbs.db
-Toolkit
+Toolkit/
 models_hidden
 
 # --- Python 运行缓存 ---
@@ -55,3 +55,4 @@ robust_upload.py
 Toolkit/scripts
 hf.sh
 generate_requirement.py
+test.ipynb
