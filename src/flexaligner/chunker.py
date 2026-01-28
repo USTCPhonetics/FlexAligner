@@ -79,7 +79,7 @@ class CTCChunker:
 
 
     def _load_resources(self):
-        """加载词典和模型配置"""
+        """加载词典和模型配置（通用化重构版）"""
         # 1. 加载 Lexicon
         lex_path = self.config.get("lexicon_path")
         if lex_path:
@@ -91,65 +91,62 @@ class CTCChunker:
             with open(phone_path, "r", encoding="utf-8") as f:
                 self.phone_to_id = json.load(f)
         
-        # 3. 加载模型 (核心重构区)
+        # 3. 加载模型 (Global Loading Logic)
         model_path = self.config.get("chunk_model_path")
+        if not model_path: return
+
+        print(f"[CTCChunker] Requesting model: {model_path}")
+
+        # --- 配置加载参数 ---
+        load_kwargs = {}
         
-        if model_path:
-            print(f"[CTCChunker] Loading model from: {model_path}")
+        # 策略 A: 官方特供版 (包含子目录)
+        # 只有我们的官方库需要这个 subfolder 参数，其他通用模型不需要
+        if "USTCPhonetics/FlexAligner" in model_path:
+            print("[CTCChunker] Mode: Official Repo (with subfolder)")
+            load_kwargs["subfolder"] = "hf_phs"
             
-            # --- 智能路径判定逻辑 ---
-            is_abs_path = os.path.isabs(model_path)
-            path_exists = os.path.exists(model_path)
+        # 策略 B: 用户指定的本地路径
+        elif os.path.isdir(model_path):
+            print("[CTCChunker] Mode: Local Override")
+            # 本地路径不需要额外参数，transformers 会自动识别
             
-            # 情况 A: 是本地路径 (必须存在) -> 不加 subfolder
-            if path_exists and os.path.isdir(model_path):
-                print("[CTCChunker] Detected VALID LOCAL model path.")
-                load_args = {}
-            
-            # 情况 B: 是绝对路径但不存在 -> 直接物理熔断，不丢给 HF
-            elif is_abs_path and not path_exists:
-                raise FileNotFoundError(f"Local model path not found: {model_path}")
+        # 策略 C: 通用 Hugging Face 模型 (如 English 模型)
+        # e.g., "facebook/wav2vec2-base-960h"
+        else:
+            print("[CTCChunker] Mode: Generic HF Hub (Cache -> Download)")
+            # 不需要 subfolder，直接加载
 
-            # 情况 C: 是 HF Repo ID (非绝对路径，且包含 /) -> 判断是否为官方库
-            elif "/" in model_path:
-                print("[CTCChunker] Detected HUGGINGFACE REPO ID.")
-                # 针对 USTCPhonetics/FlexAligner 这种官方库，必须指定子目录
-                if "USTCPhonetics" in model_path: 
-                    load_args = {"subfolder": "hf_phs"}
-                else:
-                    load_args = {}
+        # --- 统一执行加载 ---
+        # transformers 的 from_pretrained 默认逻辑就是：
+        # 1. 检查 model_path 是否为本地文件夹 -> 是则加载
+        # 2. 检查 ~/.cache/huggingface 下是否有缓存 -> 是则加载
+        # 3. 联网下载 -> 下载并缓存
+        try:
+            from transformers import AutoProcessor, Wav2Vec2ForCTC
             
-            # 情况 D: 只有名字 (如 "facebook/wav2vec2-base") -> 默认不加 subfolder
-            else:
-                load_args = {}
+            self.processor = AutoProcessor.from_pretrained(model_path, **load_kwargs)
+            self.model = Wav2Vec2ForCTC.from_pretrained(model_path, **load_kwargs).to(self.device)
+            self.model.eval()
+            print(f"[CTCChunker] Successfully loaded model from {model_path}")
             
-            # --- 统一加载 ---
-            try:
-                # 使用 AutoProcessor 兼容性更好
-                self.processor = AutoProcessor.from_pretrained(model_path, **load_args)
-                self.model = Wav2Vec2ForCTC.from_pretrained(model_path, **load_args).to(self.device)
-                self.model.eval()
-                
-            except Exception as e:
-                # 只有在明确失败时才打印，并抛出更清晰的错误给 Pytest 捕获
-                raise RuntimeError(
-                    f"Model load failed from '{model_path}' with args {load_args}.\n"
-                    f"Error details: {e}\n"
-                    "Tip: If local, check 'preprocessor_config.json'. If Cloud, check network."
-                )
+        except Exception as e:
+            raise RuntimeError(
+                f"Model load failed.\n"
+                f"Path: {model_path}\n"
+                f"Args: {load_kwargs}\n"
+                f"Error: {e}\n"
+                "Check network connection or model name."
+            )
 
-            # 4. 确定 blank_id
-            # 优先从 config 拿，拿不到去 phone_to_id 找 <pad>，再不行问 tokenizer
-            blank_token = self.config.get("blank_token", "<pad>")
-            
-            if blank_token in self.phone_to_id:
-                self.blank_id = self.phone_to_id[blank_token]
-            elif hasattr(self.processor, "tokenizer") and self.processor.tokenizer.pad_token_id is not None:
-                # 兼容 HF Tokenizer 的逻辑
-                self.blank_id = self.processor.tokenizer.pad_token_id
-            else:
-                # 最后的兜底
-                self.blank_id = 0
+        # 4. 确定 blank_id (保持不变)
+        blank_token = self.config.get("blank_token", "<pad>")
+        if blank_token in self.phone_to_id:
+            self.blank_id = self.phone_to_id[blank_token]
+        elif hasattr(self.processor, "tokenizer") and self.processor.tokenizer.pad_token_id is not None:
+            self.blank_id = self.processor.tokenizer.pad_token_id
+        else:
+            self.blank_id = 0
     @torch.inference_mode()
     def find_chunks(self, audio_tensor: torch.Tensor, text_list: List[str]) -> List[AudioChunk]:
         """
