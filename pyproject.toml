@@ -14,6 +14,7 @@ authors = [
 ]
 
 # 核心运行依赖 (L1: FAST 模式)
+# 确保中英双语清洗、基础计算、模型加载的物理闭环
 dependencies = [
     "torch>=2.0.0",
     "torchaudio",
@@ -25,11 +26,13 @@ dependencies = [
     "tqdm",
     "jieba",
     "g2p_en",
-    "chardet",   # 编码识别开销极小，建议保留在核心
+    "num2words", # [NEW] 核心依赖：英语数字归一化
+    "chardet",   # 编码识别
+    "nltk",      # g2p_en 的底层支持
 ]
 
 [project.optional-dependencies]
-# L2: 坦克级鲁棒模式所需的重型依赖
+# L2: 坦克级鲁棒模式所需的重型依赖 (音频处理增强)
 robust = [
     "librosa",
 ]
@@ -45,6 +48,7 @@ test = [
 dev = [
     "ruff",
 ]
+# 确保 CI 或开发者使用 'pip install -e .[all]' 时能覆盖所有组件
 all = [
     "flexaligner[robust,secure,test,dev]",
 ]
@@ -58,3 +62,7 @@ include = ["flexaligner*"]
 
 [tool.setuptools.package-data]
 flexaligner = ["assets/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

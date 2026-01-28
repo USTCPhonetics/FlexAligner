@@ -5,9 +5,9 @@ import jieba
 import nltk
 from g2p_en import G2p
 from typing import List
-from num2words import num2words  # 引入专业数字转文字库
 
-# 延迟导入，防止 FAST 模式下因为缺少依赖而报错
+# 延迟导入区：核心防御逻辑
+# 防止因为缺少非核心库导致 FAST 模式无法启动
 try:
     import librosa
 except ImportError:
@@ -17,6 +17,9 @@ try:
     import chardet
 except ImportError:
     chardet = None
+
+# [Lazy Import] num2words 不需要顶层导入，避免 IO 开销
+num2words = None 
 
 class TextFrontend:
     def __init__(self, config=None, mode="FAST"):
@@ -28,7 +31,7 @@ class TextFrontend:
         self.mode = mode.upper()
         self.target_sr = 16000
         
-        # 预加载核心组件 (Jieba 是必须的)
+        # 预加载核心组件 (Jieba 是必须的，但 num2words 只有用到时才加载)
         if self.mode != "FAST": 
             print(f"[Frontend] Initializing in {self.mode} mode...")
             
@@ -38,8 +41,7 @@ class TextFrontend:
         # 依赖检查
         self._check_dependencies()
 
-        # [完备增强] 英语清洗规则：缩写展开映射表
-        # 包含了对单引号的完整处理，防止残留
+        # 英语清洗规则：缩写展开映射表
         self._en_abbreviations = {
             r"i'm": "i am",
             r"it's": "it is",
@@ -81,9 +83,19 @@ class TextFrontend:
 
     def _normalize_numbers(self, text: str) -> str:
         """
-        [NEW] 使用 num2words 进行专业的英语数字归一化
-        处理逻辑：寻找所有独立的数字串，并将其转换为单词。支持年份识别。
+        [ROBUST] 延迟加载 num2words 进行数字归一化
         """
+        # 1. 尝试动态导入
+        global num2words
+        if num2words is None:
+            try:
+                from num2words import num2words as n2w_func
+                num2words = n2w_func
+            except ImportError:
+                # 优雅降级：如果没装库，打印警告并原样返回
+                print("[Frontend] Warning: 'num2words' library not found. Skipping number normalization.")
+                return text
+
         def replace_num(match):
             num_str = match.group()
             try:
@@ -185,10 +197,10 @@ class TextFrontend:
             for pattern, replacement in self._en_symbols.items():
                 text = re.sub(pattern, replacement, text)
 
-            # 3. 数字归一化 (使用 num2words)
+            # 3. 数字归一化 (使用延迟加载的 num2words)
             text = self._normalize_numbers(text)
             
-            # 4. 物理清洗：只保留字母、数字和空格 (单引号在缩写阶段已处理)
+            # 4. 物理清洗
             text = re.sub(r"[^a-z0-9 ]", " ", text)
             return " ".join(text.split())
 
