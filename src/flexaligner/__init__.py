@@ -14,4 +14,5 @@ __all__ = [
     "AlignmentResult",
     "CTCChunker",
     "LocalAligner",
+    "TextFrontend"
 ]

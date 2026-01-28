@@ -96,7 +96,8 @@ class PronouncingDictionary:
 class LocalAligner:
     def __init__(self, config: dict):
         self.config = config or {}
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # // Modified: 统一从配置读取设备，不再各自探测
+        self.device = torch.device(self.config.get("device", "cpu"))
         
         # 资源
         self.model = None
@@ -111,7 +112,7 @@ class LocalAligner:
         self.sil_cost = self.config.get("sil_cost", -0.5)
         self.frame_hop = self.config.get("frame_hop_s", 0.01)
         self.optional_sil = self.config.get("optional_sil", True)
-        self.use_dynamic_hop = self.config.get("use_dynamic_hop", False)
+        self.offset_s = self.config.get("offset_s", 0.0125)
         # 加载
         self._load_resources()
 
@@ -166,14 +167,14 @@ class LocalAligner:
         log_probs = torch.log_softmax(logits, dim=-1).squeeze(0).cpu().numpy() # (T, V)
 
         # [核心修改] 决定时间转换的步长
-        if self.use_dynamic_hop:
-            # 动态模式：消除采样率混叠带来的误差，物理上更准
-            T = log_probs.shape[0]
-            actual_duration = chunk_tensor.size(0) / 16000.0
-            current_hop = actual_duration / T if T > 0 else self.frame_hop
-        else:
-            # 默认模式：严格按 frame_hop (0.01s) 计算，与老板脚本完全一致
-            current_hop = self.frame_hop
+        # if self.use_dynamic_hop:
+        #     # 动态模式：消除采样率混叠带来的误差，物理上更准
+        #     T = log_probs.shape[0]
+        #     actual_duration = chunk_tensor.size(0) / 16000.0
+        #     current_hop = actual_duration / T if T > 0 else self.frame_hop
+        # else:
+        #     # 默认模式：严格按 frame_hop (0.01s) 计算，与老板脚本完全一致
+        current_hop = self.frame_hop
 
         # 2. Build Graph
         words = text.split()
@@ -195,14 +196,23 @@ class LocalAligner:
             beam_size=self.beam_size
         )
 
-        # 4. Convert Frames to Seconds (使用 current_hop)
+        # 4. Convert Frames to Seconds (引入 Offset 与 物理熔断) // Modified
+        # 计算音频实际物理时长，确保 Offset 后的时间戳不会越界
+        actual_duration = chunk_tensor.size(0) / 16000.0
+        
         phones_out = []
         for lab, s, e in ali_result.phone_segments_f:
-            phones_out.append(AlignmentSegment(lab, s * current_hop, e * current_hop))
+            # 公式：t = offset + (frame_idx * hop)
+            # 使用 min(t, actual_duration) 保证物理合法性
+            start_t = min(self.offset_s + (s * current_hop), actual_duration)
+            end_t = min(self.offset_s + (e * current_hop), actual_duration)
+            phones_out.append(AlignmentSegment(lab, start_t, end_t))
             
         words_out = []
         for lab, s, e in ali_result.word_segments_f:
-            words_out.append(AlignmentSegment(lab, s * current_hop, e * current_hop))
+            start_t = min(self.offset_s + (s * current_hop), actual_duration)
+            end_t = min(self.offset_s + (e * current_hop), actual_duration)
+            words_out.append(AlignmentSegment(lab, start_t, end_t))
 
         return {"phones": phones_out, "words": words_out}
 # ==========================================

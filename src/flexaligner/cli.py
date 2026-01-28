@@ -50,8 +50,7 @@ def main():
     config = AlignmentConfig(
         device=args.device,
         beam_size=args.beam_size,
-        align_beam_size=args.align_beam,
-        use_dynamic_hop=args.dynamic  # 这里的开关控制了精度模式
+        align_beam_size=args.align_beam
     )
     
     # 打印启动信息

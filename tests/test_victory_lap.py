@@ -69,7 +69,6 @@ def test_stage_1_baseline_alignment(victory_env, tmp_path):
     config = AlignmentConfig(
         chunk_model_path=victory_env["chunk_path"],
         align_model_path=victory_env["align_path"],
-        use_dynamic_hop=False,
         frame_hop_s=0.01,
         device="cpu"
     )
@@ -88,7 +87,6 @@ def test_stage_2_high_precision_victory(victory_env, tmp_path):
     config = AlignmentConfig(
         chunk_model_path=victory_env["chunk_path"],
         align_model_path=victory_env["align_path"],
-        use_dynamic_hop=True,
         frame_hop_s=0.01,
         device="cpu"
     )

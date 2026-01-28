@@ -118,8 +118,7 @@ from flexaligner.config import AlignmentConfig
 # 1. Configuration (Optional: enable dynamic precision)
 ```python
 config = AlignmentConfig(
-    device="cuda", 
-    use_dynamic_hop=True
+    device="cuda"
 )
 ```
 # 2. Initialize

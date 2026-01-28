@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from typing import List, Dict
 from dataclasses import dataclass
-from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
+from transformers import Wav2Vec2ForCTC, AutoProcessor
 import os
 # 引入我们在 io.py 定义的数据结构
 from .io import AudioChunk
@@ -56,7 +56,8 @@ class InternalChunk:
 class CTCChunker:
     def __init__(self, config: dict):
         self.config = config or {}
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # 统一从配置读取设备
+        self.device = torch.device(self.config.get("device", "cpu"))
         
         # 资源占位符
         self.model = None
@@ -65,7 +66,7 @@ class CTCChunker:
         self.phone_to_id = {}
         self.blank_id = 0
         
-        # 加载配置参数
+        # 加载超参
         self.beam_size = self.config.get("beam_size", 10)
         self.min_chunk_s = self.config.get("min_chunk_s", 1.0)
         self.max_chunk_s = self.config.get("max_chunk_s", 12.0)
@@ -73,8 +74,9 @@ class CTCChunker:
         self.min_words = self.config.get("min_words", 2)
         self.pad_s = self.config.get("pad_s", 0.15)
         
-        # 自动加载资源
+        # 启动加载
         self._load_resources()
+
 
     def _load_resources(self):
         """加载词典和模型配置"""
@@ -89,37 +91,65 @@ class CTCChunker:
             with open(phone_path, "r", encoding="utf-8") as f:
                 self.phone_to_id = json.load(f)
         
-        # 3. 加载模型
+        # 3. 加载模型 (核心重构区)
         model_path = self.config.get("chunk_model_path")
         
         if model_path:
-            print(f"[CTCChunker] Loading model from {model_path}...")
+            print(f"[CTCChunker] Loading model from: {model_path}")
             
-            # 探测逻辑：如果是云端 Repo ID (非本地存在路径)，则默认加上 subfolder
-            is_local_dir = os.path.isdir(model_path)
-            load_kwargs = {}
-            if not is_local_dir:
-                load_kwargs["subfolder"] = "hf_phs"
+            # --- 智能路径判定逻辑 ---
+            is_abs_path = os.path.isabs(model_path)
+            path_exists = os.path.exists(model_path)
+            
+            # 情况 A: 是本地路径 (必须存在) -> 不加 subfolder
+            if path_exists and os.path.isdir(model_path):
+                print("[CTCChunker] Detected VALID LOCAL model path.")
+                load_args = {}
+            
+            # 情况 B: 是绝对路径但不存在 -> 直接物理熔断，不丢给 HF
+            elif is_abs_path and not path_exists:
+                raise FileNotFoundError(f"Local model path not found: {model_path}")
 
+            # 情况 C: 是 HF Repo ID (非绝对路径，且包含 /) -> 判断是否为官方库
+            elif "/" in model_path:
+                print("[CTCChunker] Detected HUGGINGFACE REPO ID.")
+                # 针对 USTCPhonetics/FlexAligner 这种官方库，必须指定子目录
+                if "USTCPhonetics" in model_path: 
+                    load_args = {"subfolder": "hf_phs"}
+                else:
+                    load_args = {}
+            
+            # 情况 D: 只有名字 (如 "facebook/wav2vec2-base") -> 默认不加 subfolder
+            else:
+                load_args = {}
+            
+            # --- 统一加载 ---
             try:
-                # 尝试加载 (根据探测结果决定是否带 subfolder)
-                self.processor = Wav2Vec2Processor.from_pretrained(model_path, **load_kwargs)
-                self.model = Wav2Vec2ForCTC.from_pretrained(model_path, **load_kwargs).to(self.device)
-            except (OSError, ValueError) as e:
-                # Fallback: 捕获由于目录结构不匹配导致的错误 (OSError) 或 AutoConfig 识别失败 (ValueError)
-                print(f"[CTCChunker] Routing logic failed ({e}). Trying fallback to root...")
-                self.processor = Wav2Vec2Processor.from_pretrained(model_path)
-                self.model = Wav2Vec2ForCTC.from_pretrained(model_path).to(self.device)
+                # 使用 AutoProcessor 兼容性更好
+                self.processor = AutoProcessor.from_pretrained(model_path, **load_args)
+                self.model = Wav2Vec2ForCTC.from_pretrained(model_path, **load_args).to(self.device)
+                self.model.eval()
+                
+            except Exception as e:
+                # 只有在明确失败时才打印，并抛出更清晰的错误给 Pytest 捕获
+                raise RuntimeError(
+                    f"Model load failed from '{model_path}' with args {load_args}.\n"
+                    f"Error details: {e}\n"
+                    "Tip: If local, check 'preprocessor_config.json'. If Cloud, check network."
+                )
 
-            self.model.eval()
-            
-            # 确定 blank_id
+            # 4. 确定 blank_id
+            # 优先从 config 拿，拿不到去 phone_to_id 找 <pad>，再不行问 tokenizer
             blank_token = self.config.get("blank_token", "<pad>")
-            if blank_token not in self.phone_to_id:
-                # 尝试从 processor 自动获取
-                blank_token = self.processor.tokenizer.pad_token or "<pad>"
-            self.blank_id = self.phone_to_id.get(blank_token, 0)
-
+            
+            if blank_token in self.phone_to_id:
+                self.blank_id = self.phone_to_id[blank_token]
+            elif hasattr(self.processor, "tokenizer") and self.processor.tokenizer.pad_token_id is not None:
+                # 兼容 HF Tokenizer 的逻辑
+                self.blank_id = self.processor.tokenizer.pad_token_id
+            else:
+                # 最后的兜底
+                self.blank_id = 0
     @torch.inference_mode()
     def find_chunks(self, audio_tensor: torch.Tensor, text_list: List[str]) -> List[AudioChunk]:
         """
@@ -208,51 +238,101 @@ class CTCChunker:
 
     # --- 内部核心算法 ---
 
-    def _read_lexicon(self, path: Path) -> Dict[str, List[List[str]]]:
-        lex = {}
-        with path.open("r", encoding="utf-8") as f:
+    def _read_lexicon(self, path: Path):
+        lexicon = {}
+        if not path.exists():
+            return lexicon
+        with open(path, "r", encoding="utf-8") as f:
             for line in f:
                 parts = line.strip().split()
                 if len(parts) >= 2:
-                    word = parts[0].lower() # 简单归一化
-                    phones = parts[1:]
-                    lex.setdefault(word, []).append(phones)
-        return lex
+                    word = parts[0]
+                    # 关键：直接存 List[str]，不要套娃
+                    phones = parts[1:] 
+                    lexicon[word] = phones
+        return lexicon
+
 
     def _words_to_pronunciations(self, words: List[str]) -> List[List[List[str]]]:
         out = []
-        for w in words:
-            # 归一化处理
-            w_norm = w.lower()
+        print(f"\n[DEBUG] --- Entering _words_to_pronunciations (Total words: {len(words)}) ---")
+        
+        for i, w in enumerate(words):
+            w_norm = w.strip().lower()
+            if not w_norm:
+                continue
+                
             if w_norm not in self.lexicon:
-                # OOV处理：这里简单抛错，实际工程可以加 G2P Fallback
-                raise ValueError(f"OOV Word: {w_norm}")
-            out.append(self.lexicon[w_norm])
+                raise ValueError(f"[CTCChunker] OOV Word: {w_norm}")
+            
+            # 1. 原始查表结果
+            flat_phones = self.lexicon[w_norm]
+            
+            # 2. 构造当前的词候选 (包裹一层)
+            word_candidates = [flat_phones]
+            
+            # 🔴 关键调试打印：只打印前 3 个词，防止日志爆炸
+            if i < 3:
+                print(f"[DEBUG] Word[{i}]: '{w_norm}'")
+                print(f"        Lexicon says: {flat_phones} (Type: {type(flat_phones)})")
+                print(f"        Wrapped into: {word_candidates} (Depth: 2)")
+            
+            out.append(word_candidates)
+        
+        # 3. 最终整体结构验证
+        if out:
+            print(f"[DEBUG] Final structure sample (out[0]): {out[0]}")
+            # 物理验证：如果是正确的，out[0][0] 应该是一个 list (音素列表)，而不是 string
+            if len(out[0]) > 0:
+                print(f"        Verification: out[0][0][0] is '{out[0][0][0]}' (Should be first phone char)")
+        
+        print(f"[DEBUG] --- End of _words_to_pronunciations ---\n")
         return out
+            
+
 
     def _beam_search(self, log_probs, words, prons_per_word) -> PronCandidate:
         """简单的 Beam Search，寻找最佳发音组合"""
-        # 初始状态
-        beam = [PronCandidate(phones=[], pron_choice_idxs=[], score=-float("inf"))]
+        # 1. 确保初始化时 phones 是一个纯净的空列表
+        beam = [PronCandidate(phones=[], pron_choice_idxs=[], score=0.0)]
         
         for i, word in enumerate(words):
             new_beam = []
-            variants = prons_per_word[i]
+            variants = prons_per_word[i] # 结构: [['t', 'a', ...]]
             
             for cand in beam:
                 for p_idx, pron in enumerate(variants):
+                    # --- 维度防御检查 ---
+                    # 确保 pron 是 ['t', 'a'] 而不是 [['t', 'a']]
+                    if len(pron) > 0 and isinstance(pron[0], list):
+                        print(f"[DEBUG] Dimension Error detected at word '{word}', flattening...")
+                        pron = pron[0] 
+
+                    # 2. 拼接音素序列
                     new_phones = cand.phones + pron
-                    try:
-                        new_ids = [self.phone_to_id[p] for p in new_phones]
-                    except KeyError:
-                         # 某些生僻音素不在模型词表中
-                        continue
                     
-                    # 快速计算得分 (使用 Viterbi Best Path)
-                    # 注意：为了速度，这里其实每次都重算了整个序列，
-                    # 更好的做法是增量计算，但对于短句/Chunking来说，这个速度足够了
-                    trellis = build_trellis(log_probs, new_ids, self.blank_id)
-                    score = float(torch.max(trellis[:, len(new_ids)]).item())
+                    # --- 再次防御：确保 new_phones 里的每一个元素都是字符串 ---
+                    try:
+                        # 核心查表
+                        new_ids = [self.phone_to_id[p] for p in new_phones if isinstance(p, str)]
+                    except KeyError as e:
+                        # 某些音素不在词表中，打印出来看看是哪个
+                        # print(f"[CTCChunker] Missing Phone in Vocabulary: {e}")
+                        continue
+                    except TypeError as e:
+                        # 如果走到这里，说明 new_phones 里混进了 list
+                        # 我们打印出 new_phones 的前几个元素来抓现行
+                        print(f"[CRITICAL] new_phones sample: {new_phones[:3]}")
+                        raise e
+                    
+                    # 3. 计算 Viterbi 得分 (build_trellis)
+                    # 这里的 score 计算逻辑保持你的不变
+                    try:
+                        trellis = build_trellis(log_probs, new_ids, self.blank_id)
+                        # 注意：trellis 维度通常是 (T, S+1)
+                        score = float(torch.max(trellis[:, len(new_ids)]).item())
+                    except Exception:
+                        score = -float("inf")
                     
                     new_beam.append(PronCandidate(
                         phones=new_phones,
@@ -260,7 +340,7 @@ class CTCChunker:
                         score=score
                     ))
             
-            # Pruning
+            # 4. 剪枝
             new_beam.sort(key=lambda x: x.score, reverse=True)
             beam = new_beam[:self.beam_size]
             

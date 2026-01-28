@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flexaligner"
-version = "0.1.0"
+version = "0.1.1"
 description = "Robust speech-text alignment framework with CTC Chunking and CE local alignment."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,30 +12,49 @@ authors = [
     {name = "Wang Yiming", email = "wangyiming0369@gmail.com"},
     {name = "Jiahong Yuan", email = "jiahongyuan@ustc.edu.cn"}
 ]
-# 核心运行依赖
+
+# 核心运行依赖 (L1: FAST 模式)
 dependencies = [
     "torch>=2.0.0",
     "torchaudio",
     "transformers",
     "soundfile",
     "numpy",
-    "praatio",  # 处理 TextGrid 的工业级标准库
+    "scipy",     # 用于 FAST 模式下的基础重采样
+    "praatio",  
     "tqdm",
+    "jieba",
+    "g2p_en",
+    "chardet",   # 编码识别开销极小，建议保留在核心
 ]
 
-# 定义可选依赖（用于开发和测试）
 [project.optional-dependencies]
+# L2: 坦克级鲁棒模式所需的重型依赖
+robust = [
+    "librosa",
+]
+# L3: 安全增强模式
+secure = [
+    "python-magic", 
+]
 test = [
     "pytest>=7.0",
     "pytest-cov",
+    "pytest-timeout",
 ]
 dev = [
-    "ruff",    # 现代化的代码检查工具
+    "ruff",
+]
+all = [
+    "flexaligner[robust,secure,test,dev]",
 ]
 
-# 命令行工具：安装后直接输入 flex-align 就能跑
 [project.scripts]
 flex-align = "flexaligner.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["flexaligner*"]
+
+[tool.setuptools.package-data]
+flexaligner = ["assets/**/*"]
