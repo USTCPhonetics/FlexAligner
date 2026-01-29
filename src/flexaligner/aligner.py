@@ -2,12 +2,13 @@ import torch
 import numpy as np
 import math
 import os
+import json
 from dataclasses import dataclass
 from typing import List, Dict, Tuple, Optional, Set
 from transformers import AutoModelForCTC, AutoProcessor
 
 # ==========================================
-#  1. Helper Structures (保留你的核心数据结构)
+#  1. Helper Structures (数据结构区)
 # ==========================================
 
 @dataclass
@@ -47,7 +48,7 @@ class AlignmentResult:
     aligned_phone_ids: np.ndarray 
 
 # ==========================================
-#  2. Helper Class: Lexicon (搬运并简化)
+#  2. Helper Class: Lexicon (词典区)
 # ==========================================
 
 class PronouncingDictionary:
@@ -58,7 +59,7 @@ class PronouncingDictionary:
         self.lex.setdefault(word, []).append(list(pron))
 
     def get_prons(self, word: str) -> List[List[str]]:
-        # 简单归一化：查不到就抛错，或者你可以改为返回 <UNK>
+        # 简单归一化
         if word not in self.lex:
             # 尝试大写
             if word.upper() in self.lex:
@@ -84,37 +85,61 @@ class PronouncingDictionary:
                 parts = ln.split()
                 if len(parts) < 2: 
                     continue
-                # 同时也存一份原始大小写，以防万一
-                w = parts[0]
+                
+                # [核心修正] 强制转小写，与 Frontend/Chunker 保持符号一致性
+                w = parts[0].lower()
                 pd.add(w, parts[1:])
         return pd
 
 # ==========================================
-#  3. Core Class: LocalAligner
+#  3. Core Class: LocalAligner (核心逻辑)
 # ==========================================
 
 class LocalAligner:
-    def __init__(self, config: dict):
+    # [核心修正] 增加 phone_to_id 接口，支持云端动态注入
+    def __init__(self, config: dict, phone_to_id: Optional[Dict[str, int]] = None):
         self.config = config or {}
-        # // Modified: 统一从配置读取设备，不再各自探测
+        # 统一从配置读取设备
         self.device = torch.device(self.config.get("device", "cpu"))
         
-        # 资源
+        # 资源占位
         self.model = None
         self.processor = None
         self.lexicon = None
         self.phone_to_id = {}
         
-        # 参数 (从 config 读取，提供默认值)
-        self.beam_size = self.config.get("beam_size", 400)
+        # 参数加载 (带默认值兜底)
+        self.beam_size = self.config.get("align_beam_size", 400)
         self.p_stay = self.config.get("p_stay", 0.92)
         self.sil_phone = self.config.get("sil_phone", "sil")
         self.sil_cost = self.config.get("sil_cost", -0.5)
         self.frame_hop = self.config.get("frame_hop_s", 0.01)
         self.optional_sil = self.config.get("optional_sil", True)
         self.offset_s = self.config.get("offset_s", 0.0125)
-        # 加载
+        
+        # 1. 加载模型和词典
         self._load_resources()
+
+        # 2. [核心修正] 音素表加载优先级：注入 > 模型自带 > 本地JSON
+        if phone_to_id is not None:
+            # 优先使用 Pipeline 传进来的 (云端英语模式)
+            print(f"[LocalAligner] Using injected phone_to_id map ({len(phone_to_id)} tokens)")
+            self.phone_to_id = phone_to_id
+        elif not self.phone_to_id:
+            # 如果模型没带 vocab (非 processor 加载)，尝试读本地 json
+            json_path = self.config.get("phone_json_path")
+            if json_path and os.path.exists(json_path):
+                try:
+                    with open(json_path, 'r', encoding='utf-8') as f:
+                        self.phone_to_id = json.load(f)
+                except Exception as e:
+                    print(f"[LocalAligner] Failed to load phones.json: {e}")
+        
+        # 调试用反查表
+        self.id_to_phone = {v: k for k, v in self.phone_to_id.items()}
+        
+        # 3. 确保 SIL ID 存在
+        self.sil_id = self.phone_to_id.get(self.sil_phone, 0)
 
     def _load_resources(self):
         """加载模型和词典"""
@@ -122,6 +147,25 @@ class LocalAligner:
         lex_path = self.config.get("lexicon_path")
         if lex_path:
             self.lexicon = PronouncingDictionary.from_path(lex_path)
+        else:
+            self.lexicon = PronouncingDictionary() # 空词典兜底
+
+        # [核心修正] Stage 2 OOV 热修复 (同步 Chunker 的逻辑)
+        if self.config.get("lang") == "en":
+            oov_patch = {
+                "montreal": ["M", "AA1", "N", "T", "R", "IY0", "AA1", "L"],
+                "forced": ["F", "AO1", "R", "S", "T"],
+                "aligner": ["AH0", "L", "AY1", "N", "ER0"],
+            }
+            patched = 0
+            for w, p in oov_patch.items():
+                try:
+                    self.lexicon.get_prons(w)
+                except KeyError:
+                    self.lexicon.add(w, p)
+                    patched += 1
+            if patched > 0:
+                print(f"[LocalAligner] Applied hotfix for {patched} OOV words.")
 
         # 2. Model
         model_path = self.config.get("align_model_path")
@@ -130,26 +174,35 @@ class LocalAligner:
 
         print(f"[LocalAligner] Loading model from {model_path}...")
         
-        # 核心逻辑：智能路由子文件夹
-        # 如果 model_path 指向本地已存在的文件夹，通常不需要 subfolder
-        # 如果是 Hugging Face 的 Repo ID (如 USTCPhonetics/FlexAligner)，必须进入 ce2
+        # [核心修正] 智能路由逻辑
         is_local_dir = os.path.isdir(model_path)
         load_kwargs = {}
+        
         if not is_local_dir:
-             load_kwargs["subfolder"] = "ce2"
+            # 动态决定 subfolder
+            lang = self.config.get("lang", "zh")
+            load_kwargs["subfolder"] = f"{lang}/aligner"
+            print(f"[LocalAligner] Cloud mode detected. Target subfolder: {load_kwargs['subfolder']}")
 
         try:
-            # 策略 A: 尝试带 subfolder 加载（如果是云端 ID）或直接加载（如果是本地路径）
+            # 策略 A: 尝试带 subfolder 加载 (云端) 或 直接加载 (本地)
             self.processor = AutoProcessor.from_pretrained(model_path, **load_kwargs)
             self.model = AutoModelForCTC.from_pretrained(model_path, **load_kwargs).to(self.device)
         except (OSError, ValueError) as e:
-            # 策略 B: Fallback - 如果策略 A 失败，尝试完全不带 subfolder（兼容本地已进入 ce2 内部的情况）
-            print(f"[LocalAligner] Subfolder routing failed ({e}), falling back to root...")
-            self.processor = AutoProcessor.from_pretrained(model_path)
-            self.model = AutoModelForCTC.from_pretrained(model_path).to(self.device)
+            # 策略 B: 降级重试 (防止用户手动改了本地文件夹结构)
+            print(f"[LocalAligner] Routing failed ({e}), falling back to root/default...")
+            try:
+                self.processor = AutoProcessor.from_pretrained(model_path)
+                self.model = AutoModelForCTC.from_pretrained(model_path).to(self.device)
+            except Exception as final_e:
+                print(f"[LocalAligner] Critical: Failed to load model: {final_e}")
+                return
             
         self.model.eval()
-        self.phone_to_id = self.processor.tokenizer.get_vocab()
+        
+        # 如果加载了 Processor，优先提取它的 Vocab
+        if self.processor:
+            self.phone_to_id = self.processor.tokenizer.get_vocab()
 
     @torch.inference_mode()
     def align_locally(self, chunk_tensor: torch.Tensor, text: str) -> Dict[str, List[AlignmentSegment]]:
@@ -166,45 +219,75 @@ class LocalAligner:
         logits = self.model(**inputs).logits 
         log_probs = torch.log_softmax(logits, dim=-1).squeeze(0).cpu().numpy() # (T, V)
 
-        # [核心修改] 决定时间转换的步长
-        # if self.use_dynamic_hop:
-        #     # 动态模式：消除采样率混叠带来的误差，物理上更准
-        #     T = log_probs.shape[0]
-        #     actual_duration = chunk_tensor.size(0) / 16000.0
-        #     current_hop = actual_duration / T if T > 0 else self.frame_hop
-        # else:
-        #     # 默认模式：严格按 frame_hop (0.01s) 计算，与老板脚本完全一致
+        # ==========================================
+        # 🧪 [物理探针] 动态步长检测与诊断
+        # ==========================================
+        T_frames = log_probs.shape[0]
+        actual_samples = chunk_tensor.size(0)
+        actual_duration = actual_samples / 16000.0
+        
+        # 计算物理步长 (Seconds Per Frame)
+        if T_frames > 1:
+            calculated_hop = actual_duration / T_frames
+        else:
+            calculated_hop = self.frame_hop # Fallback
+            
+        print("\n" + "="*40)
+        print(f"🧪 [Physics Probe] Audio Analysis:")
+        print(f"   Samples:  {actual_samples}")
+        print(f"   Duration: {actual_duration:.6f} sec")
+        print(f"   Frames:   {T_frames}")
+        print(f"   SPF(Calc): {calculated_hop*1000:.3f} ms")
+        print(f"   SPF(Conf): {self.frame_hop*1000:.3f} ms")
+        
+        # 诊断判定
+        diff = abs(calculated_hop - self.frame_hop) * 1000
+        if diff > 1.0: # 误差超过 1ms
+             print(f"⚠️  [WARNING] STRIDE MISMATCH DETECTED!")
+        else:
+             print(f"✅  [OK] Physics matches Config.")
         current_hop = self.frame_hop
+             
+        print("="*40 + "\n")
+        # ==========================================
 
         # 2. Build Graph
         words = text.split()
-        graph, entry_bias = build_phone_graph_optional_sil(
-            words=words,
-            prondict=self.lexicon,
-            phone_to_id=self.phone_to_id,
-            sil_phone=self.sil_phone,
-            optional_sil_between_words=self.optional_sil,
-            optional_sil_at_start=True,
-            optional_sil_at_end=True,
-            sil_cost=self.sil_cost
-        )
+        try:
+            graph, entry_bias = build_phone_graph_optional_sil(
+                words=words,
+                prondict=self.lexicon,
+                phone_to_id=self.phone_to_id,
+                sil_phone=self.sil_phone,
+                optional_sil_between_words=self.optional_sil,
+                optional_sil_at_start=True,
+                optional_sil_at_end=True,
+                sil_cost=self.sil_cost
+            )
+        except Exception as e:
+            print(f"[LocalAligner] Graph build failed for '{text}': {e}")
+            return {"phones": [], "words": []}
 
         # 3. Viterbi Decode
-        ali_result = align_beam_viterbi(
-            log_probs, graph, entry_bias,
-            p_stay=self.p_stay,
-            beam_size=self.beam_size
-        )
+        try:
+            ali_result = align_beam_viterbi(
+                log_probs, graph, entry_bias,
+                p_stay=self.p_stay,
+                beam_size=self.beam_size
+            )
+        except Exception as e:
+            print(f"[LocalAligner] Viterbi failed for '{text}': {e}")
+            return {"phones": [], "words": []}
 
-        # 4. Convert Frames to Seconds (引入 Offset 与 物理熔断) // Modified
-        # 计算音频实际物理时长，确保 Offset 后的时间戳不会越界
-        actual_duration = chunk_tensor.size(0) / 16000.0
+        # 4. Convert Frames to Seconds
+        # 使用上面诊断出的 current_hop
         
         phones_out = []
         for lab, s, e in ali_result.phone_segments_f:
-            # 公式：t = offset + (frame_idx * hop)
-            # 使用 min(t, actual_duration) 保证物理合法性
+            # 物理越界防御：min(t, duration)
+            ####################################################
             start_t = min(self.offset_s + (s * current_hop), actual_duration)
+            ####################################################
             end_t = min(self.offset_s + (e * current_hop), actual_duration)
             phones_out.append(AlignmentSegment(lab, start_t, end_t))
             
@@ -215,8 +298,9 @@ class LocalAligner:
             words_out.append(AlignmentSegment(lab, start_t, end_t))
 
         return {"phones": phones_out, "words": words_out}
+
 # ==========================================
-#  4. Algorithms (原封不动搬运你的逻辑)
+#  4. Algorithms (图算法区)
 # ==========================================
 
 NEG_INF = -1e30
@@ -246,8 +330,6 @@ def build_phone_graph_optional_sil(
     sil_cost: float = 0.0,
 ) -> Tuple[PhoneGraph, np.ndarray]:
     
-    # ... (此处为 build_phone_graph_optional_sil 的逻辑，保持不变) ...
-    # 为了代码紧凑，我直接复制你上面的逻辑，核心变量如下：
     next_node = 0
     def new_node():
         nonlocal next_node
@@ -261,11 +343,36 @@ def build_phone_graph_optional_sil(
     entry_bias = []
 
     def add_emit(u, v, phone, widx, w, bias=0.0):
-        if phone not in phone_to_id:
-            # 这里可以改柔和一点，避免直接 crash
-            print(f"[Warn] Phone '{phone}' not in vocab, skipping edge.")
+        # [核心战术] 音素模糊匹配 (Fuzzy Matching)
+        # 目标：解决 AO vs AO1, AH vs AH0 的不匹配问题
+        
+        target_id = None
+        
+        # 1. 尝试精确匹配
+        if phone in phone_to_id:
+            target_id = phone_to_id[phone]
+        else:
+            # 2. 尝试模糊匹配 (去重音 / 加重音)
+            phone_pure = ''.join(filter(str.isalpha, phone)) # AO1 -> AO
+            
+            # 2a. 尝试纯音素 (AO)
+            if phone_pure in phone_to_id:
+                target_id = phone_to_id[phone_pure]
+            else:
+                # 2b. 尝试加重音变体 (AO -> AO1, AO0, AO2)
+                # 优先尝试 1 (Primary Stress)
+                for suffix in ["1", "0", "2"]:
+                    variant = phone_pure + suffix
+                    if variant in phone_to_id:
+                        target_id = phone_to_id[variant]
+                        break
+        
+        if target_id is None:
+            # 确实没救了，跳过这条边（可能导致图断裂，但比崩溃好）
+            # print(f"[Warn] OOV Phone: {phone} (and variants) not in vocab")
             return
-        emit_edges.append(EmitEdge(u=u, v=v, phone=phone, phone_id=phone_to_id[phone], word_index=widx, word=w))
+
+        emit_edges.append(EmitEdge(u=u, v=v, phone=phone, phone_id=target_id, word_index=widx, word=w))
         entry_bias.append(bias)
 
     def add_eps(u, v):
@@ -287,9 +394,8 @@ def build_phone_graph_optional_sil(
         try:
             prons = prondict.get_prons(w)
         except KeyError:
-            print(f"[Warn] OOV: {w}, skipping word in graph")
-            # 简单的 OOV 处理：直接跳过或者把词当做 SIL 处理
-            # 为了程序稳健，我们暂时创建一个空连接
+            print(f"[Warn] OOV in Graph: {w}, skipping word in graph")
+            # 遇到 OOV 无法构建发音路径，直接由 EPS 边跳过，避免图断裂
             add_eps(cur_node, end_of_word)
             cur_node = end_of_word
             continue
@@ -363,12 +469,10 @@ def align_beam_viterbi(
     graph: PhoneGraph,
     entry_bias: np.ndarray,
     p_stay: float = 0.92,
-    beam_size: int = 300,
+    beam_size: int = 400,
     word_sil_label: str = "sil",
 ) -> AlignmentResult:
-    # ... (搬运你的 align_beam_viterbi 逻辑) ...
     T, V = logp.shape
-    # S = len(graph.states)
     
     lp_stay = math.log(p_stay)
     lp_move = math.log(1.0 - p_stay)
@@ -433,7 +537,6 @@ def align_beam_viterbi(
             best_state = s
             
     if best_state is None and len(cur_scores) > 0:
-        # Fallback: best state even if not valid end
         best_state = max(cur_scores.items(), key=lambda kv: kv[1])[0]
 
     # Backtrace
@@ -444,7 +547,6 @@ def align_beam_viterbi(
             path[t] = cur
             cur = int(bp[t].get(cur, cur))
     else:
-        # Should catch T=0 or empty beam
         path.fill(0) 
 
     aligned_phone_ids = np.array([graph.states[int(s)].edge.phone_id for s in path], dtype=np.int32)

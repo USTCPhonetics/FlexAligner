@@ -9,44 +9,34 @@ from typing import Optional
 # =================================================
 
 def get_best_device(requested_device: Optional[str] = None) -> str:
-    """
-    智能设备探测器：
-    1. 优先使用用户在 config 中指定的设备 (如 'cuda:1')。
-    2. 如果没指定，探测 CUDA，默认返回 'cuda:0'。
-    3. 如果都没有，Fallback 到 'cpu'。
-    """
     if requested_device:
         return requested_device
-        
-    if torch.cuda.is_available():
-        # 这里可以扩展：如果要智能选择显存最多的卡，可以在这里写逻辑
-        # 目前默认锁定 GPU 0，这是最稳健的极客做法
-        return "cuda:0"
-    
-    return "cpu"
+    return "cuda:0" if torch.cuda.is_available() else "cpu"
 
 # =================================================
-#  路径解析逻辑 (保持你的 Local First 逻辑)
+#  资源寻址引擎 (Language-Aware Resolver)
 # =================================================
 
 HF_ORG = "USTCPhonetics"
 REPO_NAME = "FlexAligner"
 
-# // Modified in src/flexaligner/config.py
-
-def resolve_model_path(local_folder_name: str, hf_subfolder: Optional[str] = None) -> str:
-    project_root = Path(os.getcwd()) 
-    local_path = project_root / "models" / local_folder_name
+def resolve_resource_path(lang: str, stage: str) -> str:
+    """
+    智能路径解析器：
+    1. 优先查找本地路径: models/{lang}/{stage}
+    2. 如果本地残缺，返回 HF Repo ID 并带上 subfolder 标识
+    """
+    project_root = Path(os.getcwd())
+    # 这里的 stage 对应云端的 'chunker' 或 'aligner'
+    local_path = project_root / "models" / lang / stage
     
-    # 物理验证：不仅文件夹要存在，核心文件必须配齐
-    # 如果只有文件夹名而没文件，Transformers 会误以为是本地模型而报错
     required_files = ["config.json", "preprocessor_config.json"]
     is_valid_local = local_path.exists() and all((local_path / f).exists() for f in required_files)
     
     if is_valid_local:
         return str(local_path.absolute())
     
-    # 本地不成立，强制走云端
+    # 物理定位：返回 Repo ID，具体的 subfolder 逻辑由 Chunker/Aligner 内部处理
     return f"{HF_ORG}/{REPO_NAME}"
 
 # =================================================
@@ -56,50 +46,64 @@ def resolve_model_path(local_folder_name: str, hf_subfolder: Optional[str] = Non
 @dataclass
 class AlignmentConfig:
     """
-    全局配置类：管理路径、超参数和计算设备
+    FlexAligner 2.0 全局配置类：支持多语种动态切换
     """
-    # --- 1. 运行环境 (智能寻址) ---
-    # 默认 device 设为 None，在 __post_init__ 中进行智能探测
-    device: str = field(default="cuda" if torch.cuda.is_available() else "cpu")
+    # --- 0. 核心语言标识 ---
+    lang: str = "zh" 
+
+    # --- 1. 运行环境 ---
+    device: str = field(default=None) 
     
-    # --- 2. 资源路径 ---
-    chunk_model_path: str = field(
-        default_factory=lambda: resolve_model_path("hf_phs", hf_subfolder="hf_phs")
-    )
-    align_model_path: str = field(
-        default_factory=lambda: resolve_model_path("ce2", hf_subfolder="ce2")
-    )
-    
-    lexicon_path: str = "assets/dictionaries/dict.mandarin.2"
-    phone_json_path: str = "assets/dictionaries/phones.json"
-    
-    # --- 3. Stage 1 (Chunker) 超参数 ---
+    # --- 2. 资源路径 (动态生成) ---
+    chunk_model_path: str = field(default=None)
+    align_model_path: str = field(default=None)
+    lexicon_path: str = field(default=None)
+    phone_json_path: str = field(default=None)
+
+    # --- 3. 算法参数 (Stage 1) ---
     beam_size: int = 10
     min_chunk_s: float = 1.0
-    max_chunk_s: float = 12.0
-    max_gap_s: float = 0.35
+    max_chunk_s: float = 2.0
+    max_gap_s: float = 0.1
     min_words: int = 2
     pad_s: float = 0.15
     blank_token: str = "<pad>"
     
-    # --- 4. Stage 2 (Local Aligner) 物理参数 [核心修正] ---
+    # --- 4. 算法参数 (Stage 2) ---
     sil_phone: str = "sil"
     optional_sil: bool = True
     sil_cost: float = -0.5
-    align_beam_size: int = 400
+    align_beam_size: int = 300
     p_stay: float = 0.92
     
-    # 物理真理：stride=160, sr=16000 => 0.01s
-    frame_hop_s: float = 0.01  
-    
-    # 要求的 12.5ms 偏移修正
-    offset_s: float = 0.0125  
+    # 🔴 物理真理：修改后的 Wav2Vec2 Stride=1 => 10ms
+    frame_hop_s: float = 0.01
+    offset_s: float = 0
+
+    # src/flexaligner/config.py
+
+    # src/flexaligner/config.py 中的 __post_init__ 关键部分修正
 
     def __post_init__(self):
-        """初始化后的校验逻辑"""
-        # 确保设备分配是最优的
         self.device = get_best_device(self.device)
-        print(f"[Config] Global computation device set to: {self.device}")
+        
+        # 自动模型寻址
+        if self.chunk_model_path is None:
+            self.chunk_model_path = resolve_resource_path(self.lang, "chunker")
+        if self.align_model_path is None:
+            self.align_model_path = resolve_resource_path(self.lang, "aligner")
 
-# 实例化
-default_config = AlignmentConfig()
+        # [同步重命名] 动态词典绑定
+        base_asset = Path("assets/dictionaries")
+        if self.lang == "zh":
+            self.lexicon_path = str(base_asset / "zh.dict") # 修正
+            self.phone_json_path = str(base_asset / "phones.json")
+        elif self.lang == "en":
+            self.lexicon_path = str(base_asset / "en.dict") # 修正
+            
+            # 英语音素表逻辑：优先找本地 vocab.json
+            if os.path.isdir(self.chunk_model_path):
+                vocab_path = Path(self.chunk_model_path) / "vocab.json"
+                self.phone_json_path = str(vocab_path) if vocab_path.exists() else None
+            else:
+                self.phone_json_path = None # 云端模式将由 Chunker 在运行时补全

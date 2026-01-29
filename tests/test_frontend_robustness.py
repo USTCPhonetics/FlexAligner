@@ -1,5 +1,4 @@
 import pytest
-import os
 import shutil
 import soundfile as sf
 import numpy as np

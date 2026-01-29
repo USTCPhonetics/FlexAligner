@@ -1,0 +1,112 @@
+File type = "ooTextFile"
+Object class = "TextGrid"
+
+xmin = 0
+xmax = 1.358688
+tiers? <exists>
+size = 2
+item []:
+    item [1]:
+        class = "IntervalTier"
+        name = "phones"
+        xmin = 0
+        xmax = 1.358688
+        intervals: size = 19
+        intervals [1]:
+            xmin = 0.012500
+            xmax = 0.112500
+            text = "M"
+        intervals [2]:
+            xmin = 0.112500
+            xmax = 0.192500
+            text = "AH2"
+        intervals [3]:
+            xmin = 0.192500
+            xmax = 0.202500
+            text = "N"
+        intervals [4]:
+            xmin = 0.202500
+            xmax = 0.212500
+            text = "T"
+        intervals [5]:
+            xmin = 0.212500
+            xmax = 0.222500
+            text = "R"
+        intervals [6]:
+            xmin = 0.222500
+            xmax = 0.232500
+            text = "IY0"
+        intervals [7]:
+            xmin = 0.232500
+            xmax = 0.242500
+            text = "AO1"
+        intervals [8]:
+            xmin = 0.242500
+            xmax = 0.342500
+            text = "L"
+        intervals [9]:
+            xmin = 0.342500
+            xmax = 0.352500
+            text = "F"
+        intervals [10]:
+            xmin = 0.352500
+            xmax = 0.362500
+            text = "AO1"
+        intervals [11]:
+            xmin = 0.362500
+            xmax = 0.372500
+            text = "R"
+        intervals [12]:
+            xmin = 0.372500
+            xmax = 0.382500
+            text = "S"
+        intervals [13]:
+            xmin = 0.382500
+            xmax = 0.422500
+            text = "T"
+        intervals [14]:
+            xmin = 0.422500
+            xmax = 0.432500
+            text = "AH0"
+        intervals [15]:
+            xmin = 0.432500
+            xmax = 0.442500
+            text = "L"
+        intervals [16]:
+            xmin = 0.442500
+            xmax = 0.452500
+            text = "AY1"
+        intervals [17]:
+            xmin = 0.452500
+            xmax = 0.462500
+            text = "N"
+        intervals [18]:
+            xmin = 0.462500
+            xmax = 1.012500
+            text = "ER0"
+        intervals [19]:
+            xmin = 1.012500
+            xmax = 1.352500
+            text = "sil"
+    item [2]:
+        class = "IntervalTier"
+        name = "words"
+        xmin = 0
+        xmax = 1.358688
+        intervals: size = 4
+        intervals [1]:
+            xmin = 0.012500
+            xmax = 0.342500
+            text = "montreal"
+        intervals [2]:
+            xmin = 0.342500
+            xmax = 0.422500
+            text = "forced"
+        intervals [3]:
+            xmin = 0.422500
+            xmax = 1.012500
+            text = "aligner"
+        intervals [4]:
+            xmin = 1.012500
+            xmax = 1.352500
+            text = "sil"

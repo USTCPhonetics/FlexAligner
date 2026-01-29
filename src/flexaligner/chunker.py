@@ -1,21 +1,29 @@
 import torch
-import json
-from pathlib import Path
-from typing import List, Dict
+import os
+from typing import List, Optional
 from dataclasses import dataclass
 from transformers import Wav2Vec2ForCTC, AutoProcessor
-import os
+
 # 引入我们在 io.py 定义的数据结构
-from .io import AudioChunk
+try:
+    from .io import AudioChunk
+except ImportError:
+    @dataclass
+    class AudioChunk:
+        tensor: torch.Tensor
+        start_time: float
+        end_time: float
+        text: str
+        chunk_id: str
 
 # ==========================================
-#  Helper Data Structures (内部使用)
+#  Helper Data Structures
 # ==========================================
 
 @dataclass
 class Point:
-    token_index: int  # index in target token sequence
-    time_index: int   # frame index
+    token_index: int 
+    time_index: int 
 
 @dataclass
 class Segment:
@@ -44,7 +52,6 @@ class WordSeg:
 
 @dataclass
 class InternalChunk:
-    """中间状态的 Chunk，只存时间信息，还没切 Tensor"""
     start: float
     end: float
     words: List[str]
@@ -56,174 +63,201 @@ class InternalChunk:
 class CTCChunker:
     def __init__(self, config: dict):
         self.config = config or {}
-        # 统一从配置读取设备
         self.device = torch.device(self.config.get("device", "cpu"))
+        self.lang = self.config.get("lang", "zh")
         
-        # 资源占位符
+        # 资源
         self.model = None
         self.processor = None
         self.lexicon = {}
-        self.phone_to_id = {}
+        self.phone_to_id = {} 
         self.blank_id = 0
         
-        # 加载超参
-        self.beam_size = self.config.get("beam_size", 10)
+        # 参数
+        self.beam_size = self.config.get("beam_size", 10) # 默认较小，为了速度
         self.min_chunk_s = self.config.get("min_chunk_s", 1.0)
         self.max_chunk_s = self.config.get("max_chunk_s", 12.0)
         self.max_gap_s = self.config.get("max_gap_s", 0.35)
         self.min_words = self.config.get("min_words", 2)
         self.pad_s = self.config.get("pad_s", 0.15)
+        self.blank_token = self.config.get("blank_token", "<pad>")
         
-        # 启动加载
+        # [物理常数]
+        self.config_hop = self.config.get("frame_hop_s", 0.01)
+
         self._load_resources()
 
 
     def _load_resources(self):
-        """加载词典和模型配置（通用化重构版）"""
-        # 1. 加载 Lexicon
+        """加载资源 (含云端/本地逻辑 + 英语兼容性补丁)"""
         lex_path = self.config.get("lexicon_path")
-        if lex_path:
-            self.lexicon = self._read_lexicon(Path(lex_path))
+        self.lexicon = self._read_lexicon(lex_path)
         
-        # 2. 加载 Phones JSON
-        phone_path = self.config.get("phone_json_path")
-        if phone_path:
-            with open(phone_path, "r", encoding="utf-8") as f:
-                self.phone_to_id = json.load(f)
-        
-        # 3. 加载模型 (Global Loading Logic)
         model_path = self.config.get("chunk_model_path")
         if not model_path: return
 
         print(f"[CTCChunker] Requesting model: {model_path}")
-
-        # --- 配置加载参数 ---
         load_kwargs = {}
+        is_local_dir = os.path.isdir(model_path)
         
-        # 策略 A: 官方特供版 (包含子目录)
-        # 只有我们的官方库需要这个 subfolder 参数，其他通用模型不需要
-        if "USTCPhonetics/FlexAligner" in model_path:
-            print("[CTCChunker] Mode: Official Repo (with subfolder)")
-            load_kwargs["subfolder"] = "hf_phs"
-            
-        # 策略 B: 用户指定的本地路径
-        elif os.path.isdir(model_path):
-            print("[CTCChunker] Mode: Local Override")
-            # 本地路径不需要额外参数，transformers 会自动识别
-            
-        # 策略 C: 通用 Hugging Face 模型 (如 English 模型)
-        # e.g., "facebook/wav2vec2-base-960h"
+        if not is_local_dir:
+            # 云端模式：自动定位 subfolder
+            load_kwargs["subfolder"] = f"{self.lang}/chunker"
+            print(f"[CTCChunker] Mode: Cloud Repo ({load_kwargs['subfolder']})")
         else:
-            print("[CTCChunker] Mode: Generic HF Hub (Cache -> Download)")
-            # 不需要 subfolder，直接加载
+            print("[CTCChunker] Mode: Local Override")
 
-        # --- 统一执行加载 ---
-        # transformers 的 from_pretrained 默认逻辑就是：
-        # 1. 检查 model_path 是否为本地文件夹 -> 是则加载
-        # 2. 检查 ~/.cache/huggingface 下是否有缓存 -> 是则加载
-        # 3. 联网下载 -> 下载并缓存
         try:
-            from transformers import AutoProcessor, Wav2Vec2ForCTC
-            
             self.processor = AutoProcessor.from_pretrained(model_path, **load_kwargs)
             self.model = Wav2Vec2ForCTC.from_pretrained(model_path, **load_kwargs).to(self.device)
             self.model.eval()
-            print(f"[CTCChunker] Successfully loaded model from {model_path}")
-            
+            print(f"[CTCChunker] Successfully loaded model.")
         except Exception as e:
-            raise RuntimeError(
-                f"Model load failed.\n"
-                f"Path: {model_path}\n"
-                f"Args: {load_kwargs}\n"
-                f"Error: {e}\n"
-                "Check network connection or model name."
-            )
+            print(f"[CTCChunker] Routing failed ({e}), falling back to root...")
+            try:
+                self.processor = AutoProcessor.from_pretrained(model_path)
+                self.model = Wav2Vec2ForCTC.from_pretrained(model_path).to(self.device)
+            except Exception as final_e:
+                raise RuntimeError(f"Model load failed: {final_e}")
 
-        # 4. 确定 blank_id (保持不变)
-        blank_token = self.config.get("blank_token", "<pad>")
-        if blank_token in self.phone_to_id:
-            self.blank_id = self.phone_to_id[blank_token]
-        elif hasattr(self.processor, "tokenizer") and self.processor.tokenizer.pad_token_id is not None:
-            self.blank_id = self.processor.tokenizer.pad_token_id
+        if hasattr(self.processor, "tokenizer"):
+            self.phone_to_id = self.processor.tokenizer.get_vocab()
+            if self.blank_token in self.phone_to_id:
+                self.blank_id = self.phone_to_id[self.blank_token]
+            elif self.processor.tokenizer.pad_token_id is not None:
+                self.blank_id = self.processor.tokenizer.pad_token_id
+            else:
+                self.blank_id = 0
+            
+            # ==========================================
+            # 🛠️ [英语专用补丁] 建立模糊匹配索引
+            # ==========================================
+            if self.lang == "en":
+                # 1. 识别垃圾桶音素 (Garbage/Null)，通常是 "O"
+                # 如果词典里有 "O" 但模型没有，记录下来以免报错
+                self.garbage_tokens = {"O", "[UNK]", "<unk>"}
+                
+                # 2. 预计算 "纯净版" 音素映射
+                # 这样在 Beam Search 时，不用每次都 split 字符串，速度更快
+                self.fuzzy_map = {}
+                for token, pid in self.phone_to_id.items():
+                    # 存入原始 key (如 "AA")
+                    self.fuzzy_map[token] = pid
+                    
+                    # 存入去重音 key (如 "AA" -> pid)
+                    # 这样当词典查 "AA1" 时，我们去数字变成 "AA"，查这个表就能拿到 ID
+                    pure_token = ''.join(filter(str.isalpha, token))
+                    if pure_token and pure_token not in self.fuzzy_map:
+                        self.fuzzy_map[pure_token] = pid
+                
+                print(f"[CTCChunker] 🇬🇧 English Hotfix Applied: Fuzzy map built with {len(self.fuzzy_map)} entries.")
+            # ==========================================
+            
         else:
             self.blank_id = 0
     @torch.inference_mode()
     def find_chunks(self, audio_tensor: torch.Tensor, text_list: List[str]) -> List[AudioChunk]:
-        """
-        [主入口] 执行 Stage 1 完整流程：
-        Audio -> LogProbs -> BeamSearch -> Viterbi -> WordSegs -> Merge -> AudioChunks
-        """
+        """[主入口] 执行 Stage 1 完整流程 (含自适应重试 + Token对齐修复)"""
         if self.model is None:
-            raise RuntimeError("CTC 模型未加载，请检查 config 中的 chunk_model_path")
+            raise RuntimeError("CTC 模型未加载")
 
-        # 1. 计算声学概率 (Forward Pass)
-        # audio_tensor: (Time,) -> (1, Time) -> Model
+        # 1. Forward Pass
         input_values = self.processor(
             audio_tensor.numpy(), 
             sampling_rate=16000, 
             return_tensors="pt"
         ).input_values.to(self.device)
         
-        logits = self.model(input_values).logits  # (1, T, V)
-        log_probs = torch.log_softmax(logits, dim=-1).squeeze(0) # (T, V)
+        logits = self.model(input_values).logits 
+        log_probs = torch.log_softmax(logits, dim=-1).squeeze(0)
         
-        # 计算每帧秒数 (SPF)
-        # num_frames = log_probs.size(0)
-        # audio_dur = audio_tensor.size(0) / 16000
-        spf = (audio_tensor.size(0) / 16000) / log_probs.size(0)
+        # --- 物理探针 ---
+        actual_samples = audio_tensor.size(0)
+        actual_duration = actual_samples / 16000.0
+        T_frames = log_probs.size(0)
+        calculated_spf = actual_duration / T_frames if T_frames > 0 else 0
+        
+        # 自动纠正步长
+        if abs(calculated_spf - self.config_hop) > 0.001:
+             print(f"[CTCChunker] ⚠️ Physics override: hop={calculated_spf*1000:.2f}ms")
+             spf = calculated_spf
+        else:
+             spf = self.config_hop
+        # ----------------
 
-        # 2. 发音变体 Beam Search
+        # 2. 发音变体 Beam Search (带自适应重试)
         prons_per_word = self._words_to_pronunciations(text_list)
-        best_candidate = self._beam_search(log_probs, text_list, prons_per_word)
+        
+        best_candidate = None
+        for attempt_beam in [self.beam_size, 50, 200, 1000]:
+            best_candidate = self._beam_search(log_probs, text_list, prons_per_word, beam_width=attempt_beam)
+            if best_candidate:
+                if attempt_beam > self.beam_size:
+                    print(f"[CTCChunker] 💡 Expanded beam to {attempt_beam} to find path.")
+                break
+        
+        if not best_candidate:
+            print("[CTCChunker] ❌ Beam search failed even with beam=1000. Fallback to full audio.")
+            return [AudioChunk(
+                tensor=audio_tensor,
+                start_time=0.0,
+                end_time=audio_tensor.size(0)/16000.0,
+                text=" ".join(text_list),
+                chunk_id="chunk_fallback"
+            )]
 
-        # 3. Viterbi 强制对齐 (得到 token 级别的对齐点)
-        target_ids = [self.phone_to_id[p] for p in best_candidate.phones]
+        # 3. Viterbi 强制对齐
+        # target_ids 只包含模型认识的 token ID (过滤掉了 OOV 和 Garbage)
+        target_ids = [self.phone_to_id[p] for p in best_candidate.phones if p in self.phone_to_id]
+        if not target_ids: return []
+
         trellis = build_trellis(log_probs, target_ids, self.blank_id)
         points = backtrace(trellis, log_probs, target_ids, self.blank_id)
         
-        # 4. 转换回 Word Segments (物理时间戳)
-        # 先转为 token 级别的 segment
-        token_segs = points_to_segments(points, best_candidate.phones)
+        # 4. 转回物理时间戳
+        # [核心修复点 1] points_to_segments 需要的 labels 必须与 target_ids 对应
+        # 因此我们不能传 best_candidate.phones (含 O)，而要传过滤后的列表
+        filtered_phones = [p for p in best_candidate.phones if p in self.phone_to_id]
+        token_segs = points_to_segments(points, filtered_phones)
         
-        # 再组合成 Word
+        # [核心修复点 2] 构建清洗过的 prons 列表，供 word segment 还原使用
+        # 确保 word 切分逻辑看到的音素数量与 Viterbi 输出的一致
+        clean_prons = []
+        for i, idx in enumerate(best_candidate.pron_choice_idxs):
+            raw_pron = prons_per_word[i][idx]
+            # 同样只保留模型认识的音素
+            if len(raw_pron) > 0 and isinstance(raw_pron[0], list): raw_pron = raw_pron[0] # 防御性解包
+            filtered_pron = [p for p in raw_pron if p in self.phone_to_id]
+            clean_prons.append(filtered_pron)
+
         word_segs = self._phones_to_word_segments_robust(
             token_segs, text_list, 
-            [prons_per_word[i][idx] for i, idx in enumerate(best_candidate.pron_choice_idxs)]
+            clean_prons 
         )
 
-        # 5. 智能合并成 Chunk (宏观切分)
-        # 将 Segment 转换为带真实时间的 WordSeg 对象
+        # 5. 切分逻辑
         word_objects = [
             WordSeg(s.start_frame * spf, (s.end_frame - s.start_frame) * spf, s.label)
             for s in word_segs
         ]
         
         internal_chunks = self._merge_words_into_chunks(word_objects)
-        
-        # 6. Padding (向两侧静音延展)
         audio_dur_s = audio_tensor.size(0) / 16000
         internal_chunks = self._pad_chunks(internal_chunks, word_objects, audio_dur_s)
 
-        # 7. 生成最终 AudioChunk 对象 (In-Memory Slicing!)
+        # 6. 生成对象
         final_chunks = []
         sr = 16000
         for i, c in enumerate(internal_chunks):
-            # 计算 sample 索引
             s_samp = int(c.start * sr)
             e_samp = int(c.end * sr)
-            
-            # 边界保护
             s_samp = max(0, s_samp)
             e_samp = min(audio_tensor.size(0), e_samp)
             
-            if e_samp <= s_samp:
-                continue
+            if e_samp <= s_samp: continue
 
-            # 切片！(Copy to avoid memory leaks if large tensor is kept)
-            chunk_tensor = audio_tensor[s_samp:e_samp].clone()
-            
             chunk_obj = AudioChunk(
-                tensor=chunk_tensor,
+                tensor=audio_tensor[s_samp:e_samp].clone(),
                 start_time=c.start,
                 end_time=c.end,
                 text=" ".join(c.words),
@@ -231,144 +265,127 @@ class CTCChunker:
             )
             final_chunks.append(chunk_obj)
 
+        print(f"[CTCChunker] Found {len(final_chunks)} chunks.")
         return final_chunks
 
-    # --- 内部核心算法 ---
+    # --- 内部核心 ---
 
-    def _read_lexicon(self, path: Path):
+    def _read_lexicon(self, path: Optional[str]):
         lexicon = {}
-        if not path.exists():
-            return lexicon
-        with open(path, "r", encoding="utf-8") as f:
-            for line in f:
-                parts = line.strip().split()
-                if len(parts) >= 2:
-                    word = parts[0]
-                    # 关键：直接存 List[str]，不要套娃
-                    phones = parts[1:] 
+        if path and os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    parts = line.strip().split()
+                    if len(parts) >= 2:
+                        word = parts[0].lower() 
+                        phones = parts[1:] 
+                        lexicon[word] = phones
+        
+        if self.lang == "en":
+            oov_patch = {
+                "montreal": ["M", "AA1", "N", "T", "R", "IY0", "AA1", "L"],
+                "forced": ["F", "AO1", "R", "S", "T"],
+                "aligner": ["AH0", "L", "AY1", "N", "ER0"],
+            }
+            for word, phones in oov_patch.items():
+                if word not in lexicon:
                     lexicon[word] = phones
         return lexicon
 
-
     def _words_to_pronunciations(self, words: List[str]) -> List[List[List[str]]]:
         out = []
-        print(f"\n[DEBUG] --- Entering _words_to_pronunciations (Total words: {len(words)}) ---")
-        
         for i, w in enumerate(words):
             w_norm = w.strip().lower()
-            if not w_norm:
-                continue
-                
+            if not w_norm: continue
             if w_norm not in self.lexicon:
                 raise ValueError(f"[CTCChunker] OOV Word: {w_norm}")
-            
-            # 1. 原始查表结果
-            flat_phones = self.lexicon[w_norm]
-            
-            # 2. 构造当前的词候选 (包裹一层)
-            word_candidates = [flat_phones]
-            
-            # 🔴 关键调试打印：只打印前 3 个词，防止日志爆炸
-            if i < 3:
-                print(f"[DEBUG] Word[{i}]: '{w_norm}'")
-                print(f"        Lexicon says: {flat_phones} (Type: {type(flat_phones)})")
-                print(f"        Wrapped into: {word_candidates} (Depth: 2)")
-            
-            out.append(word_candidates)
-        
-        # 3. 最终整体结构验证
-        if out:
-            print(f"[DEBUG] Final structure sample (out[0]): {out[0]}")
-            # 物理验证：如果是正确的，out[0][0] 应该是一个 list (音素列表)，而不是 string
-            if len(out[0]) > 0:
-                print(f"        Verification: out[0][0][0] is '{out[0][0][0]}' (Should be first phone char)")
-        
-        print(f"[DEBUG] --- End of _words_to_pronunciations ---\n")
+            out.append([self.lexicon[w_norm]])
         return out
-            
 
-
-    def _beam_search(self, log_probs, words, prons_per_word) -> PronCandidate:
-        """简单的 Beam Search，寻找最佳发音组合"""
-        # 1. 确保初始化时 phones 是一个纯净的空列表
+    def _beam_search(self, log_probs, words, prons_per_word, beam_width=10) -> Optional[PronCandidate]:
+        """
+        支持动态调整 Beam Width + [核心升级] 音素模糊匹配
+        """
         beam = [PronCandidate(phones=[], pron_choice_idxs=[], score=0.0)]
         
         for i, word in enumerate(words):
             new_beam = []
-            variants = prons_per_word[i] # 结构: [['t', 'a', ...]]
+            variants = prons_per_word[i]
             
             for cand in beam:
                 for p_idx, pron in enumerate(variants):
-                    # --- 维度防御检查 ---
-                    # 确保 pron 是 ['t', 'a'] 而不是 [['t', 'a']]
-                    if len(pron) > 0 and isinstance(pron[0], list):
-                        print(f"[DEBUG] Dimension Error detected at word '{word}', flattening...")
-                        pron = pron[0] 
-
-                    # 2. 拼接音素序列
+                    # 防御性扁平化处理
+                    if len(pron) > 0 and isinstance(pron[0], list): pron = pron[0] 
+                    
                     new_phones = cand.phones + pron
+                    new_ids = []
+                    valid_pron = True
                     
-                    # --- 再次防御：确保 new_phones 里的每一个元素都是字符串 ---
-                    try:
-                        # 核心查表
-                        new_ids = [self.phone_to_id[p] for p in new_phones if isinstance(p, str)]
-                    except KeyError as e:
-                        # 某些音素不在词表中，打印出来看看是哪个
-                        # print(f"[CTCChunker] Missing Phone in Vocabulary: {e}")
-                        continue
-                    except TypeError as e:
-                        # 如果走到这里，说明 new_phones 里混进了 list
-                        # 我们打印出 new_phones 的前几个元素来抓现行
-                        print(f"[CRITICAL] new_phones sample: {new_phones[:3]}")
-                        raise e
+                    # --- [核心修复] 音素模糊匹配逻辑 ---
+                    for p in new_phones:
+                        if not isinstance(p, str): continue
+                        
+                        # 1. 尝试精确匹配 (例如: "AA", "sil")
+                        if p in self.phone_to_id:
+                            new_ids.append(self.phone_to_id[p])
+                        else:
+                            # 2. 尝试去重音匹配 (例如: "AA1" -> "AA")
+                            # Chunker 词表通常不带数字，但词典带数字
+                            p_pure = ''.join(filter(str.isalpha, p))
+                            if p_pure in self.phone_to_id:
+                                new_ids.append(self.phone_to_id[p_pure])
+                            elif p == "O": 
+                                # 3. 特殊处理 "O" (Garbage/Null)
+                                # 如果模型词表里没有 "O"，我们选择跳过它，
+                                # 而不是判定路径断裂。CTC 会自动处理中间的空白。
+                                continue
+                            else:
+                                # 4. 确实是未知的 OOV，标记路径无效
+                                # print(f"DEBUG: Real OOV found: {p} (pure: {p_pure})")
+                                valid_pron = False
+                                break
+                    # -----------------------------------
                     
-                    # 3. 计算 Viterbi 得分 (build_trellis)
-                    # 这里的 score 计算逻辑保持你的不变
+                    if not valid_pron:
+                        continue 
+                    
+                    # 计算 Viterbi 得分
                     try:
                         trellis = build_trellis(log_probs, new_ids, self.blank_id)
-                        # 注意：trellis 维度通常是 (T, S+1)
-                        score = float(torch.max(trellis[:, len(new_ids)]).item())
+                        # Trellis shape: (T+1, S+1), 取最后时刻最后状态的得分
+                        score = float(torch.max(trellis[-1, -1]).item())
                     except Exception:
                         score = -float("inf")
                     
-                    new_beam.append(PronCandidate(
-                        phones=new_phones,
-                        pron_choice_idxs=cand.pron_choice_idxs + [p_idx],
-                        score=score
-                    ))
+                    # 只有分数有效的路径才保留
+                    if score > -1e8: 
+                        new_beam.append(PronCandidate(
+                            phones=new_phones,
+                            pron_choice_idxs=cand.pron_choice_idxs + [p_idx],
+                            score=score
+                        ))
             
-            # 4. 剪枝
+            if not new_beam: return None # Dead end
             new_beam.sort(key=lambda x: x.score, reverse=True)
-            beam = new_beam[:self.beam_size]
+            beam = new_beam[:beam_width] # 使用传入的 beam_width
             
         return beam[0] if beam else None
 
     def _phones_to_word_segments_robust(self, token_segs, words, prons):
-        """根据音素长度反推单词边界"""
         word_segs = []
-        wi = 0 # token index
-        
+        wi = 0 
         for word, pron in zip(words, prons):
             n_phones = len(pron)
-            if n_phones == 0:
-                continue
-            
-            if wi + n_phones > len(token_segs):
-                break
-                
+            if n_phones == 0: continue
+            if wi + n_phones > len(token_segs): break
             start_frame = token_segs[wi].start_frame
             end_frame = token_segs[wi + n_phones - 1].end_frame
-            
             word_segs.append(Segment(word, start_frame, end_frame))
             wi += n_phones
-            
         return word_segs
 
     def _merge_words_into_chunks(self, words: List[WordSeg]) -> List[InternalChunk]:
-        """[核心] 你的孤岛切分逻辑"""
-        if not words:
-            return []
-        
+        if not words: return []
         chunks = []
         cur_words = [words[0].word]
         cur_start = words[0].start
@@ -377,108 +394,85 @@ class CTCChunker:
         for w in words[1:]:
             gap = w.start - cur_end
             proposed_dur = w.end - cur_start
-            
-            # 判断是否断开
             if gap <= self.max_gap_s and proposed_dur <= self.max_chunk_s:
-                # 连起来
                 cur_end = w.end
                 cur_words.append(w.word)
             else:
-                # 断开，保存前一个
                 if (cur_end - cur_start) >= self.min_chunk_s and len(cur_words) >= self.min_words:
                     chunks.append(InternalChunk(cur_start, cur_end, cur_words))
-                
-                # 开启新 Chunk
                 cur_start = w.start
                 cur_end = w.end
                 cur_words = [w.word]
-                
-        # 扫尾
-        if (cur_end - cur_start) >= self.min_chunk_s and len(cur_words) >= self.min_words:
-            chunks.append(InternalChunk(cur_start, cur_end, cur_words))
-            
+        
+        if len(cur_words) > 0:
+             chunks.append(InternalChunk(cur_start, cur_end, cur_words))
         return chunks
 
     def _pad_chunks(self, chunks, words, audio_dur):
-        """向两侧安全地填充静音"""
-        if not chunks: 
-            return []
+        if not chunks: return []
         out = []
-        
-        # 为了快速查找，建立 word map
-        # 这里简化处理：假设 chunks 和 words 都是有序的
-        # 实际逻辑：在 words 列表中找到 chunk 的第一个词和最后一个词的前后邻居
-        
-        # 简单版：只做基础 padding，不处理复杂的 word 邻居避让（为了代码清晰）
-        # 如果需要原来的严格逻辑，可以把 chunks2.py 里的 pad_chunks_without_cutting_words 完整搬过来
-        # 这里演示基础逻辑：
         for c in chunks:
             new_start = max(0.0, c.start - self.pad_s)
             new_end = min(audio_dur, c.end + self.pad_s)
             out.append(InternalChunk(new_start, new_end, c.words))
-            
         return out
 
-
 # ==========================================
-#  Static Pure Functions (数学运算部分)
+#  Static Functions
 # ==========================================
 
 def build_trellis(log_probs: torch.Tensor, targets: List[int], blank_id: int) -> torch.Tensor:
-    """Viterbi Trellis 构建 (Vectorized)"""
     T, V = log_probs.shape
     N = len(targets)
     device = log_probs.device
-    neg_inf = -float("inf")
+    neg_inf = -1e9 
 
     targets_t = torch.tensor(targets, device=device, dtype=torch.long)
     trellis = torch.full((T + 1, N + 1), neg_inf, device=device, dtype=log_probs.dtype)
     trellis[0, 0] = 0.0
-
-    # First column: blanks only
     trellis[1:, 0] = torch.cumsum(log_probs[:, blank_id], dim=0)
 
     for t in range(1, T + 1):
         lp_t = log_probs[t - 1]
         blank = lp_t[blank_id]
         emit_scores = lp_t[targets_t]
-
+        
         stay = trellis[t - 1, 1:] + blank
         emit = trellis[t - 1, :-1] + emit_scores
-
         trellis[t, 1:] = torch.maximum(stay, emit)
 
     return trellis
 
 def backtrace(trellis: torch.Tensor, log_probs: torch.Tensor, targets: List[int], blank_id: int) -> List[Point]:
-    """回溯寻找最佳路径点"""
     _T = trellis.size(0) - 1
     N = trellis.size(1) - 1
     j = N
-    t = int(torch.argmax(trellis[:, j]).item())
+    t = _T 
     path = []
 
     while t > 0 and j > 0:
         lp_t = log_probs[t - 1]
+        score_current = trellis[t, j]
         score_stay = trellis[t - 1, j] + lp_t[blank_id]
         score_emit = trellis[t - 1, j - 1] + lp_t[targets[j - 1]]
-
-        if score_emit > score_stay:
+        
+        if abs(score_current - score_emit) < 1e-4:
             path.append(Point(token_index=j - 1, time_index=t - 1))
             j -= 1
             t -= 1
+        elif abs(score_current - score_stay) < 1e-4:
+            t -= 1
         else:
             t -= 1
+            
     path.reverse()
     return path
 
 def points_to_segments(points: List[Point], labels: List[str]) -> List[Segment]:
-    """将点转换为区间"""
-    if not points: 
-        return []
+    if not points: return []
     segs = []
     for i, p in enumerate(points):
         start = p.time_index
-        end = points[i + 1].time_index if i + 1 < len(points) else (p.time_index + 1)
+        end = points[i + 1].time_index if i + 1 < len(points) else start + 1
         segs.append(Segment(labels[p.token_index], start, end))
     return segs

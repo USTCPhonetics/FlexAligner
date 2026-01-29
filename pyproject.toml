@@ -4,37 +4,37 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flexaligner"
-version = "0.1.1"
-description = "Robust speech-text alignment framework with CTC Chunking and CE local alignment."
+version = "1.0.0"  # 既然我们已经实现了全闭环和 CLI，直接上 1.0.0 吧！
+description = "Robust Signal-to-Symbol alignment framework for wild real-world speech."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
     {name = "Wang Yiming", email = "wangyiming0369@gmail.com"},
     {name = "Jiahong Yuan", email = "jiahongyuan@ustc.edu.cn"}
 ]
+license = {text = "MIT"}
 
 # 核心运行依赖 (L1: FAST 模式)
-# 确保中英双语清洗、基础计算、模型加载的物理闭环
+# [修正] 移除了 praatio，因为我们实现了自研的高效 TextGrid 导出器
 dependencies = [
     "torch>=2.0.0",
     "torchaudio",
     "transformers",
     "soundfile",
     "numpy",
-    "scipy",     # 用于 FAST 模式下的基础重采样
-    "praatio",  
-    "tqdm",
-    "jieba",
-    "g2p_en",
-    "num2words", # [NEW] 核心依赖：英语数字归一化
-    "chardet",   # 编码识别
-    "nltk",      # g2p_en 的底层支持
+    "scipy",      # 用于 FAST 模式下的基础重采样
+    "tqdm",       # [NEW] 批处理进度条核心依赖
+    "jieba",      # 中文分词
+    "g2p_en",     # 英文 G2P
+    "num2words",  # 英文数字归一化
+    "chardet",    # 编码识别
+    "nltk",       # g2p_en 的底层支持
 ]
 
 [project.optional-dependencies]
 # L2: 坦克级鲁棒模式所需的重型依赖 (音频处理增强)
 robust = [
-    "librosa",
+    "librosa",    # 用于复杂音频的重采样和加载
 ]
 # L3: 安全增强模式
 secure = [
@@ -48,12 +48,16 @@ test = [
 dev = [
     "ruff",
 ]
-# 确保 CI 或开发者使用 'pip install -e .[all]' 时能覆盖所有组件
+# 一键安装所有功能的开发环境
 all = [
     "flexaligner[robust,secure,test,dev]",
 ]
 
 [project.scripts]
+# [修正] 双入口策略：满足不同用户的习惯
+# 1. flexaligner: 包名即命令，最直观
+flexaligner = "flexaligner.cli:main"
+# 2. flex-align: 短命令，打字快
 flex-align = "flexaligner.cli:main"
 
 [tool.setuptools.packages.find]
@@ -61,6 +65,7 @@ where = ["src"]
 include = ["flexaligner*"]
 
 [tool.setuptools.package-data]
+# 确保内置的字典或小资源能被打包
 flexaligner = ["assets/**/*"]
 
 [tool.pytest.ini_options]
