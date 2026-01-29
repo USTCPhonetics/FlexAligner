@@ -140,9 +140,6 @@ aligner.align_batch(tasks)
 
 print(f"✅ Processing complete.")
 ```
-🗓️ Roadmap & To-Do
-## 🗓️ Roadmap
-
 ## 🗓️ Roadmap
 
 - [x] **Core Alignment Engine:** Two-stage architecture (CTC Chunking + Local Alignment).
