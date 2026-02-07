@@ -56,6 +56,5 @@ jobs:
         # 强制 CPU 推理模式，防止云端找不到 GPU 报错
         CUDA_VISIBLE_DEVICES: ""
       run: |
-        # 执行点火测试
-        # 增加了 -v (详细) 和 -s (显示输出)，方便我们在 Actions 日志里看模型下载进度
-        pytest -v -s tests/test_victory_lap.py
+        # 方案 A：运行所有测试（推荐，Pytest 会自动抓取 test_*.py）
+        pytest -v -s tests/ --cache-clear
