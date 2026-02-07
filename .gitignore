@@ -56,3 +56,5 @@ Toolkit/scripts
 hf.sh
 generate_requirement.py
 test.ipynb
+tests/test_zh_bach.py
+tests/test_999_en_wav.py
