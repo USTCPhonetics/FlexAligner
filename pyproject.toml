@@ -29,6 +29,7 @@ dependencies = [
     "num2words",  # 英文数字归一化
     "chardet",    # 编码识别
     "nltk",       # g2p_en 的底层支持
+    "pandas"
 ]
 
 [project.optional-dependencies]
