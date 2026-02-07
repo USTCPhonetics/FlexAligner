@@ -82,6 +82,39 @@ def parse_batch_file(file_path: Path) -> List[Tuple[str, str, str]]:
                 
     return tasks
 
+def print_dashboard(args, config: AlignmentConfig, is_batch: bool, tasks_count: int = 0):
+    """[系统预检仪表盘] 打印所有详尽参数"""
+    print("\n" + "⚙️ " + "="*58)
+    print(f"{' FLEXALIGNER CONFIGURATION DASHBOARD ':=^58}")
+    print("="*60)
+    
+    # 1. 运行环境
+    print(f"  [Environment]")
+    print(f"    - Mode:        {'📦 BATCH' if is_batch else '🎯 SINGLE'}")
+    print(f"    - Device:      {config.device.upper()}")
+    print(f"    - Language:    {config.lang if config.lang else 'Auto-Detect'}")
+    
+    # 2. 物理与算法参数 (显化默认值)
+    print(f"\n  [Algorithm Parameters]")
+    print(f"    - Max Gap (s): {config.max_gap_s:<10} (Stage 1 split threshold)")
+    print(f"    - Beam Size:   {config.beam_size:<10} (Stage 1 search width)")
+    print(f"    - Min Chunk:   {getattr(config, 'min_chunk_s', 1.0):<10} s")
+    print(f"    - Pad Window:  {getattr(config, 'pad_s', 0.15):<10} s")
+    
+    # 3. 任务信息
+    print(f"\n  [Task Scope]")
+    if is_batch:
+        print(f"    - Batch File:  {args.input_file}")
+        print(f"    - Tasks Loaded:{tasks_count}")
+    else:
+        print(f"    - Audio In:    {args.input_file}")
+        print(f"    - Text In:     {args.transcript_file if args.transcript_file else '(Auto-derived)'}")
+        print(f"    - Output:      {args.output if args.output else '(Auto-derived .TextGrid)'}")
+
+    print("="*60 + "\n")
+
+
+    
 def main():
     parser = argparse.ArgumentParser(
         description="🌊 FlexAligner: Robust Signal-to-Symbol Alignment.",
@@ -89,15 +122,17 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
-    # 核心位置参数：Input File (可能是音频，也可能是 CSV)
+    # 核心位置参数
     parser.add_argument("input_file", help="Input Audio file OR Batch list (.csv/.txt)")
-    # 可选位置参数：Transcript (仅单文件模式需要，Batch模式会自动忽略)
     parser.add_argument("transcript_file", nargs="?", help="Transcript file (for single mode)")
     
     # 选项
     parser.add_argument("-o", "--output", help="Output path (for single mode)")
     parser.add_argument("-l", "--lang", choices=["zh", "en"], help="Force language (triggers Language Lock)")
     parser.add_argument("--device", default="cpu", help="Compute device (cuda/cpu/mps)")
+    
+    # 调试与详尽模式 # Modified
+    parser.add_argument("-v", "--verbose", action="store_true", help="Print detailed parameters and logs")
     
     # 高级参数
     parser.add_argument("--beam_size", type=int, default=10, help="Stage 1 Beam Size")
@@ -107,23 +142,15 @@ def main():
     
     input_path = Path(args.input_file)
     
-    # --- 1. 智能路由 (Smart Routing) ---
-    is_batch = False
-    
+    # --- 1. 智能路由 ---
     if input_path.suffix.lower() in BATCH_EXTENSIONS:
         is_batch = True
     elif input_path.suffix.lower() in AUDIO_EXTENSIONS:
         is_batch = False
     else:
-        # 后缀无法识别，尝试读取内容或根据第二个参数判断
-        # 如果给了 transcript_file，肯定是单文件模式
-        if args.transcript_file:
-            is_batch = False
-        else:
-            # 默认为 Batch 尝试解析
-            is_batch = True
+        is_batch = not bool(args.transcript_file)
 
-    # --- 2. 初始化引擎 (一次性) ---
+    # --- 2. 初始化配置 ---
     config = AlignmentConfig(
         device=args.device,
         lang=args.lang,
@@ -131,11 +158,19 @@ def main():
         max_gap_s=args.max_gap
     )
     
-    print("\n" + "="*60)
-    print(f"🌊 FlexAligner (v1.0.0) | Mode: {'📦 BATCH' if is_batch else '🎯 SINGLE'}")
-    print(f"   Device: {config.device.upper()} | Lang: {args.lang if args.lang else 'Auto'}")
-    print("="*60)
+    # 获取任务列表以供打印
+    tasks = []
+    if is_batch and input_path.exists():
+        tasks = parse_batch_file(input_path)
 
+    # --- 3. 打印仪表盘 (如果开启 verbose) --- # Modified
+    if args.verbose:
+        print_dashboard(args, config, is_batch, len(tasks))
+    else:
+        # 非 verbose 模式下的简短输出
+        print(f"🌊 FlexAligner (v1.0.0) | {config.device.upper()} | {'Batch' if is_batch else 'Single'}")
+
+    # --- 4. 初始化引擎 ---
     try:
         aligner = FlexAligner(config=asdict(config))
     except Exception as e:
@@ -144,53 +179,45 @@ def main():
 
     t0 = time.time()
 
-    # --- 3. 执行逻辑 ---
+    # --- 5. 执行逻辑 ---
     if is_batch:
         if not input_path.exists():
             print(f"❌ Error: Batch file not found: {input_path}")
             sys.exit(1)
-            
-        tasks = parse_batch_file(input_path)
         if not tasks:
             print("⚠️  No valid tasks to process.")
             sys.exit(0)
             
-        print(f"✅ Loaded {len(tasks)} valid tasks. Starting pipeline...")
-        aligner.align_batch(tasks)
+        print(f"🚀 Starting pipeline for {len(tasks)} tasks...")
+        aligner.align_batch(tasks) # 内部可以根据 config.verbose 决定是否打印每条进度
         
     else:
-        # 单文件模式：需要更严格的检查
-        if not args.transcript_file:
-            # 尝试自动推断 transcript
+        # 单文件推断逻辑保持不变
+        actual_transcript = args.transcript_file
+        if not actual_transcript:
             potential_txt = input_path.with_suffix(".txt")
             if potential_txt.exists():
-                print(f"ℹ️  Auto-detected transcript: {potential_txt.name}")
-                transcript_path = str(potential_txt)
+                actual_transcript = str(potential_txt)
             else:
                 print("❌ Error: Transcript file required for single mode.")
                 sys.exit(1)
-        else:
-            transcript_path = args.transcript_file
 
-        # 推断输出路径
-        if args.output:
-            output_path = args.output
-        else:
-            output_path = str(input_path.with_suffix(".TextGrid"))
+        actual_output = args.output if args.output else str(input_path.with_suffix(".TextGrid"))
             
         if not input_path.exists():
             print(f"❌ Error: Audio file not found: {input_path}")
             sys.exit(1)
             
-        # 执行单条对齐 (开启 Verbose 仪表盘)
         try:
-            aligner.align(str(input_path), transcript_path, output_path, verbose=True)
-            print(f"\n✅ Saved to: {Path(output_path).absolute()}")
+            # 这里的 verbose 传给 align 方法，用于打印 Stage 1/2 的细节
+            aligner.align(str(input_path), actual_transcript, actual_output, verbose=args.verbose)
+            if args.verbose:
+                print(f"✨ [Success] Result saved to: {Path(actual_output).absolute()}")
         except Exception as e:
             print(f"\n❌ Alignment Failed: {e}")
             sys.exit(1)
 
-    print(f"🕒 Total Runtime: {time.time() - t0:.2f}s")
+    print(f"\n🏁 Total Runtime: {time.time() - t0:.2f}s")
 
 if __name__ == "__main__":
     main()

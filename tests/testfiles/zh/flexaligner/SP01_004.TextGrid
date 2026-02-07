@@ -1,0 +1,236 @@
+File type = "ooTextFile"
+Object class = "TextGrid"
+
+xmin = 0
+xmax = 4.040000
+tiers? <exists>
+size = 2
+item []:
+    item [1]:
+        class = "IntervalTier"
+        name = "words"
+        xmin = 0
+        xmax = 4.040000
+        intervals: size = 17
+        intervals [1]:
+            xmin = 0.000000
+            xmax = 0.151493
+            text = "NULL"
+        intervals [2]:
+            xmin = 0.151493
+            xmax = 0.221493
+            text = "sil"
+        intervals [3]:
+            xmin = 0.221493
+            xmax = 0.621493
+            text = "如果"
+        intervals [4]:
+            xmin = 0.621493
+            xmax = 0.871493
+            text = "没有"
+        intervals [5]:
+            xmin = 0.871493
+            xmax = 1.191493
+            text = "消毒"
+        intervals [6]:
+            xmin = 1.191493
+            xmax = 1.431493
+            text = "液"
+        intervals [7]:
+            xmin = 1.431493
+            xmax = 1.661493
+            text = "sil"
+        intervals [8]:
+            xmin = 1.661493
+            xmax = 1.871493
+            text = "用"
+        intervals [9]:
+            xmin = 1.871493
+            xmax = 2.341493
+            text = "普通"
+        intervals [10]:
+            xmin = 2.341493
+            xmax = 2.751493
+            text = "香皂"
+        intervals [11]:
+            xmin = 2.751493
+            xmax = 2.921493
+            text = "洗"
+        intervals [12]:
+            xmin = 2.921493
+            xmax = 3.261493
+            text = "口罩"
+        intervals [13]:
+            xmin = 3.261493
+            xmax = 3.321493
+            text = "sil"
+        intervals [14]:
+            xmin = 3.321493
+            xmax = 3.441493
+            text = "也"
+        intervals [15]:
+            xmin = 3.441493
+            xmax = 3.801493
+            text = "可以"
+        intervals [16]:
+            xmin = 3.801493
+            xmax = 3.891493
+            text = "sil"
+        intervals [17]:
+            xmin = 3.908607
+            xmax = 4.040000
+            text = "NULL"
+    item [2]:
+        class = "IntervalTier"
+        name = "phones"
+        xmin = 0
+        xmax = 4.040000
+        intervals: size = 37
+        intervals [1]:
+            xmin = 0.000000
+            xmax = 0.151493
+            text = "NULL"
+        intervals [2]:
+            xmin = 0.151493
+            xmax = 0.221493
+            text = "sil"
+        intervals [3]:
+            xmin = 0.221493
+            xmax = 0.321493
+            text = "r"
+        intervals [4]:
+            xmin = 0.321493
+            xmax = 0.401493
+            text = "u"
+        intervals [5]:
+            xmin = 0.401493
+            xmax = 0.511493
+            text = "g"
+        intervals [6]:
+            xmin = 0.511493
+            xmax = 0.621493
+            text = "uo"
+        intervals [7]:
+            xmin = 0.621493
+            xmax = 0.711493
+            text = "m"
+        intervals [8]:
+            xmin = 0.711493
+            xmax = 0.771493
+            text = "ei"
+        intervals [9]:
+            xmin = 0.771493
+            xmax = 0.871493
+            text = "iu"
+        intervals [10]:
+            xmin = 0.871493
+            xmax = 0.941493
+            text = "x"
+        intervals [11]:
+            xmin = 0.941493
+            xmax = 1.041493
+            text = "iao"
+        intervals [12]:
+            xmin = 1.041493
+            xmax = 1.111493
+            text = "d"
+        intervals [13]:
+            xmin = 1.111493
+            xmax = 1.191493
+            text = "u"
+        intervals [14]:
+            xmin = 1.191493
+            xmax = 1.431493
+            text = "ie"
+        intervals [15]:
+            xmin = 1.431493
+            xmax = 1.661493
+            text = "sil"
+        intervals [16]:
+            xmin = 1.661493
+            xmax = 1.871493
+            text = "iong"
+        intervals [17]:
+            xmin = 1.871493
+            xmax = 2.031493
+            text = "p"
+        intervals [18]:
+            xmin = 2.031493
+            xmax = 2.151493
+            text = "u"
+        intervals [19]:
+            xmin = 2.151493
+            xmax = 2.241493
+            text = "t"
+        intervals [20]:
+            xmin = 2.241493
+            xmax = 2.341493
+            text = "ong"
+        intervals [21]:
+            xmin = 2.341493
+            xmax = 2.431493
+            text = "x"
+        intervals [22]:
+            xmin = 2.431493
+            xmax = 2.541493
+            text = "iang"
+        intervals [23]:
+            xmin = 2.541493
+            xmax = 2.641493
+            text = "z"
+        intervals [24]:
+            xmin = 2.641493
+            xmax = 2.751493
+            text = "ao"
+        intervals [25]:
+            xmin = 2.751493
+            xmax = 2.851493
+            text = "x"
+        intervals [26]:
+            xmin = 2.851493
+            xmax = 2.921493
+            text = "i"
+        intervals [27]:
+            xmin = 2.921493
+            xmax = 3.001493
+            text = "k"
+        intervals [28]:
+            xmin = 3.001493
+            xmax = 3.081493
+            text = "ou"
+        intervals [29]:
+            xmin = 3.081493
+            xmax = 3.151493
+            text = "zh"
+        intervals [30]:
+            xmin = 3.151493
+            xmax = 3.261493
+            text = "ao"
+        intervals [31]:
+            xmin = 3.261493
+            xmax = 3.321493
+            text = "sil"
+        intervals [32]:
+            xmin = 3.321493
+            xmax = 3.441493
+            text = "ie"
+        intervals [33]:
+            xmin = 3.441493
+            xmax = 3.551493
+            text = "k"
+        intervals [34]:
+            xmin = 3.551493
+            xmax = 3.651493
+            text = "e"
+        intervals [35]:
+            xmin = 3.651493
+            xmax = 3.801493
+            text = "i"
+        intervals [36]:
+            xmin = 3.801493
+            xmax = 3.891493
+            text = "sil"
+        intervals [37]:
+            xmin = 3.908607
+            xmax = 4.040000
+            text = "NULL"

@@ -1,0 +1,30 @@
+{
+  "utt_id": "SP01_002",
+  "audio": "/home/wangyiming/projects/FlexAligner/tests/testfiles/zh/SP01_002.wav",
+  "transcript": "/home/wangyiming/projects/FlexAligner/tests/testfiles/zh/SP01_002.txt",
+  "words": [
+    "楼",
+    "内",
+    "非常",
+    "整洁",
+    "似乎",
+    "刚刚",
+    "清扫",
+    "过"
+  ],
+  "beam_size": 8,
+  "best_pron_choice_idxs": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "best_score": -13.452959060668945,
+  "seconds_per_frame": 0.02012820512820513,
+  "blank_token": "<pad>",
+  "inter_word_token": null
+}

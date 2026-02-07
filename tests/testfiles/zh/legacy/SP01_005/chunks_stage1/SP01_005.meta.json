@@ -1,0 +1,40 @@
+{
+  "utt_id": "SP01_005",
+  "audio": "/home/wangyiming/projects/FlexAligner/tests/testfiles/zh/SP01_005.wav",
+  "transcript": "/home/wangyiming/projects/FlexAligner/tests/testfiles/zh/SP01_005.txt",
+  "words": [
+    "餐车",
+    "给",
+    "我们",
+    "拉",
+    "来",
+    "了",
+    "伙食",
+    "三",
+    "菜",
+    "一",
+    "汤",
+    "加",
+    "米饭"
+  ],
+  "beam_size": 8,
+  "best_pron_choice_idxs": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0
+  ],
+  "best_score": -23.145553588867188,
+  "seconds_per_frame": 0.020106382978723403,
+  "blank_token": "<pad>",
+  "inter_word_token": null
+}

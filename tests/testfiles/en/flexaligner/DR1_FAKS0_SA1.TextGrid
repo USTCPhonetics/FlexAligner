@@ -1,0 +1,232 @@
+File type = "ooTextFile"
+Object class = "TextGrid"
+
+xmin = 0
+xmax = 3.968000
+tiers? <exists>
+size = 2
+item []:
+    item [1]:
+        class = "IntervalTier"
+        name = "words"
+        xmin = 0
+        xmax = 3.968000
+        intervals: size = 15
+        intervals [1]:
+            xmin = 0.000000
+            xmax = 0.511333
+            text = "NULL"
+        intervals [2]:
+            xmin = 0.511333
+            xmax = 0.591333
+            text = "sil"
+        intervals [3]:
+            xmin = 0.591333
+            xmax = 0.821333
+            text = "she"
+        intervals [4]:
+            xmin = 0.821333
+            xmax = 1.071333
+            text = "had"
+        intervals [5]:
+            xmin = 1.071333
+            xmax = 1.191333
+            text = "your"
+        intervals [6]:
+            xmin = 1.191333
+            xmax = 1.511333
+            text = "dark"
+        intervals [7]:
+            xmin = 1.511333
+            xmax = 1.841333
+            text = "suit"
+        intervals [8]:
+            xmin = 1.841333
+            xmax = 2.001333
+            text = "in"
+        intervals [9]:
+            xmin = 2.001333
+            xmax = 2.411333
+            text = "greasy"
+        intervals [10]:
+            xmin = 2.411333
+            xmax = 2.791333
+            text = "wash"
+        intervals [11]:
+            xmin = 2.791333
+            xmax = 3.201333
+            text = "water"
+        intervals [12]:
+            xmin = 3.201333
+            xmax = 3.471333
+            text = "all"
+        intervals [13]:
+            xmin = 3.471333
+            xmax = 3.831333
+            text = "year"
+        intervals [14]:
+            xmin = 3.831333
+            xmax = 3.901333
+            text = "sil"
+        intervals [15]:
+            xmin = 3.917596
+            xmax = 3.968000
+            text = "NULL"
+    item [2]:
+        class = "IntervalTier"
+        name = "phones"
+        xmin = 0
+        xmax = 3.968000
+        intervals: size = 38
+        intervals [1]:
+            xmin = 0.000000
+            xmax = 0.511333
+            text = "NULL"
+        intervals [2]:
+            xmin = 0.511333
+            xmax = 0.591333
+            text = "sil"
+        intervals [3]:
+            xmin = 0.591333
+            xmax = 0.711333
+            text = "SH"
+        intervals [4]:
+            xmin = 0.711333
+            xmax = 0.821333
+            text = "IY1"
+        intervals [5]:
+            xmin = 0.821333
+            xmax = 0.901333
+            text = "HH"
+        intervals [6]:
+            xmin = 0.901333
+            xmax = 1.011333
+            text = "AE1"
+        intervals [7]:
+            xmin = 1.011333
+            xmax = 1.071333
+            text = "D"
+        intervals [8]:
+            xmin = 1.071333
+            xmax = 1.111333
+            text = "Y"
+        intervals [9]:
+            xmin = 1.111333
+            xmax = 1.151333
+            text = "UH1"
+        intervals [10]:
+            xmin = 1.151333
+            xmax = 1.191333
+            text = "R"
+        intervals [11]:
+            xmin = 1.191333
+            xmax = 1.261333
+            text = "D"
+        intervals [12]:
+            xmin = 1.261333
+            xmax = 1.371333
+            text = "AA1"
+        intervals [13]:
+            xmin = 1.371333
+            xmax = 1.421333
+            text = "R"
+        intervals [14]:
+            xmin = 1.421333
+            xmax = 1.511333
+            text = "K"
+        intervals [15]:
+            xmin = 1.511333
+            xmax = 1.651333
+            text = "S"
+        intervals [16]:
+            xmin = 1.651333
+            xmax = 1.771333
+            text = "UW1"
+        intervals [17]:
+            xmin = 1.771333
+            xmax = 1.841333
+            text = "T"
+        intervals [18]:
+            xmin = 1.841333
+            xmax = 1.901333
+            text = "IH1"
+        intervals [19]:
+            xmin = 1.901333
+            xmax = 2.001333
+            text = "N"
+        intervals [20]:
+            xmin = 2.001333
+            xmax = 2.061333
+            text = "G"
+        intervals [21]:
+            xmin = 2.061333
+            xmax = 2.121333
+            text = "R"
+        intervals [22]:
+            xmin = 2.121333
+            xmax = 2.201333
+            text = "IY1"
+        intervals [23]:
+            xmin = 2.201333
+            xmax = 2.341333
+            text = "S"
+        intervals [24]:
+            xmin = 2.341333
+            xmax = 2.411333
+            text = "IY0"
+        intervals [25]:
+            xmin = 2.411333
+            xmax = 2.551333
+            text = "W"
+        intervals [26]:
+            xmin = 2.551333
+            xmax = 2.651333
+            text = "AA1"
+        intervals [27]:
+            xmin = 2.651333
+            xmax = 2.791333
+            text = "SH"
+        intervals [28]:
+            xmin = 2.791333
+            xmax = 2.911333
+            text = "W"
+        intervals [29]:
+            xmin = 2.911333
+            xmax = 3.001333
+            text = "AO1"
+        intervals [30]:
+            xmin = 3.001333
+            xmax = 3.081333
+            text = "T"
+        intervals [31]:
+            xmin = 3.081333
+            xmax = 3.201333
+            text = "ER0"
+        intervals [32]:
+            xmin = 3.201333
+            xmax = 3.351333
+            text = "AO1"
+        intervals [33]:
+            xmin = 3.351333
+            xmax = 3.471333
+            text = "L"
+        intervals [34]:
+            xmin = 3.471333
+            xmax = 3.671333
+            text = "Y"
+        intervals [35]:
+            xmin = 3.671333
+            xmax = 3.751333
+            text = "IH1"
+        intervals [36]:
+            xmin = 3.751333
+            xmax = 3.831333
+            text = "R"
+        intervals [37]:
+            xmin = 3.831333
+            xmax = 3.901333
+            text = "sil"
+        intervals [38]:
+            xmin = 3.917596
+            xmax = 3.968000
+            text = "NULL"

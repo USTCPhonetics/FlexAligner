@@ -1,0 +1,38 @@
+{
+  "utt_id": "SP01_001",
+  "audio": "/home/wangyiming/projects/FlexAligner/tests/testfiles/zh/SP01_001.wav",
+  "transcript": "/home/wangyiming/projects/FlexAligner/tests/testfiles/zh/SP01_001.txt",
+  "words": [
+    "他们",
+    "抓紧",
+    "一切",
+    "运力",
+    "将",
+    "旅客",
+    "分批",
+    "分",
+    "拨",
+    "地",
+    "送",
+    "走"
+  ],
+  "beam_size": 8,
+  "best_pron_choice_idxs": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "best_score": -17.74382209777832,
+  "seconds_per_frame": 0.02010362694300518,
+  "blank_token": "<pad>",
+  "inter_word_token": null
+}

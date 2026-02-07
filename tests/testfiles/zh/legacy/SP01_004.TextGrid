@@ -1,0 +1,236 @@
+File type = "ooTextFile"
+Object class = "TextGrid"
+
+xmin = 0.000000
+xmax = 4.040000
+tiers? <exists>
+size = 2
+item []:
+    item [1]:
+        class = "IntervalTier"
+        name = "phones"
+        xmin = 0.000000
+        xmax = 4.040000
+        intervals: size = 37
+        intervals [1]:
+            xmin = 0.000000
+            xmax = 0.151000
+            text = "NULL"
+        intervals [2]:
+            xmin = 0.151000
+            xmax = 0.221000
+            text = "sil"
+        intervals [3]:
+            xmin = 0.221000
+            xmax = 0.321000
+            text = "r"
+        intervals [4]:
+            xmin = 0.321000
+            xmax = 0.401000
+            text = "u"
+        intervals [5]:
+            xmin = 0.401000
+            xmax = 0.511000
+            text = "g"
+        intervals [6]:
+            xmin = 0.511000
+            xmax = 0.621000
+            text = "uo"
+        intervals [7]:
+            xmin = 0.621000
+            xmax = 0.711000
+            text = "m"
+        intervals [8]:
+            xmin = 0.711000
+            xmax = 0.771000
+            text = "ei"
+        intervals [9]:
+            xmin = 0.771000
+            xmax = 0.871000
+            text = "iu"
+        intervals [10]:
+            xmin = 0.871000
+            xmax = 0.941000
+            text = "x"
+        intervals [11]:
+            xmin = 0.941000
+            xmax = 1.041000
+            text = "iao"
+        intervals [12]:
+            xmin = 1.041000
+            xmax = 1.111000
+            text = "d"
+        intervals [13]:
+            xmin = 1.111000
+            xmax = 1.191000
+            text = "u"
+        intervals [14]:
+            xmin = 1.191000
+            xmax = 1.431000
+            text = "ie"
+        intervals [15]:
+            xmin = 1.431000
+            xmax = 1.661000
+            text = "sil"
+        intervals [16]:
+            xmin = 1.661000
+            xmax = 1.871000
+            text = "iong"
+        intervals [17]:
+            xmin = 1.871000
+            xmax = 2.031000
+            text = "p"
+        intervals [18]:
+            xmin = 2.031000
+            xmax = 2.151000
+            text = "u"
+        intervals [19]:
+            xmin = 2.151000
+            xmax = 2.241000
+            text = "t"
+        intervals [20]:
+            xmin = 2.241000
+            xmax = 2.341000
+            text = "ong"
+        intervals [21]:
+            xmin = 2.341000
+            xmax = 2.431000
+            text = "x"
+        intervals [22]:
+            xmin = 2.431000
+            xmax = 2.541000
+            text = "iang"
+        intervals [23]:
+            xmin = 2.541000
+            xmax = 2.641000
+            text = "z"
+        intervals [24]:
+            xmin = 2.641000
+            xmax = 2.751000
+            text = "ao"
+        intervals [25]:
+            xmin = 2.751000
+            xmax = 2.851000
+            text = "x"
+        intervals [26]:
+            xmin = 2.851000
+            xmax = 2.921000
+            text = "i"
+        intervals [27]:
+            xmin = 2.921000
+            xmax = 3.001000
+            text = "k"
+        intervals [28]:
+            xmin = 3.001000
+            xmax = 3.081000
+            text = "ou"
+        intervals [29]:
+            xmin = 3.081000
+            xmax = 3.151000
+            text = "zh"
+        intervals [30]:
+            xmin = 3.151000
+            xmax = 3.261000
+            text = "ao"
+        intervals [31]:
+            xmin = 3.261000
+            xmax = 3.321000
+            text = "sil"
+        intervals [32]:
+            xmin = 3.321000
+            xmax = 3.441000
+            text = "ie"
+        intervals [33]:
+            xmin = 3.441000
+            xmax = 3.551000
+            text = "k"
+        intervals [34]:
+            xmin = 3.551000
+            xmax = 3.651000
+            text = "e"
+        intervals [35]:
+            xmin = 3.651000
+            xmax = 3.801000
+            text = "i"
+        intervals [36]:
+            xmin = 3.801000
+            xmax = 3.891000
+            text = "sil"
+        intervals [37]:
+            xmin = 3.909000
+            xmax = 4.040000
+            text = "NULL"
+    item [2]:
+        class = "IntervalTier"
+        name = "words"
+        xmin = 0.000000
+        xmax = 4.040000
+        intervals: size = 17
+        intervals [1]:
+            xmin = 0.000000
+            xmax = 0.151000
+            text = "NULL"
+        intervals [2]:
+            xmin = 0.151000
+            xmax = 0.221000
+            text = "sil"
+        intervals [3]:
+            xmin = 0.221000
+            xmax = 0.621000
+            text = "如果"
+        intervals [4]:
+            xmin = 0.621000
+            xmax = 0.871000
+            text = "没有"
+        intervals [5]:
+            xmin = 0.871000
+            xmax = 1.191000
+            text = "消毒"
+        intervals [6]:
+            xmin = 1.191000
+            xmax = 1.431000
+            text = "液"
+        intervals [7]:
+            xmin = 1.431000
+            xmax = 1.661000
+            text = "sil"
+        intervals [8]:
+            xmin = 1.661000
+            xmax = 1.871000
+            text = "用"
+        intervals [9]:
+            xmin = 1.871000
+            xmax = 2.341000
+            text = "普通"
+        intervals [10]:
+            xmin = 2.341000
+            xmax = 2.751000
+            text = "香皂"
+        intervals [11]:
+            xmin = 2.751000
+            xmax = 2.921000
+            text = "洗"
+        intervals [12]:
+            xmin = 2.921000
+            xmax = 3.261000
+            text = "口罩"
+        intervals [13]:
+            xmin = 3.261000
+            xmax = 3.321000
+            text = "sil"
+        intervals [14]:
+            xmin = 3.321000
+            xmax = 3.441000
+            text = "也"
+        intervals [15]:
+            xmin = 3.441000
+            xmax = 3.801000
+            text = "可以"
+        intervals [16]:
+            xmin = 3.801000
+            xmax = 3.891000
+            text = "sil"
+        intervals [17]:
+            xmin = 3.909000
+            xmax = 4.040000
+            text = "NULL"

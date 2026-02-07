@@ -63,8 +63,8 @@ class AlignmentConfig:
     # --- 3. 算法参数 (Stage 1) ---
     beam_size: int = 10
     min_chunk_s: float = 1.0
-    max_chunk_s: float = 2.0
-    max_gap_s: float = 0.1
+    max_chunk_s: float = 12.0
+    max_gap_s: float = 0.35
     min_words: int = 2
     pad_s: float = 0.15
     blank_token: str = "<pad>"
@@ -73,13 +73,17 @@ class AlignmentConfig:
     sil_phone: str = "sil"
     optional_sil: bool = True
     sil_cost: float = -0.5
-    align_beam_size: int = 300
+    align_beam_size: int = 400
     p_stay: float = 0.92
     
     # 🔴 物理真理：修改后的 Wav2Vec2 Stride=1 => 10ms
     frame_hop_s: float = 0.01
     offset_s: float = 0
-
+    boundary_lambda: float = 0.0
+    boundary_context_s: float = 0.06
+    
+    chunks_out_dir : Optional[str] = "chunks_out" # 可选的输出目录参数，默认为 "chunks_out"
+    verbose: bool = False # 是否开启详细日志输出
     # src/flexaligner/config.py
 
     # src/flexaligner/config.py 中的 __post_init__ 关键部分修正
@@ -97,13 +101,13 @@ class AlignmentConfig:
         base_asset = Path("assets/dictionaries")
         if self.lang == "zh":
             self.lexicon_path = str(base_asset / "zh.dict") # 修正
-            self.phone_json_path = str(base_asset / "phones.json")
+            # self.phone_json_path = str(base_asset / "phones.json")
         elif self.lang == "en":
             self.lexicon_path = str(base_asset / "en.dict") # 修正
             
             # 英语音素表逻辑：优先找本地 vocab.json
             if os.path.isdir(self.chunk_model_path):
                 vocab_path = Path(self.chunk_model_path) / "vocab.json"
-                self.phone_json_path = str(vocab_path) if vocab_path.exists() else None
+                # self.phone_json_path = str(vocab_path) if vocab_path.exists() else None
             else:
                 self.phone_json_path = None # 云端模式将由 Chunker 在运行时补全

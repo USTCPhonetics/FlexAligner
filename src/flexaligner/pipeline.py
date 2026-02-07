@@ -1,11 +1,15 @@
 import torch
 import numpy as np
 import time
+import pandas as pd
+import soundfile as sf
+import shutil
+import gc
 from pathlib import Path
-from dataclasses import asdict
+from dataclasses import dataclass, asdict
 from typing import Dict, Union, List, Tuple, Optional
 
-# 尝试导入进度条，如果没有则使用哑巴包装器
+# 进度条适配
 try:
     from tqdm import tqdm
 except ImportError:
@@ -14,16 +18,24 @@ except ImportError:
 # [核心依赖]
 from .config import AlignmentConfig
 from .frontend import TextFrontend
-# 延迟导入防止循环依赖
 from .chunker import CTCChunker
 from .aligner import LocalAligner
+
+# 定义一个轻量级的数据结构，用于在 Stage 1 和 Stage 2 之间传递数据
+@dataclass
+class AlignmentTask:
+    chunk_id: str
+    text: str
+    start_time: float
+    end_time: float
+    tensor: torch.Tensor
 
 class FlexAligner:
     def __init__(self, config: Union[Dict, AlignmentConfig, None] = None):
         """
-        FlexAligner 核心控制器
+        FlexAligner 控制器：严格分步执行 (Segmentation -> Alignment)
         """
-        # 1. 配置对象化
+        # 1. 配置加载
         if isinstance(config, dict):
             self.config = AlignmentConfig(**config)
         elif isinstance(config, AlignmentConfig):
@@ -31,199 +43,259 @@ class FlexAligner:
         else:
             self.config = AlignmentConfig()
         
-        config_dict = asdict(self.config)
+        self.config_dict = asdict(self.config)
         
-        # 2. 初始化前端
+        # 2. 初始化前端 (轻量级，常驻)
         mode = getattr(self.config, "validation_mode", "FAST")
-        self.frontend = TextFrontend(config=config_dict, mode=mode)
+        self.frontend = TextFrontend(config=self.config_dict, mode=mode)
         
-        # 3. 初始化 Chunker (Stage 1)
-        self.chunker = CTCChunker(config=config_dict)
-        
-        # 4. 初始化 Aligner (Stage 2)
-        # 共享词表优化：如果 Aligner 没指定词表，直接复用 Chunker 的
-        if self.config.phone_json_path is None and hasattr(self.chunker, 'phone_to_id'):
-            self.aligner = LocalAligner(config=config_dict, phone_to_id=self.chunker.phone_to_id)
-        else:
-            self.aligner = LocalAligner(config=config_dict)
+        # 3. 模型组件 (懒加载 / 按需加载，初始为空)
+        self.chunker: Optional[CTCChunker] = None
+        self.aligner: Optional[LocalAligner] = None
 
+    # =========================================================================
+    # [入口 1] 单文件处理 (Strict Mode)
+    # =========================================================================
     def align(self, audio_path: str, text_path: str, output_path: str, verbose: bool = True):
         """
-        [单文件入口] 全闭环对齐流程
+        单文件全流程：针对单文件任务，如果出错，应当直接抛出异常。
         """
-        return self._align_core(audio_path, text_path, output_path, verbose=verbose)
+        tasks = [(audio_path, text_path, output_path)]
+        self.align_batch(tasks, raise_on_error=True)
 
-    def align_batch(self, tasks: List[Tuple[str, str, str]]):
+    # =========================================================================
+    # [入口 2] 批量处理 (Robust Mode - Two Stage)
+    # =========================================================================
+    def align_batch(self, tasks: List[Tuple[str, str, str]], raise_on_error: bool = False):
         """
-        [批处理入口] 高效处理文件列表
-        Args:
-            tasks: List of (audio_path, text_path, output_path)
+        严格分步执行批量任务：
+        Phase 1: 全部切分 -> 内存暂存 -> 卸载 Chunker
+        Phase 2: 加载 Aligner -> 读取暂存 -> 对齐拼接
         """
-        if not tasks:
-            print("[FlexAligner] Warning: Empty task list.")
-            return
+        if not tasks: return
 
         print("\n" + "="*80)
-        print(f"🚀 [Batch Mode] Starting alignment for {len(tasks)} files...")
-        print(f"   Device: {self.config.device} | Base Lang: {self.config.lang if self.config.lang else 'Auto-Detect'}")
+        print(f"🚀 [FlexAligner] Batch Processing: {len(tasks)} files")
+        print(f"   Strategy: Two-Stage Sequential (Chunk -> Align)")
         print("="*80)
 
-        # 1. 锁定语言 (Language Lock)
-        # 如果 Config 指定了语言，则以此为准；否则以第一条数据探测结果为准
-        target_lang = self.config.lang
+        # --- Phase 1: Segmentation ---
+        print(f"\n[Phase 1] Segmentation & Text Preprocessing...")
         
-        success_count = 0
-        fail_count = 0
-        start_time = time.time()
-
-        # 使用 tqdm 显示进度条
-        pbar = tqdm(tasks, unit="file", desc="Aligning")
+        if self.chunker is None:
+            print(f"   -> Loading Chunker model...")
+            self.chunker = CTCChunker(config=self.config_dict)
         
-        for i, (audio_p, text_p, out_p) in enumerate(pbar):
+        # 暂存所有文件的 Chunk 信息
+        # 结构: [ {"output_path": str, "full_duration": float, "chunks": List[AlignmentTask]}, ... ]
+        batch_data = []
+        
+        pbar_seg = tqdm(tasks, desc="Seg", unit="file")
+        for audio_p, text_p, out_p in pbar_seg:
             try:
-                # 预加载文本以进行语言一致性检查
-                # 注意：为了效率，我们尽量不重复读取，但在 batch 模式下安全第一
+                # IO
+                audio_np = self.frontend.load_audio(audio_p)
                 raw_text = self.frontend.load_text(text_p)
-                current_lang = self.frontend.detect_language(raw_text)
-
-                # [核心逻辑] 语言一致性熔断
-                if i == 0 and not target_lang:
-                    target_lang = current_lang
-                    # 动态反写回 config，确保后续组件感知
-                    self.config.lang = target_lang
-                    tqdm.write(f"🔒 [Language Lock] Batch language set to: {target_lang.upper()}")
                 
-                if target_lang and current_lang != target_lang:
-                    raise AssertionError(
-                        f"Language Mismatch! Expected {target_lang.upper()}, "
-                        f"but file '{Path(text_p).name}' is detected as {current_lang.upper()}."
-                    )
+                # Preprocess
+                lang = self.config.lang if self.config.lang else self.frontend.detect_language(raw_text)
+                tokens = self.frontend.get_phonemes(raw_text, lang)
+                text_list = [t.strip() for t in tokens if t.strip()]
+                
+                audio_tensor = torch.from_numpy(audio_np).float()
+                full_dur = audio_tensor.size(0) / 16000.0
+                
+                # Chunking
+                file_id = Path(audio_p).stem
+                raw_chunks = self.chunker.find_chunks(audio_tensor, text_list, file_id=file_id)
+                
+                # 转换为标准 Task 对象
+                task_chunks = []
+                for rc in raw_chunks:
+                    task_chunks.append(AlignmentTask(
+                        chunk_id=rc.chunk_id,
+                        text=rc.text,
+                        start_time=rc.start_time,
+                        end_time=rc.end_time,
+                        tensor=rc.tensor
+                    ))
 
-                # 调用核心逻辑 (关闭 verbose 以提高速度和减少刷屏)
-                # 我们复用 _align_core，传入预读取的文本以减少 IO（需要稍微修改 core 接口支持）
-                # 这里为了代码简洁，直接传路径，TextFrontend 内部有 LRU Cache，不会太慢
-                self._align_core(audio_p, text_p, out_p, verbose=False, pre_lang=target_lang)
-                success_count += 1
+                batch_data.append({
+                    "output_path": out_p,
+                    "full_duration": full_dur,
+                    "chunks": task_chunks,
+                    "src_name": Path(audio_p).name
+                })
                 
             except Exception as e:
-                fail_count += 1
-                tqdm.write(f"❌ Error processing {Path(audio_p).name}: {str(e)}")
-                # 在 Batch 模式下，个别失败不应中断整个进程，除非是严重的语言错误
-                if isinstance(e, AssertionError):
-                    raise e # 语言不对直接炸
+                if raise_on_error: raise e
+                tqdm.write(f"❌ Segmentation Failed {Path(audio_p).name}: {e}")
+        
+        # 显存清理
+        print(f"   -> Unloading Chunker to free VRAM...")
+        del self.chunker
+        self.chunker = None
+        gc.collect()
+        if torch.cuda.is_available(): torch.cuda.empty_cache()
 
-        total_time = time.time() - start_time
-        print("\n" + "-"*80)
-        print(f"🏁 Batch Completed in {total_time:.2f}s")
-        print(f"   ✅ Success: {success_count}")
-        print(f"   ❌ Failed:  {fail_count}")
-        print(f"   ⚡ Speed:   {len(tasks)/total_time:.2f} files/sec")
+        # --- Phase 2: Alignment ---
+        print(f"\n[Phase 2] Alignment & Stitching...")
+        if not batch_data: return
+
+        if self.aligner is None:
+            print(f"   -> Loading Aligner model...")
+            self.aligner = LocalAligner(config=self.config_dict)
+
+        pbar_ali = tqdm(batch_data, desc="Align", unit="file")
+        for item in pbar_ali:
+            try:
+                # 调用统一的缝合逻辑
+                self._stitch_and_export(
+                    chunks=item['chunks'],
+                    full_duration=item['full_duration'],
+                    output_path=item['output_path']
+                )
+            except Exception as e:
+                if raise_on_error: raise e
+                tqdm.write(f"❌ Alignment Failed {item['src_name']}: {e}")
+
+        print("\n" + "="*80)
+        print(f"🏁 Batch Processing Completed.")
         print("="*80 + "\n")
 
-    def _align_core(self, audio_path: str, text_path: str, output_path: str, verbose: bool = True, pre_lang: str = None):
+    # =========================================================================
+    # [入口 3] 从 Manifest 恢复 (Stage 2 Only)
+    # =========================================================================
+    def align_from_manifest(
+        self, 
+        manifest_path: str, 
+        audio_dir: str, 
+        output_path: str, 
+        full_audio_path: Optional[str] = None,
+        verbose: bool = True
+    ):
         """
-        [内部核心] 执行单次对齐，支持静默模式
+        Stage 2 独立模式：读取 TSV -> 寻找音频 -> 转换为 Task 对象 -> 统一缝合
         """
-        # --- 1. IO & Preprocessing ---
-        audio_np = self.frontend.load_audio(audio_path)
-        raw_text = self.frontend.load_text(text_path)
+        tsv_path = Path(manifest_path)
+        wav_dir_path = Path(audio_dir)
         
-        # 语言决策优先级：pre_lang (Batch传入) > config.lang > 自动检测
-        if pre_lang:
-            lang = pre_lang
-        elif hasattr(self.config, 'lang') and self.config.lang:
-            lang = self.config.lang
-        else:
-            lang = self.frontend.detect_language(raw_text)
-        
-        raw_tokens = self.frontend.get_phonemes(raw_text, lang)
-        text_list = [t.strip() for t in raw_tokens if t.strip()]
-        
-        audio_tensor = torch.from_numpy(audio_np).float()
-        audio_duration = audio_tensor.size(0) / 16000.0
-
-        # --- 仪表盘 (仅 Verbose 模式) ---
-        if verbose:
-            print("\n" + "="*80)
-            print(f"🎛️  [FlexAligner Dashboard] Processing: {Path(audio_path).name}")
-            print(f"   Audio Dur: {audio_duration:.3f}s | Lang: {lang.upper()} | Words: {len(text_list)}")
-            print("="*80)
-            print(f"🛰️  [Stage 1] Executing Macro-Segmentation (Beam Size={self.chunker.beam_size})...")
-
-        # --- 2. Stage 1: Chunker ---
-        chunks = self.chunker.find_chunks(audio_tensor, text_list)
+        if not tsv_path.exists(): raise FileNotFoundError(f"Manifest not found: {tsv_path}")
+        if not wav_dir_path.exists(): raise FileNotFoundError(f"Chunk audio dir: {wav_dir_path}")
 
         if verbose:
-            n_chunks = len(chunks)
-            avg_w_p_c = len(text_list) / n_chunks if n_chunks > 0 else 0
-            print("-" * 80)
-            print(f"📊 [Stage 1 Report] Found {n_chunks} chunks (Avg {avg_w_p_c:.1f} words/chunk)")
-            print(f"{'ID':<6} | {'START':<8} | {'END':<8} | {'DUR':<6} | {'TEXT PREVIEW':<35}")
-            print("-" * 80)
+            print(f"🧩 [Resume] Processing {tsv_path.name}")
+
+        if self.aligner is None:
+            self.aligner = LocalAligner(config=self.config_dict)
+
+        # 1. 确定总时长
+        target_duration = 0.0
+        if full_audio_path and Path(full_audio_path).exists():
+            target_duration = sf.info(full_audio_path).duration
         
+        # 2. 读取 TSV
+        try:
+            df = pd.read_csv(tsv_path, sep='\t')
+        except Exception as e:
+            raise RuntimeError(f"Failed to parse TSV: {e}")
+
+        if target_duration == 0.0 and not df.empty:
+            # 降级：估算
+            try: target_duration = float(df.iloc[-1]['end_s'])
+            except: target_duration = 0.0
+
+        # 3. 构建 Task 列表 (模拟 Phase 1 的输出)
+        task_chunks = []
+        for _, row in tqdm(df.iterrows(), total=len(df), desc="Loading Audio", disable=not verbose):
+            chunk_id = row['chunk_id']
+            text = str(row.get('text', row.get('words', ''))).strip()
+            start = float(row['start_s'])
+            end = float(row['end_s'])
+
+            # 寻找音频 (兼容 Legacy 命名 {id}_*.wav)
+            candidates = list(wav_dir_path.glob(f"{chunk_id}_*.wav"))
+            if not candidates:
+                candidates = list(wav_dir_path.glob(f"{chunk_id}.wav"))
+            
+            if not candidates:
+                if verbose: print(f"❌ Chunk audio missing: {chunk_id}")
+                continue
+            
+            # 读取音频转 Tensor
+            try:
+                wav, sr = sf.read(str(candidates[0]))
+                if sr != 16000 and verbose: print(f"⚠️ Resampling required for {chunk_id}")
+                chunk_tensor = torch.from_numpy(wav).float()
+                if chunk_tensor.ndim > 1: chunk_tensor = chunk_tensor.mean(dim=1)
+                
+                task_chunks.append(AlignmentTask(
+                    chunk_id=chunk_id,
+                    text=text,
+                    start_time=start,
+                    end_time=end,
+                    tensor=chunk_tensor
+                ))
+            except Exception as e:
+                print(f"❌ Error loading {chunk_id}: {e}")
+
+        # 4. 调用统一缝合逻辑
+        self._stitch_and_export(task_chunks, target_duration, output_path)
+        if verbose: print(f"✅ Saved to {output_path}")
+
+    # =========================================================================
+    # [核心私有方法] 缝合与导出 (The Core Stitcher)
+    # =========================================================================
+    def _stitch_and_export(self, chunks: List[AlignmentTask], full_duration: float, output_path: str):
+        """
+        核心逻辑：接收标准化 Chunk 列表，执行对齐，处理 Gap/Padding，生成 TextGrid
+        """
         global_phones = []
         global_words = []
-        prev_end_time = 0.0
+        prev_global_end = 0.0  # 物理锚点归零
 
-        # --- 3. Stage 2: Local Alignment Loop ---
-        for i, chunk in enumerate(chunks):
-            if verbose:
-                chunk_dur = chunk.end_time - chunk.start_time
-                txt_preview = (chunk.text[:32] + "..") if len(chunk.text) > 32 else chunk.text
-                print(f"{i:<6} | {chunk.start_time:8.3f} | {chunk.end_time:8.3f} | {chunk_dur:6.3f} | {txt_preview:<35}")
-
-            # 填充 Gap
-            gap_dur = chunk.start_time - prev_end_time
-            if gap_dur > 1e-6:
-                null_seg = ("NULL", prev_end_time, chunk.start_time)
-                global_phones.append(null_seg)
-                global_words.append(null_seg)
-
-            # Local Alignment
-            local_result = self.aligner.align_locally(chunk.tensor, chunk.text)
-            offset = chunk.start_time
+        for chunk in chunks:
+            chunk_start = chunk.start_time
+            chunk_end = chunk.end_time
             
-            # --- Result Merging & Physics Fuse ---
-            for seg in local_result["phones"]:
-                g_start = offset + seg.start
-                g_end = offset + seg.end
-                if g_end > g_start + 1e-6:
-                    global_phones.append((seg.label, g_start, g_end))
-                
-            for seg in local_result["words"]:
-                g_start = offset + seg.start
-                g_end = offset + seg.end
-                if g_end > g_start + 1e-6:
-                    global_words.append((seg.label, g_start, g_end))
-                elif verbose:
-                    print(f"      ⚠️  [Physics Fuse] Dropped zero-len word: {seg.label} at {g_start:.3f}s")
+            # A. 核心对齐推理
+            result = self.aligner.align_locally(chunk.tensor, chunk.text, file_id=chunk.chunk_id)
             
-            prev_end_time = chunk.end_time
+            if not result['phones']: 
+                # 如果对齐失败，为了保持时间轴连续，可能需要填补？
+                # 目前逻辑是跳过，这会导致大 Gap
+                continue
 
-        # --- 4. Finalization ---
-        if prev_end_time < audio_duration - 1e-6:
-            last_null = ("NULL", prev_end_time, audio_duration)
-            global_phones.append(last_null)
-            global_words.append(last_null)
+            # B. 头部缝合 (Stitch Gap)
+            gap = chunk_start - prev_global_end
+            if gap > 0.001:
+                gap_seg = ("NULL", prev_global_end, chunk_start)
+                global_phones.append(gap_seg)
+                global_words.append(gap_seg)
+            
+            # C. 添加对齐结果 (Offset Shift)
+            for seg in result['phones']:
+                global_phones.append((seg.label, chunk_start + seg.start, chunk_start + seg.end))
+            for seg in result['words']:
+                global_words.append((seg.label, chunk_start + seg.start, chunk_start + seg.end))
+            
+            prev_global_end = chunk_end
 
-        if verbose:
-            print("-" * 80)
-            print(f"🏁 [Pipeline] Finished. Total Aligned Words: {len(global_words) - global_words.count('NULL')}")
-            print("=" * 80 + "\n")
-
-        # --- 5. Export ---
-        self._export_textgrid(
-            output_path, 
-            audio_duration, 
-            {"phones": global_phones, "words": global_words}
-        )
+        # D. 尾部补齐 (Final Padding)
+        # 获取最后一个有效对齐点的结束时间
+        final_valid_end = max(prev_global_end, global_phones[-1][2] if global_phones else 0.0)
         
-        return chunks
-    
-    def _export_textgrid(self, path: str, duration: float, tiers_data: dict):
-        """
-        [工业级导出] 自研 TextGrid 生成器
-        """
+        if full_duration > final_valid_end + 0.001:
+            pad_seg = ("NULL", final_valid_end, full_duration)
+            global_phones.append(pad_seg)
+            global_words.append(pad_seg)
+            final_valid_end = full_duration # 更新为真实时长
+
+        # E. 写入文件
+        self._export_textgrid_file(output_path, final_valid_end, {"phones": global_phones, "words": global_words})
+
+    def _export_textgrid_file(self, path: str, duration: float, tiers_data: dict):
+        """底层 I/O：TextGrid 格式化写入"""
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         

@@ -1,0 +1,200 @@
+File type = "ooTextFile"
+Object class = "TextGrid"
+
+xmin = 0
+xmax = 3.010000
+tiers? <exists>
+size = 2
+item []:
+    item [1]:
+        class = "IntervalTier"
+        name = "phones"
+        xmin = 0
+        xmax = 3.010000
+        intervals: size = 33
+        intervals [1]:
+            xmin = 0.000000
+            xmax = 0.110000
+            text = "sil"
+        intervals [2]:
+            xmin = 0.110000
+            xmax = 0.280000
+            text = "uo"
+        intervals [3]:
+            xmin = 0.280000
+            xmax = 0.410000
+            text = "iu"
+        intervals [4]:
+            xmin = 0.410000
+            xmax = 0.480000
+            text = "d"
+        intervals [5]:
+            xmin = 0.480000
+            xmax = 0.590000
+            text = "ian"
+        intervals [6]:
+            xmin = 0.590000
+            xmax = 0.650000
+            text = "er"
+        intervals [7]:
+            xmin = 0.650000
+            xmax = 0.710000
+            text = "j"
+        intervals [8]:
+            xmin = 0.710000
+            xmax = 0.830000
+            text = "iao"
+        intervals [9]:
+            xmin = 0.830000
+            xmax = 0.930000
+            text = "t"
+        intervals [10]:
+            xmin = 0.930000
+            xmax = 1.000000
+            text = "ou"
+        intervals [11]:
+            xmin = 1.000000
+            xmax = 1.060000
+            text = "l"
+        intervals [12]:
+            xmin = 1.060000
+            xmax = 1.170000
+            text = "an"
+        intervals [13]:
+            xmin = 1.170000
+            xmax = 1.310000
+            text = "e"
+        intervals [14]:
+            xmin = 1.310000
+            xmax = 1.400000
+            text = "l"
+        intervals [15]:
+            xmin = 1.400000
+            xmax = 1.530000
+            text = "e"
+        intervals [16]:
+            xmin = 1.530000
+            xmax = 1.660000
+            text = "sil"
+        intervals [17]:
+            xmin = 1.660000
+            xmax = 1.790000
+            text = "x"
+        intervals [18]:
+            xmin = 1.790000
+            xmax = 1.880000
+            text = "in"
+        intervals [19]:
+            xmin = 1.880000
+            xmax = 1.970000
+            text = "z"
+        intervals [20]:
+            xmin = 1.970000
+            xmax = 2.070000
+            text = "ang"
+        intervals [21]:
+            xmin = 2.070000
+            xmax = 2.160000
+            text = "d"
+        intervals [22]:
+            xmin = 2.160000
+            xmax = 2.210000
+            text = "u"
+        intervals [23]:
+            xmin = 2.210000
+            xmax = 2.330000
+            text = "iu"
+        intervals [24]:
+            xmin = 2.330000
+            xmax = 2.390000
+            text = "d"
+        intervals [25]:
+            xmin = 2.390000
+            xmax = 2.470000
+            text = "ian"
+        intervals [26]:
+            xmin = 2.470000
+            xmax = 2.520000
+            text = "er"
+        intervals [27]:
+            xmin = 2.520000
+            xmax = 2.610000
+            text = "sh"
+        intervals [28]:
+            xmin = 2.610000
+            xmax = 2.690000
+            text = "ou"
+        intervals [29]:
+            xmin = 2.690000
+            xmax = 2.750000
+            text = "b"
+        intervals [30]:
+            xmin = 2.750000
+            xmax = 2.800000
+            text = "u"
+        intervals [31]:
+            xmin = 2.800000
+            xmax = 2.860000
+            text = "l"
+        intervals [32]:
+            xmin = 2.860000
+            xmax = 2.970000
+            text = "iao"
+        intervals [33]:
+            xmin = 2.970000
+            xmax = 3.010000
+            text = "sil"
+    item [2]:
+        class = "IntervalTier"
+        name = "words"
+        xmin = 0
+        xmax = 3.010000
+        intervals: size = 12
+        intervals [1]:
+            xmin = 0.000000
+            xmax = 0.110000
+            text = "sil"
+        intervals [2]:
+            xmin = 0.110000
+            xmax = 0.280000
+            text = "我"
+        intervals [3]:
+            xmin = 0.280000
+            xmax = 0.650000
+            text = "有点儿"
+        intervals [4]:
+            xmin = 0.650000
+            xmax = 1.310000
+            text = "焦头烂额"
+        intervals [5]:
+            xmin = 1.310000
+            xmax = 1.530000
+            text = "了"
+        intervals [6]:
+            xmin = 1.530000
+            xmax = 1.660000
+            text = "sil"
+        intervals [7]:
+            xmin = 1.660000
+            xmax = 2.070000
+            text = "心脏"
+        intervals [8]:
+            xmin = 2.070000
+            xmax = 2.210000
+            text = "都"
+        intervals [9]:
+            xmin = 2.210000
+            xmax = 2.520000
+            text = "有点儿"
+        intervals [10]:
+            xmin = 2.520000
+            xmax = 2.690000
+            text = "受"
+        intervals [11]:
+            xmin = 2.690000
+            xmax = 2.970000
+            text = "不了"
+        intervals [12]:
+            xmin = 2.970000
+            xmax = 3.010000
+            text = "sil"
