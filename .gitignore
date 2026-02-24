@@ -58,3 +58,8 @@ generate_requirement.py
 test.ipynb
 tests/test_zh_bach.py
 tests/test_999_en_wav.py
+verification_out
+verification_out_pytest
+work_align_legacy
+legacy_out
+chunks_out
