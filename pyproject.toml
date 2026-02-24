@@ -29,7 +29,8 @@ dependencies = [
     "num2words",  # 英文数字归一化
     "chardet",    # 编码识别
     "nltk",       # g2p_en 的底层支持
-    "pandas"
+    "pandas",
+    "librosa"    # [NEW] 基础音频处理，支持多种格式和采样率
 ]
 
 [project.optional-dependencies]
