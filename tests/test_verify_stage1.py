@@ -13,8 +13,8 @@ from flexaligner.pipeline import FlexAligner
 # ==========================================
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 # MODEL_PATH = PROJECT_ROOT / "Toolkit/models/hf_phs"
-TEST_WAV = PROJECT_ROOT / "Toolkit/test/SP01_001.wav"
-TEST_TXT = PROJECT_ROOT / "Toolkit/test/SP01_001.txt"
+TEST_WAV = PROJECT_ROOT / "tests/testfiles/zh/SP01_001.wav"
+TEST_TXT = PROJECT_ROOT / "tests/testfiles/zh/SP01_001.txt"
 
 @pytest.fixture
 def base_config():
