@@ -1,15 +1,93 @@
 File type = "ooTextFile"
 Object class = "TextGrid"
 
-xmin = 0.000000
+xmin = 0
 xmax = 3.780000
 tiers? <exists>
 size = 2
 item []:
     item [1]:
         class = "IntervalTier"
+        name = "words"
+        xmin = 0
+        xmax = 3.780000
+        intervals: size = 18
+        intervals [1]:
+            xmin = 0.000000
+            xmax = 0.131000
+            text = "NULL"
+        intervals [2]:
+            xmin = 0.131000
+            xmax = 0.231000
+            text = "sil"
+        intervals [3]:
+            xmin = 0.231000
+            xmax = 0.641000
+            text = "餐车"
+        intervals [4]:
+            xmin = 0.641000
+            xmax = 0.791000
+            text = "给"
+        intervals [5]:
+            xmin = 0.791000
+            xmax = 1.001000
+            text = "我们"
+        intervals [6]:
+            xmin = 1.001000
+            xmax = 1.161000
+            text = "拉"
+        intervals [7]:
+            xmin = 1.161000
+            xmax = 1.271000
+            text = "来"
+        intervals [8]:
+            xmin = 1.271000
+            xmax = 1.371000
+            text = "了"
+        intervals [9]:
+            xmin = 1.371000
+            xmax = 1.871000
+            text = "伙食"
+        intervals [10]:
+            xmin = 1.871000
+            xmax = 2.041000
+            text = "sil"
+        intervals [11]:
+            xmin = 2.041000
+            xmax = 2.281000
+            text = "三"
+        intervals [12]:
+            xmin = 2.281000
+            xmax = 2.501000
+            text = "菜"
+        intervals [13]:
+            xmin = 2.501000
+            xmax = 2.631000
+            text = "一"
+        intervals [14]:
+            xmin = 2.631000
+            xmax = 2.881000
+            text = "汤"
+        intervals [15]:
+            xmin = 2.881000
+            xmax = 3.121000
+            text = "加"
+        intervals [16]:
+            xmin = 3.121000
+            xmax = 3.501000
+            text = "米饭"
+        intervals [17]:
+            xmin = 3.501000
+            xmax = 3.551000
+            text = "sil"
+        intervals [18]:
+            xmin = 3.551000
+            xmax = 3.780000
+            text = "NULL"
+    item [2]:
+        class = "IntervalTier"
         name = "phones"
-        xmin = 0.000000
+        xmin = 0
         xmax = 3.780000
         intervals: size = 37
         intervals [1]:
@@ -157,84 +235,6 @@ item []:
             xmax = 3.551000
             text = "sil"
         intervals [37]:
-            xmin = 3.568000
-            xmax = 3.780000
-            text = "NULL"
-    item [2]:
-        class = "IntervalTier"
-        name = "words"
-        xmin = 0.000000
-        xmax = 3.780000
-        intervals: size = 18
-        intervals [1]:
-            xmin = 0.000000
-            xmax = 0.131000
-            text = "NULL"
-        intervals [2]:
-            xmin = 0.131000
-            xmax = 0.231000
-            text = "sil"
-        intervals [3]:
-            xmin = 0.231000
-            xmax = 0.641000
-            text = "餐车"
-        intervals [4]:
-            xmin = 0.641000
-            xmax = 0.791000
-            text = "给"
-        intervals [5]:
-            xmin = 0.791000
-            xmax = 1.001000
-            text = "我们"
-        intervals [6]:
-            xmin = 1.001000
-            xmax = 1.161000
-            text = "拉"
-        intervals [7]:
-            xmin = 1.161000
-            xmax = 1.271000
-            text = "来"
-        intervals [8]:
-            xmin = 1.271000
-            xmax = 1.371000
-            text = "了"
-        intervals [9]:
-            xmin = 1.371000
-            xmax = 1.871000
-            text = "伙食"
-        intervals [10]:
-            xmin = 1.871000
-            xmax = 2.041000
-            text = "sil"
-        intervals [11]:
-            xmin = 2.041000
-            xmax = 2.281000
-            text = "三"
-        intervals [12]:
-            xmin = 2.281000
-            xmax = 2.501000
-            text = "菜"
-        intervals [13]:
-            xmin = 2.501000
-            xmax = 2.631000
-            text = "一"
-        intervals [14]:
-            xmin = 2.631000
-            xmax = 2.881000
-            text = "汤"
-        intervals [15]:
-            xmin = 2.881000
-            xmax = 3.121000
-            text = "加"
-        intervals [16]:
-            xmin = 3.121000
-            xmax = 3.501000
-            text = "米饭"
-        intervals [17]:
-            xmin = 3.501000
-            xmax = 3.551000
-            text = "sil"
-        intervals [18]:
-            xmin = 3.568000
+            xmin = 3.551000
             xmax = 3.780000
             text = "NULL"

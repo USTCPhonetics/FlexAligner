@@ -23,6 +23,14 @@ dist/
 *.egg-info/
 src/*.egg-info/
 .eggs/
+*.json
+*.jsonl
+*.txt
+*.TextGrid
+*.ctm
+*.tsv
+*.phones.*
+*.words.*
 
 # --- 核心数据与模型 (绝对不要传到 GitHub，这些该去 HuggingFace) ---
 # 忽略所有存放模型权重的文件夹
@@ -62,4 +70,7 @@ verification_out
 verification_out_pytest
 work_align_legacy
 legacy_out
-chunks_out
+chunks_out/*
+tests/testfiles/zh/flexaligner-1
+tests/testfiles/zh/flexaligner-01
+tests/testfiles/zh/flexaligner-0

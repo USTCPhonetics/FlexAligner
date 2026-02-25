@@ -2,7 +2,8 @@ import sys
 import os
 from pathlib import Path
 import torch
-
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
+os.environ["HF_DATASETS_OFFLINE"] = "1"
 # 1. 确保能导入 src 下的包
 sys.path.append(os.path.abspath("./src"))
 
@@ -14,8 +15,10 @@ def main():
     # 定义基础路径
     PROJECT_ROOT = Path(".")
     INPUT_DIR = PROJECT_ROOT / "tests/testfiles/en"
-    OUTPUT_DIR = INPUT_DIR / "flexaligner"
-    
+    OUTPUT_DIR = INPUT_DIR / "flexaligner-00"
+    SEG_MODEL_DIR = PROJECT_ROOT / "models_hidden/en/hf_phs"
+    MODEL_DIR = PROJECT_ROOT / "models_hidden/en/ce2" 
+    # DICT_PATH = PROJECT_ROOT / "assets/dictionaries/en.dict"
     # ---------------------------------------------------------
     # [关键] 这里需要指向你的英文模型和词典！
     # 假设你的 Toolkit 里有对应的英文资源，请修改下面的路径
@@ -72,13 +75,14 @@ def main():
     
     # 如果 Stage 1 (Chunking) 使用不同的模型，请在这里指定
     # config.model_path = str(PROJECT_ROOT / "Toolkit/models/english_chunker")
-
+    config.model_path = str(SEG_MODEL_DIR) 
     try:
         aligner = FlexAligner(config)
     except Exception as e:
         print(f"❌ 初始化失败: {e}")
         return
-
+    aligner.config_dict["align_model_path"] = MODEL_DIR 
+    aligner.config_dict["chunk_model_path"] = SEG_MODEL_DIR
     # ================= 2. 收集任务 =================
     tasks = []
     # 扫描所有 wav 文件

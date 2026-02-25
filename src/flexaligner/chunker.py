@@ -92,7 +92,9 @@ class CTCChunker:
         self.min_words = self.config.get("min_words", 2)
         self.pad_s = self.config.get("pad_s", 0.15)
         self.blank_token = self.config.get("blank_token", "<pad>")
-        
+        print("chunker config:")
+        print(self.config)
+        input("check:")
         # [Physics Fix] 不再使用固定 hop，而在运行时计算
         # self.config_hop = 0.02 
 
@@ -114,6 +116,7 @@ class CTCChunker:
 
         self._log(f"Requesting model: {model_path}")
         load_kwargs = {}
+        print(f"[info] loading model from {model_path}")
         if not os.path.isdir(model_path):
             load_kwargs["subfolder"] = f"{self.lang}/chunker"
             self._log(f"Mode: Cloud Repo ({load_kwargs['subfolder']})")
@@ -177,7 +180,7 @@ class CTCChunker:
         # [Fix 1: Dynamic SPF Calculation]
         # 完全复刻 chunks2.py: seconds_per_frame = float(audio.numel() / sr) / float(log_probs.size(0))
         spf = float(audio_tensor.numel() / 16000) / float(log_probs.size(0))
-
+        # spf = 0.02
         if self.verbose:
             print(f"  - Audio Duration: {audio_tensor.size(0)/16000:.3f}s")
             print(f"  - Logits Shape: {log_probs.shape}")

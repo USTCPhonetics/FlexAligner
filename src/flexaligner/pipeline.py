@@ -42,7 +42,8 @@ class FlexAligner:
             self.config = config
         else:
             self.config = AlignmentConfig()
-        
+        print("flexaligner config:")
+        print(self.config)
         self.config_dict = asdict(self.config)
         
         # 2. 初始化前端 (轻量级，常驻)
@@ -267,19 +268,29 @@ class FlexAligner:
                 continue
 
             # B. 头部缝合 (Stitch Gap)
-            gap = chunk_start - prev_global_end
-            if gap > 0.001:
+            # gap = chunk_start - prev_global_end
+            gap = round(chunk_start - prev_global_end, 3)
+            if gap >= 0.001:
                 gap_seg = ("NULL", prev_global_end, chunk_start)
                 global_phones.append(gap_seg)
                 global_words.append(gap_seg)
             
             # C. 添加对齐结果 (Offset Shift)
+            # for seg in result['phones']:
+            #     global_phones.append((seg.label, chunk_start + seg.start, chunk_start + seg.end))
+            # for seg in result['words']:
+            #     global_words.append((seg.label, chunk_start + seg.start, chunk_start + seg.end))
             for seg in result['phones']:
-                global_phones.append((seg.label, chunk_start + seg.start, chunk_start + seg.end))
+                abs_start = round(chunk_start + seg.start, 3)
+                abs_end = round(chunk_start + seg.end, 3)
+                global_phones.append((seg.label, abs_start, abs_end))
+                
             for seg in result['words']:
-                global_words.append((seg.label, chunk_start + seg.start, chunk_start + seg.end))
-            
-            prev_global_end = chunk_end
+                abs_start = round(chunk_start + seg.start, 3)
+                abs_end = round(chunk_start + seg.end, 3)
+                global_words.append((seg.label, abs_start, abs_end))
+            # prev_global_end = chunk_end
+            prev_global_end = global_phones[-1][2]
 
         # D. 尾部补齐 (Final Padding)
         # 获取最后一个有效对齐点的结束时间

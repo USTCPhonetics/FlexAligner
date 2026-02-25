@@ -1,15 +1,81 @@
 File type = "ooTextFile"
 Object class = "TextGrid"
 
-xmin = 0.000000
+xmin = 0
 xmax = 3.140000
 tiers? <exists>
 size = 2
 item []:
     item [1]:
         class = "IntervalTier"
+        name = "words"
+        xmin = 0
+        xmax = 3.140000
+        intervals: size = 15
+        intervals [1]:
+            xmin = 0.000000
+            xmax = 0.152000
+            text = "NULL"
+        intervals [2]:
+            xmin = 0.152000
+            xmax = 0.222000
+            text = "sil"
+        intervals [3]:
+            xmin = 0.222000
+            xmax = 0.412000
+            text = "楼"
+        intervals [4]:
+            xmin = 0.412000
+            xmax = 0.632000
+            text = "内"
+        intervals [5]:
+            xmin = 0.632000
+            xmax = 0.962000
+            text = "非常"
+        intervals [6]:
+            xmin = 0.962000
+            xmax = 0.972000
+            text = "sil"
+        intervals [7]:
+            xmin = 0.972000
+            xmax = 1.422000
+            text = "整洁"
+        intervals [8]:
+            xmin = 1.422000
+            xmax = 1.532000
+            text = "sil"
+        intervals [9]:
+            xmin = 1.532000
+            xmax = 1.952000
+            text = "似乎"
+        intervals [10]:
+            xmin = 1.952000
+            xmax = 2.292000
+            text = "刚刚"
+        intervals [11]:
+            xmin = 2.292000
+            xmax = 2.652000
+            text = "清扫"
+        intervals [12]:
+            xmin = 2.652000
+            xmax = 2.672000
+            text = "sil"
+        intervals [13]:
+            xmin = 2.672000
+            xmax = 2.872000
+            text = "过"
+        intervals [14]:
+            xmin = 2.872000
+            xmax = 2.912000
+            text = "sil"
+        intervals [15]:
+            xmin = 2.912000
+            xmax = 3.140000
+            text = "NULL"
+    item [2]:
+        class = "IntervalTier"
         name = "phones"
-        xmin = 0.000000
+        xmin = 0
         xmax = 3.140000
         intervals: size = 33
         intervals [1]:
@@ -141,72 +207,6 @@ item []:
             xmax = 2.912000
             text = "sil"
         intervals [33]:
-            xmin = 2.928000
-            xmax = 3.140000
-            text = "NULL"
-    item [2]:
-        class = "IntervalTier"
-        name = "words"
-        xmin = 0.000000
-        xmax = 3.140000
-        intervals: size = 15
-        intervals [1]:
-            xmin = 0.000000
-            xmax = 0.152000
-            text = "NULL"
-        intervals [2]:
-            xmin = 0.152000
-            xmax = 0.222000
-            text = "sil"
-        intervals [3]:
-            xmin = 0.222000
-            xmax = 0.412000
-            text = "楼"
-        intervals [4]:
-            xmin = 0.412000
-            xmax = 0.632000
-            text = "内"
-        intervals [5]:
-            xmin = 0.632000
-            xmax = 0.962000
-            text = "非常"
-        intervals [6]:
-            xmin = 0.962000
-            xmax = 0.972000
-            text = "sil"
-        intervals [7]:
-            xmin = 0.972000
-            xmax = 1.422000
-            text = "整洁"
-        intervals [8]:
-            xmin = 1.422000
-            xmax = 1.532000
-            text = "sil"
-        intervals [9]:
-            xmin = 1.532000
-            xmax = 1.952000
-            text = "似乎"
-        intervals [10]:
-            xmin = 1.952000
-            xmax = 2.292000
-            text = "刚刚"
-        intervals [11]:
-            xmin = 2.292000
-            xmax = 2.652000
-            text = "清扫"
-        intervals [12]:
-            xmin = 2.652000
-            xmax = 2.672000
-            text = "sil"
-        intervals [13]:
-            xmin = 2.672000
-            xmax = 2.872000
-            text = "过"
-        intervals [14]:
-            xmin = 2.872000
-            xmax = 2.912000
-            text = "sil"
-        intervals [15]:
-            xmin = 2.928000
+            xmin = 2.912000
             xmax = 3.140000
             text = "NULL"

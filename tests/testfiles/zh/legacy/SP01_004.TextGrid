@@ -1,15 +1,89 @@
 File type = "ooTextFile"
 Object class = "TextGrid"
 
-xmin = 0.000000
+xmin = 0
 xmax = 4.040000
 tiers? <exists>
 size = 2
 item []:
     item [1]:
         class = "IntervalTier"
+        name = "words"
+        xmin = 0
+        xmax = 4.040000
+        intervals: size = 17
+        intervals [1]:
+            xmin = 0.000000
+            xmax = 0.151000
+            text = "NULL"
+        intervals [2]:
+            xmin = 0.151000
+            xmax = 0.221000
+            text = "sil"
+        intervals [3]:
+            xmin = 0.221000
+            xmax = 0.621000
+            text = "如果"
+        intervals [4]:
+            xmin = 0.621000
+            xmax = 0.871000
+            text = "没有"
+        intervals [5]:
+            xmin = 0.871000
+            xmax = 1.191000
+            text = "消毒"
+        intervals [6]:
+            xmin = 1.191000
+            xmax = 1.431000
+            text = "液"
+        intervals [7]:
+            xmin = 1.431000
+            xmax = 1.661000
+            text = "sil"
+        intervals [8]:
+            xmin = 1.661000
+            xmax = 1.871000
+            text = "用"
+        intervals [9]:
+            xmin = 1.871000
+            xmax = 2.341000
+            text = "普通"
+        intervals [10]:
+            xmin = 2.341000
+            xmax = 2.751000
+            text = "香皂"
+        intervals [11]:
+            xmin = 2.751000
+            xmax = 2.921000
+            text = "洗"
+        intervals [12]:
+            xmin = 2.921000
+            xmax = 3.261000
+            text = "口罩"
+        intervals [13]:
+            xmin = 3.261000
+            xmax = 3.321000
+            text = "sil"
+        intervals [14]:
+            xmin = 3.321000
+            xmax = 3.441000
+            text = "也"
+        intervals [15]:
+            xmin = 3.441000
+            xmax = 3.801000
+            text = "可以"
+        intervals [16]:
+            xmin = 3.801000
+            xmax = 3.891000
+            text = "sil"
+        intervals [17]:
+            xmin = 3.891000
+            xmax = 4.040000
+            text = "NULL"
+    item [2]:
+        class = "IntervalTier"
         name = "phones"
-        xmin = 0.000000
+        xmin = 0
         xmax = 4.040000
         intervals: size = 37
         intervals [1]:
@@ -157,80 +231,6 @@ item []:
             xmax = 3.891000
             text = "sil"
         intervals [37]:
-            xmin = 3.909000
-            xmax = 4.040000
-            text = "NULL"
-    item [2]:
-        class = "IntervalTier"
-        name = "words"
-        xmin = 0.000000
-        xmax = 4.040000
-        intervals: size = 17
-        intervals [1]:
-            xmin = 0.000000
-            xmax = 0.151000
-            text = "NULL"
-        intervals [2]:
-            xmin = 0.151000
-            xmax = 0.221000
-            text = "sil"
-        intervals [3]:
-            xmin = 0.221000
-            xmax = 0.621000
-            text = "如果"
-        intervals [4]:
-            xmin = 0.621000
-            xmax = 0.871000
-            text = "没有"
-        intervals [5]:
-            xmin = 0.871000
-            xmax = 1.191000
-            text = "消毒"
-        intervals [6]:
-            xmin = 1.191000
-            xmax = 1.431000
-            text = "液"
-        intervals [7]:
-            xmin = 1.431000
-            xmax = 1.661000
-            text = "sil"
-        intervals [8]:
-            xmin = 1.661000
-            xmax = 1.871000
-            text = "用"
-        intervals [9]:
-            xmin = 1.871000
-            xmax = 2.341000
-            text = "普通"
-        intervals [10]:
-            xmin = 2.341000
-            xmax = 2.751000
-            text = "香皂"
-        intervals [11]:
-            xmin = 2.751000
-            xmax = 2.921000
-            text = "洗"
-        intervals [12]:
-            xmin = 2.921000
-            xmax = 3.261000
-            text = "口罩"
-        intervals [13]:
-            xmin = 3.261000
-            xmax = 3.321000
-            text = "sil"
-        intervals [14]:
-            xmin = 3.321000
-            xmax = 3.441000
-            text = "也"
-        intervals [15]:
-            xmin = 3.441000
-            xmax = 3.801000
-            text = "可以"
-        intervals [16]:
-            xmin = 3.801000
-            xmax = 3.891000
-            text = "sil"
-        intervals [17]:
-            xmin = 3.909000
+            xmin = 3.891000
             xmax = 4.040000
             text = "NULL"

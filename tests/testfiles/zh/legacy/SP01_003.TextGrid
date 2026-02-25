@@ -1,15 +1,77 @@
 File type = "ooTextFile"
 Object class = "TextGrid"
 
-xmin = 0.000000
+xmin = 0
 xmax = 3.390000
 tiers? <exists>
 size = 2
 item []:
     item [1]:
         class = "IntervalTier"
+        name = "words"
+        xmin = 0
+        xmax = 3.390000
+        intervals: size = 14
+        intervals [1]:
+            xmin = 0.000000
+            xmax = 0.131000
+            text = "NULL"
+        intervals [2]:
+            xmin = 0.131000
+            xmax = 0.241000
+            text = "sil"
+        intervals [3]:
+            xmin = 0.241000
+            xmax = 0.411000
+            text = "我"
+        intervals [4]:
+            xmin = 0.411000
+            xmax = 0.781000
+            text = "有点儿"
+        intervals [5]:
+            xmin = 0.781000
+            xmax = 1.441000
+            text = "焦头烂额"
+        intervals [6]:
+            xmin = 1.441000
+            xmax = 1.661000
+            text = "了"
+        intervals [7]:
+            xmin = 1.661000
+            xmax = 1.791000
+            text = "sil"
+        intervals [8]:
+            xmin = 1.791000
+            xmax = 2.201000
+            text = "心脏"
+        intervals [9]:
+            xmin = 2.201000
+            xmax = 2.341000
+            text = "都"
+        intervals [10]:
+            xmin = 2.341000
+            xmax = 2.651000
+            text = "有点儿"
+        intervals [11]:
+            xmin = 2.651000
+            xmax = 2.821000
+            text = "受"
+        intervals [12]:
+            xmin = 2.821000
+            xmax = 3.101000
+            text = "不了"
+        intervals [13]:
+            xmin = 3.101000
+            xmax = 3.141000
+            text = "sil"
+        intervals [14]:
+            xmin = 3.141000
+            xmax = 3.390000
+            text = "NULL"
+    item [2]:
+        class = "IntervalTier"
         name = "phones"
-        xmin = 0.000000
+        xmin = 0
         xmax = 3.390000
         intervals: size = 35
         intervals [1]:
@@ -149,68 +211,6 @@ item []:
             xmax = 3.141000
             text = "sil"
         intervals [35]:
-            xmin = 3.159000
-            xmax = 3.390000
-            text = "NULL"
-    item [2]:
-        class = "IntervalTier"
-        name = "words"
-        xmin = 0.000000
-        xmax = 3.390000
-        intervals: size = 14
-        intervals [1]:
-            xmin = 0.000000
-            xmax = 0.131000
-            text = "NULL"
-        intervals [2]:
-            xmin = 0.131000
-            xmax = 0.241000
-            text = "sil"
-        intervals [3]:
-            xmin = 0.241000
-            xmax = 0.411000
-            text = "我"
-        intervals [4]:
-            xmin = 0.411000
-            xmax = 0.781000
-            text = "有点儿"
-        intervals [5]:
-            xmin = 0.781000
-            xmax = 1.441000
-            text = "焦头烂额"
-        intervals [6]:
-            xmin = 1.441000
-            xmax = 1.661000
-            text = "了"
-        intervals [7]:
-            xmin = 1.661000
-            xmax = 1.791000
-            text = "sil"
-        intervals [8]:
-            xmin = 1.791000
-            xmax = 2.201000
-            text = "心脏"
-        intervals [9]:
-            xmin = 2.201000
-            xmax = 2.341000
-            text = "都"
-        intervals [10]:
-            xmin = 2.341000
-            xmax = 2.651000
-            text = "有点儿"
-        intervals [11]:
-            xmin = 2.651000
-            xmax = 2.821000
-            text = "受"
-        intervals [12]:
-            xmin = 2.821000
-            xmax = 3.101000
-            text = "不了"
-        intervals [13]:
-            xmin = 3.101000
-            xmax = 3.141000
-            text = "sil"
-        intervals [14]:
-            xmin = 3.159000
+            xmin = 3.141000
             xmax = 3.390000
             text = "NULL"

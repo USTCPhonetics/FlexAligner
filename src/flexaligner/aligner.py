@@ -435,8 +435,13 @@ class LocalAligner:
         # Load Logic (Local vs Cloud)
         is_local = os.path.isdir(model_path)
         load_kwargs = {}
+        print(f"[info]: model path {model_path}")
         if not is_local:
+            
+            
             load_kwargs["subfolder"] = f"{self.config.get('lang', 'zh')}/aligner"
+            
+            print(f"\[info\]: loading from cloud path---{ load_kwargs['subfolder'] }")
 
         try:
             self.processor = AutoProcessor.from_pretrained(model_path, **load_kwargs)
@@ -445,7 +450,7 @@ class LocalAligner:
             # Fallback
             self.processor = AutoProcessor.from_pretrained(model_path)
             self.model = AutoModelForCTC.from_pretrained(model_path).to(self.device)
-        
+    
         self.model.eval()
         if self.processor:
             self.phone_to_id = self.processor.tokenizer.get_vocab()
