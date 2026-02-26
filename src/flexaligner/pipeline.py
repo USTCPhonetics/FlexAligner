@@ -42,8 +42,8 @@ class FlexAligner:
             self.config = config
         else:
             self.config = AlignmentConfig()
-        print("flexaligner config:")
-        print(self.config)
+        # print("flexaligner config:")
+        # print(self.config)
         self.config_dict = asdict(self.config)
         
         # 2. 初始化前端 (轻量级，常驻)
