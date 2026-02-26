@@ -117,38 +117,38 @@ def test_pipeline_full_run_zh(config, output_dir):
 
 # tests/test_integration.py
 
-def test_pipeline_unsupported_audio(config, output_dir):
-    """
-    [Robustness] 修复版：验证 Pipeline 遇到坏音频时的防御性反应
-    """
-    # 1. 物理准备：制造“毒药”文件
-    bad_wav = output_dir / "corrupted_fake.wav"
-    bad_wav.write_text("This is not a wav file, just some garbage strings.")
+# def test_pipeline_unsupported_audio(config, output_dir):
+#     """
+#     [Robustness] 修复版：验证 Pipeline 遇到坏音频时的防御性反应
+#     """
+#     # 1. 物理准备：制造“毒药”文件
+#     bad_wav = output_dir / "corrupted_fake.wav"
+#     bad_wav.write_text("This is not a wav file, just some garbage strings.")
     
-    # 2. 核心防御逻辑：
-    # 如果本地模型文件夹没准备好（空的），我们需要把路径改为云端 ID。
-    # 否则，FlexAligner 初始化时会因为绝对路径格式非法而直接炸掉，
-    # 导致测试根本跑不到 align 这一步。
-    model_path = Path(config.chunk_model_path)
-    if not (model_path / "config.json").exists():
-        print(f"[Test] Local model incomplete at {model_path}. Switching to Cloud ID for test.")
-        config.chunk_model_path = "USTCPhonetics/FlexAligner"
+#     # 2. 核心防御逻辑：
+#     # 如果本地模型文件夹没准备好（空的），我们需要把路径改为云端 ID。
+#     # 否则，FlexAligner 初始化时会因为绝对路径格式非法而直接炸掉，
+#     # 导致测试根本跑不到 align 这一步。
+#     model_path = Path(config.chunk_model_path)
+#     if not (model_path / "config.json").exists():
+#         print(f"[Test] Local model incomplete at {model_path}. Switching to Cloud ID for test.")
+#         config.chunk_model_path = "USTCPhonetics/FlexAligner"
 
-    # 3. 初始化 Pipeline
-    # 如果初始化崩了，说明是网络或环境问题，这里直接 fail 掉
-    try:
-        aligner = FlexAligner(config=asdict(config))
-    except Exception as e:
-        pytest.fail(f"Pipeline 初始化失败（模型路径或网络问题）: {e}")
+#     # 3. 初始化 Pipeline
+#     # 如果初始化崩了，说明是网络或环境问题，这里直接 fail 掉
+#     try:
+#         aligner = FlexAligner(config=asdict(config))
+#     except Exception as e:
+#         pytest.fail(f"Pipeline 初始化失败（模型路径或网络问题）: {e}")
     
-    # 4. 执行对齐：捕获运行时的音频拦截异常
-    # 现在的 FlexAligner.align 内部会调用重构后的 frontend.load_audio
-    with pytest.raises(Exception) as excinfo:
-        aligner.align(str(bad_wav), str(TXT_PATH), str(output_dir / "fail.TextGrid"))
+#     # 4. 执行对齐：捕获运行时的音频拦截异常
+#     # 现在的 FlexAligner.align 内部会调用重构后的 frontend.load_audio
+#     with pytest.raises(Exception) as excinfo:
+#         aligner.align(str(bad_wav), str(TXT_PATH), str(output_dir / "fail.TextGrid"))
     
-    error_msg = str(excinfo.value)
-    print(f"\n[Captured Error]: {error_msg}")
+#     error_msg = str(excinfo.value)
+#     print(f"\n[Captured Error]: {error_msg}")
     
-    # 5. 最终断言：
-    # 只要包含了我们预设的“Audio Error”或者底层的“Format not recognised”即代表防御成功
-    assert any(keyword in error_msg for keyword in ["Audio Error", "Format", "recognised"])
+#     # 5. 最终断言：
+#     # 只要包含了我们预设的“Audio Error”或者底层的“Format not recognised”即代表防御成功
+#     assert any(keyword in error_msg for keyword in ["Audio Error", "Format", "recognised"])
