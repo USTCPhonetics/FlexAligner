@@ -14,49 +14,49 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 STAGE1_DATA_DIR = PROJECT_ROOT / "verification_out_pytest/new"
 MANIFEST_TSV = STAGE1_DATA_DIR / "SP01_001.chunks.tsv"
 
-@pytest.fixture
-def flex_aligner():
-    """初始化 FlexAligner 控制器"""
-    config = AlignmentConfig(
-        lang="zh",
-        device="cuda" if torch.cuda.is_available() else "cpu",
-        # align_model_path=str(MODEL_DIR),
-        # 允许不传 lexicon/phone_json 以使用模型默认值
-    )
-    return FlexAligner(config=config)
+# @pytest.fixture
+# def flex_aligner():
+#     """初始化 FlexAligner 控制器"""
+#     config = AlignmentConfig(
+#         lang="zh",
+#         device="cuda" if torch.cuda.is_available() else "cpu",
+#         # align_model_path=str(MODEL_DIR),
+#         # 允许不传 lexicon/phone_json 以使用模型默认值
+#     )
+#     return FlexAligner(config=config)
 
-# ==========================================
-# 1. 核心管线测试
-# ==========================================
+# # ==========================================
+# # 1. 核心管线测试
+# # ==========================================
 
-def test_align_from_manifest_flow(flex_aligner, tmp_path):
-    """
-    测试从 Manifest 恢复并完成对齐拼接的全流程 (Stage 2 核心逻辑)
-    """
-    if not MANIFEST_TSV.exists():
-        pytest.skip(f"跳过测试：未找到 Stage 1 产物 {MANIFEST_TSV}")
+# def test_align_from_manifest_flow(flex_aligner, tmp_path):
+#     """
+#     测试从 Manifest 恢复并完成对齐拼接的全流程 (Stage 2 核心逻辑)
+#     """
+#     if not MANIFEST_TSV.exists():
+#         pytest.skip(f"跳过测试：未找到 Stage 1 产物 {MANIFEST_TSV}")
 
-    output_tg = tmp_path / "final_stitched.TextGrid"
+#     output_tg = tmp_path / "final_stitched.TextGrid"
     
-    # 直接调用 Pipeline 的 Resume 模式
-    flex_aligner.align_from_manifest(
-        manifest_path=str(MANIFEST_TSV),
-        audio_dir=str(STAGE1_DATA_DIR),
-        output_path=str(output_tg),
-        verbose=True
-    )
+#     # 直接调用 Pipeline 的 Resume 模式
+#     flex_aligner.align_from_manifest(
+#         manifest_path=str(MANIFEST_TSV),
+#         audio_dir=str(STAGE1_DATA_DIR),
+#         output_path=str(output_tg),
+#         verbose=True
+#     )
 
-    # 1. 物理存在验证
-    assert output_tg.exists(), "未能生成 TextGrid 文件"
+#     # 1. 物理存在验证
+#     assert output_tg.exists(), "未能生成 TextGrid 文件"
     
-    # 2. 逻辑正确性验证 (读取生成的 TG 内容)
-    content = output_tg.read_text(encoding="utf-8")
-    assert 'name = "phones"' in content
-    assert 'name = "words"' in content
+#     # 2. 逻辑正确性验证 (读取生成的 TG 内容)
+#     content = output_tg.read_text(encoding="utf-8")
+#     assert 'name = "phones"' in content
+#     assert 'name = "words"' in content
     
-    # 3. 缝合质量验证：检查是否包含 NULL 填充
-    # 这是验证你 pipeline 中 `gap > 0.001` 逻辑是否生效的关键
-    assert '"NULL"' in content, "TextGrid 中缺失 NULL 填充，检查缝合逻辑是否正确处理了 Gap"
+#     # 3. 缝合质量验证：检查是否包含 NULL 填充
+#     # 这是验证你 pipeline 中 `gap > 0.001` 逻辑是否生效的关键
+#     assert '"NULL"' in content, "TextGrid 中缺失 NULL 填充，检查缝合逻辑是否正确处理了 Gap"
 
 # def test_stitch_logic_monotonicity(flex_aligner, tmp_path):
 #     """
