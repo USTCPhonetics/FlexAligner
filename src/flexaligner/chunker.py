@@ -92,9 +92,9 @@ class CTCChunker:
         self.min_words = self.config.get("min_words", 2)
         self.pad_s = self.config.get("pad_s", 0.15)
         self.blank_token = self.config.get("blank_token", "<pad>")
-        print("chunker config:")
-        print(self.config)
-        input("check:")
+        # print("chunker config:")
+        # print(self.config)
+        # input("check:")
         # [Physics Fix] 不再使用固定 hop，而在运行时计算
         # self.config_hop = 0.02 
 
