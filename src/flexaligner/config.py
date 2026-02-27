@@ -91,23 +91,23 @@ class AlignmentConfig:
     def __post_init__(self):
         self.device = get_best_device(self.device)
         
-        # 自动模型寻址
+        # 1. 自动模型寻址 (仅在用户未显式指定时)
         if self.chunk_model_path is None:
             self.chunk_model_path = resolve_resource_path(self.lang, "chunker")
         if self.align_model_path is None:
             self.align_model_path = resolve_resource_path(self.lang, "aligner")
 
-        # [同步重命名] 动态词典绑定
-        base_asset = Path("assets/dictionaries")
-        if self.lang == "zh":
-            self.lexicon_path = str(base_asset / "zh.dict") # 修正
-            # self.phone_json_path = str(base_asset / "phones.json")
-        elif self.lang == "en":
-            self.lexicon_path = str(base_asset / "en.dict") # 修正
-            
-            # 英语音素表逻辑：优先找本地 vocab.json
-            if os.path.isdir(self.chunk_model_path):
+        # 2. // Modified: 动态词典绑定 (加入判空保护，防止覆盖用户传进来的自定义词典)
+        if self.lexicon_path is None:
+            base_asset = Path("assets/dictionaries")
+            if self.lang == "zh":
+                self.lexicon_path = str(base_asset / "zh.dict")
+            elif self.lang == "en":
+                self.lexicon_path = str(base_asset / "en.dict")
+                
+        # 3. // Modified: 英语音素表逻辑绑定 (同样加入判空保护)
+        if self.phone_json_path is None and self.lang == "en":
+            if self.chunk_model_path and os.path.isdir(self.chunk_model_path):
                 vocab_path = Path(self.chunk_model_path) / "vocab.json"
-                # self.phone_json_path = str(vocab_path) if vocab_path.exists() else None
-            else:
-                self.phone_json_path = None # 云端模式将由 Chunker 在运行时补全
+                if vocab_path.exists():
+                    self.phone_json_path = str(vocab_path)

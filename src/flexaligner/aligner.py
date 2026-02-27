@@ -83,6 +83,9 @@ def build_phone_graph_optional_sil(
     """
     [Reference Logic] 构建包含可选静音的发音图
     """
+    # print(f"Building phone graph for words: {words}")
+    # input("Press Enter to continue...")  # Debug pause to inspect input words
+    
     next_node = 0
     def new_node() -> int:
         nonlocal next_node
@@ -98,13 +101,14 @@ def build_phone_graph_optional_sil(
     def add_emit(u: int, v: int, phone: str, widx: Optional[int], w: Optional[str], bias: float = 0.0):
         # [Robustness] 增加 OOV 防御，防止 Key Error 导致崩溃，改为跳过
         if phone not in phone_to_id:
+            assert phone.lower() == sil_phone.lower(), f"Phone '{phone}' not in vocab and is not the designated silence phone '{sil_phone}'."
             # 尝试去重音 (AO1 -> AO)
             pure = ''.join(filter(str.isalpha, phone))
             if pure in phone_to_id:
                 phone_id = phone_to_id[pure]
             else:
                 # 实在没有，打印警告并跳过这条边（可能导致图断裂，但在 Library 中比 crash 好）
-                # print(f"Warning: Phone '{phone}' not in vocab.")
+                print(f"Warning: Phone '{phone}' not in vocab.")
                 return 
         else:
             phone_id = phone_to_id[phone]
@@ -205,33 +209,205 @@ def build_phone_graph_optional_sil(
 
     return PhoneGraph(states=states, start_states=start_states, end_states=end_states), np.asarray(entry_bias, dtype=np.float32)
 
+# def align_beam_viterbi(
+#     logp: np.ndarray,      # (T, V)
+#     graph: PhoneGraph,
+#     entry_bias: np.ndarray,# (S,)
+#     p_stay: float = 0.92,
+#     beam_size: int = 400,
+#     word_sil_label: str = "sil",
+# ) -> AlignmentResult:
+#     """
+#     [Reference Logic] 标准 Beam Viterbi 解码
+#     """
+#     T, V = logp.shape
+    
+#     lp_stay = math.log(p_stay)
+#     lp_move = math.log(1.0 - p_stay)
+
+#     bp: List[Dict[int, int]] = []
+#     cur_scores: Dict[int, float] = {}
+#     cur_bp: Dict[int, int] = {}
+
+#     # Init
+#     for s in graph.start_states:
+#         phid = graph.states[s].edge.phone_id
+#         cur_scores[s] = float(logp[0, phid]) + float(entry_bias[s])
+#         cur_bp[s] = s
+
+#     # Init Pruning
+#     if len(cur_scores) > beam_size:
+#         top = sorted(cur_scores.items(), key=lambda kv: kv[1], reverse=True)[:beam_size]
+#         cur_scores = {k: v for k, v in top}
+#         cur_bp = {k: cur_bp[k] for k, _ in top}
+#     bp.append(cur_bp)
+
+#     # Forward
+#     for t in range(1, T):
+#         nxt_scores: Dict[int, float] = {}
+#         nxt_bp: Dict[int, int] = {}
+
+#         for s, sc in cur_scores.items():
+#             st = graph.states[s]
+#             emit_s = float(logp[t, st.edge.phone_id]) + float(entry_bias[s])
+
+#             # 1. Stay
+#             cand = sc + lp_stay + emit_s
+#             if cand > nxt_scores.get(s, NEG_INF):
+#                 nxt_scores[s] = cand
+#                 nxt_bp[s] = s
+
+#             # 2. Move
+#             base = sc + lp_move
+#             for ns in st.succs:
+#                 nst = graph.states[ns]
+#                 emit_ns = float(logp[t, nst.edge.phone_id]) + float(entry_bias[ns])
+#                 cand2 = base + emit_ns
+#                 if cand2 > nxt_scores.get(ns, NEG_INF):
+#                     nxt_scores[ns] = cand2
+#                     nxt_bp[ns] = s
+
+#         # Pruning
+#         if len(nxt_scores) > beam_size:
+#             top = sorted(nxt_scores.items(), key=lambda kv: kv[1], reverse=True)[:beam_size]
+#             nxt_scores = {k: v for k, v in top}
+#             nxt_bp = {k: nxt_bp[k] for k, _ in top}
+
+#         cur_scores = nxt_scores
+#         bp.append(nxt_bp)
+
+#     # Termination
+#     end_set = set(graph.end_states)
+#     best_state = None
+#     best_score = NEG_INF
+#     for s, sc in cur_scores.items():
+#         term = sc + lp_move
+#         if s in end_set and term > best_score:
+#             best_score = term
+#             best_state = s
+            
+#     if best_state is None and len(cur_scores) > 0:
+#         best_state = max(cur_scores.items(), key=lambda kv: kv[1])[0]
+
+#     # Backtrace
+#     path = np.empty((T,), dtype=np.int32)
+#     if best_state is not None:
+#         cur = int(best_state)
+#         for t in range(T - 1, -1, -1):
+#             path[t] = cur
+#             cur = int(bp[t].get(cur, cur))
+#     else:
+#         path.fill(0)
+
+#     aligned_phone_ids = np.array([graph.states[int(s)].edge.phone_id for s in path], dtype=np.int32)
+
+#     # Extract Phones
+#     phone_segments_f = []
+#     if T > 0:
+#         cur_ph = graph.states[int(path[0])].edge.phone
+#         start = 0
+#         for t in range(1, T):
+#             ph = graph.states[int(path[t])].edge.phone
+#             if ph != cur_ph:
+#                 phone_segments_f.append((cur_ph, start, t))
+#                 cur_ph = ph
+#                 start = t
+#         phone_segments_f.append((cur_ph, start, T))
+
+#     # Extract Words
+#     word_segments_f = []
+#     if T > 0:
+#         w0 = graph.states[int(path[0])].edge.word
+#         cur_w = w0 if w0 is not None else word_sil_label
+#         start = 0
+#         for t in range(1, T):
+#             w = graph.states[int(path[t])].edge.word
+#             lab = w if w is not None else word_sil_label
+#             if lab != cur_w:
+#                 word_segments_f.append((cur_w, start, t))
+#                 cur_w = lab
+#                 start = t
+#         word_segments_f.append((cur_w, start, T))
+
+#     return AlignmentResult(phone_segments_f, word_segments_f, path, aligned_phone_ids)
+
 def align_beam_viterbi(
-    logp: np.ndarray,      # (T, V)
+    logp: np.ndarray,          # (T, V) log-probabilities
     graph: PhoneGraph,
-    entry_bias: np.ndarray,# (S,)
+    entry_bias: np.ndarray,    # (S,)
     p_stay: float = 0.92,
-    beam_size: int = 400,
+    beam_size: int = 300,
     word_sil_label: str = "sil",
+    # --- [Trick Parameters] ---
+    boundary_lambda: float = 0.0,
+    boundary_context_s: float = 0.015,
+    frame_hop_s: float = 0.01,
+    sil_phone_id: Optional[int] = None,
+    min_sil_dur_ms: float = 0.0,
+    sil_enter_cost: float = 0.0,
 ) -> AlignmentResult:
     """
-    [Reference Logic] 标准 Beam Viterbi 解码
+    [Advanced Logic] 带物理惯性约束与边界平滑的 Beam Viterbi 解码
     """
     T, V = logp.shape
-    
+    S = len(graph.states)
+    if entry_bias.shape[0] != S:
+        raise ValueError("entry_bias length != number of states")
+    if T == 0:
+        raise ValueError("No frames produced by model.")
+
     lp_stay = math.log(p_stay)
     lp_move = math.log(1.0 - p_stay)
 
-    bp: List[Dict[int, int]] = []
-    cur_scores: Dict[int, float] = {}
-    cur_bp: Dict[int, int] = {}
+    # -------------------------
+    # Trick 1: 局部概率悬崖探测器 (Boundary Score)
+    # -------------------------
+    ctx = max(1, int(round(boundary_context_s / frame_hop_s)))
+    if boundary_lambda != 0.0:
+        pref = np.zeros((T + 1, V), dtype=np.float32)
+        pref[1:] = np.cumsum(logp, axis=0)
+
+        def _mean(pid: int, s: int, e: int) -> float:
+            if e <= s: return 0.0
+            return float((pref[e, pid] - pref[s, pid]) / (e - s))
+
+        def boundary_score(t: int, a: int, b: int) -> float:
+            l0 = 0 if t - ctx < 0 else (t - ctx)
+            l1 = t
+            r0 = t
+            r1 = T if t + ctx > T else (t + ctx)
+            left = _mean(a, l0, l1) - _mean(b, l0, l1)
+            right = _mean(b, r0, r1) - _mean(a, r0, r1)
+            return left + right
+    else:
+        def boundary_score(t: int, a: int, b: int) -> float:
+            return 0.0
+
+    # -------------------------
+    # Trick 2 & 3: 静音物理惯性锁与过路费 (Silence Lock & Toll)
+    # -------------------------
+    min_sil_frames = 0
+    if (min_sil_dur_ms is not None) and (min_sil_dur_ms > 0.0) and (sil_phone_id is not None):
+        min_sil_frames = max(1, int(round((min_sil_dur_ms / 1000.0) / frame_hop_s)))
+
+    def _is_sil_phone(pid: int) -> bool:
+        return (sil_phone_id is not None) and (pid == sil_phone_id)
+
+    bp: List[Dict[tuple[int, int], tuple[int, int]]] = []
+    cur_scores: Dict[tuple[int, int], float] = {}
+    cur_bp: Dict[tuple[int, int], tuple[int, int]] = {}
 
     # Init
     for s in graph.start_states:
         phid = graph.states[s].edge.phone_id
-        cur_scores[s] = float(logp[0, phid]) + float(entry_bias[s])
-        cur_bp[s] = s
+        if _is_sil_phone(phid) and min_sil_frames > 0:
+            lock = min_sil_frames - 1
+        else:
+            lock = 0
+        key = (int(s), int(lock))
+        cur_scores[key] = float(logp[0, phid]) + float(entry_bias[s])
+        cur_bp[key] = key
 
-    # Init Pruning
     if len(cur_scores) > beam_size:
         top = sorted(cur_scores.items(), key=lambda kv: kv[1], reverse=True)[:beam_size]
         cur_scores = {k: v for k, v in top}
@@ -240,30 +416,56 @@ def align_beam_viterbi(
 
     # Forward
     for t in range(1, T):
-        nxt_scores: Dict[int, float] = {}
-        nxt_bp: Dict[int, int] = {}
+        nxt_scores: Dict[tuple[int, int], float] = {}
+        nxt_bp: Dict[tuple[int, int], tuple[int, int]] = {}
 
-        for s, sc in cur_scores.items():
+        for (s, lock_prev), sc in cur_scores.items():
             st = graph.states[s]
-            emit_s = float(logp[t, st.edge.phone_id]) + float(entry_bias[s])
+            phid_prev = st.edge.phone_id
+            prev_is_sil = _is_sil_phone(phid_prev)
+            emit_s = float(logp[t, phid_prev]) + float(entry_bias[s])
 
             # 1. Stay
             cand = sc + lp_stay + emit_s
-            if cand > nxt_scores.get(s, NEG_INF):
-                nxt_scores[s] = cand
-                nxt_bp[s] = s
+            lock_stay = (lock_prev - 1) if (prev_is_sil and lock_prev > 0) else 0
+            key_stay = (int(s), int(lock_stay if prev_is_sil else 0))
+            
+            if cand > nxt_scores.get(key_stay, NEG_INF):
+                nxt_scores[key_stay] = cand
+                nxt_bp[key_stay] = (int(s), int(lock_prev))
 
             # 2. Move
             base = sc + lp_move
             for ns in st.succs:
                 nst = graph.states[ns]
-                emit_ns = float(logp[t, nst.edge.phone_id]) + float(entry_bias[ns])
-                cand2 = base + emit_ns
-                if cand2 > nxt_scores.get(ns, NEG_INF):
-                    nxt_scores[ns] = cand2
-                    nxt_bp[ns] = s
+                phid_next = nst.edge.phone_id
+                next_is_sil = _is_sil_phone(phid_next)
 
-        # Pruning
+                # [物理约束] 静音锁死逻辑：锁没归零，不准跳出
+                if prev_is_sil and lock_prev > 0 and not next_is_sil:
+                    continue
+
+                emit_ns = float(logp[t, phid_next]) + float(entry_bias[ns])
+
+                # 计算下一帧的静音锁
+                if next_is_sil:
+                    if prev_is_sil:
+                        lock_next = (lock_prev - 1) if lock_prev > 0 else 0
+                    else:
+                        lock_next = (min_sil_frames - 1) if (min_sil_frames > 0) else 0
+                else:
+                    lock_next = 0
+
+                key_next = (int(ns), int(lock_next))
+                # [过路费扣除]
+                enter_pen = float(sil_enter_cost) if ((not prev_is_sil) and next_is_sil) else 0.0
+                
+                cand2 = base + emit_ns + enter_pen + boundary_lambda * boundary_score(t, phid_prev, phid_next)
+                
+                if cand2 > nxt_scores.get(key_next, NEG_INF):
+                    nxt_scores[key_next] = cand2
+                    nxt_bp[key_next] = (int(s), int(lock_prev))
+
         if len(nxt_scores) > beam_size:
             top = sorted(nxt_scores.items(), key=lambda kv: kv[1], reverse=True)[:beam_size]
             nxt_scores = {k: v for k, v in top}
@@ -276,11 +478,11 @@ def align_beam_viterbi(
     end_set = set(graph.end_states)
     best_state = None
     best_score = NEG_INF
-    for s, sc in cur_scores.items():
+    for (s, lock_prev), sc in cur_scores.items():
         term = sc + lp_move
         if s in end_set and term > best_score:
             best_score = term
-            best_state = s
+            best_state = (int(s), int(lock_prev))
             
     if best_state is None and len(cur_scores) > 0:
         best_state = max(cur_scores.items(), key=lambda kv: kv[1])[0]
@@ -288,10 +490,10 @@ def align_beam_viterbi(
     # Backtrace
     path = np.empty((T,), dtype=np.int32)
     if best_state is not None:
-        cur = int(best_state)
+        cur_key = best_state 
         for t in range(T - 1, -1, -1):
-            path[t] = cur
-            cur = int(bp[t].get(cur, cur))
+            path[t] = int(cur_key[0])
+            cur_key = bp[t].get(cur_key, cur_key)
     else:
         path.fill(0)
 
@@ -300,13 +502,19 @@ def align_beam_viterbi(
     # Extract Phones
     phone_segments_f = []
     if T > 0:
-        cur_ph = graph.states[int(path[0])].edge.phone
+        cur_edge0 = graph.states[int(path[0])].edge
+        cur_ph = cur_edge0.phone
+        cur_wi = cur_edge0.word_index 
         start = 0
         for t in range(1, T):
-            ph = graph.states[int(path[t])].edge.phone
-            if ph != cur_ph:
+            e = graph.states[int(path[t])].edge
+            ph = e.phone
+            wi = e.word_index
+            # [关键修复] 防止跨词但同音素时被合并 (比如 "A A")
+            if (ph != cur_ph) or (wi != cur_wi):
                 phone_segments_f.append((cur_ph, start, t))
                 cur_ph = ph
+                cur_wi = wi
                 start = t
         phone_segments_f.append((cur_ph, start, T))
 
@@ -326,6 +534,7 @@ def align_beam_viterbi(
         word_segments_f.append((cur_w, start, T))
 
     return AlignmentResult(phone_segments_f, word_segments_f, path, aligned_phone_ids)
+
 
 # ==========================================
 #  3. Helper Class: Lexicon
@@ -392,7 +601,13 @@ class LocalAligner:
         # Physics
         self.frame_hop = self.config.get("frame_hop_s", 0.01)
         self.offset_s = self.config.get("offset_s", 0.0) # Reference script doesn't use explicit offset, usually 0 or implicit in hop/2
-
+        # Physics & Advanced Constraints (Trick Parameters)
+        self.frame_hop = self.config.get("frame_hop_s", 0.01)
+        self.offset_s = self.config.get("offset_s", 0.0)
+        self.sil_enter_cost = self.config.get("sil_enter_cost", -0.5)
+        self.min_sil_dur_ms = self.config.get("min_sil_dur_ms", 0.0)
+        self.boundary_lambda = self.config.get("boundary_lambda", 200.0)
+        self.boundary_context_s = self.config.get("boundary_context_s", 0.05)
         # Resources
         self.model = None
         self.processor = None
@@ -460,6 +675,9 @@ class LocalAligner:
         """
         Executes reference alignment logic and adapts output to Pipeline format.
         """
+        # print(f"Aligning chunk '{file_id}' with text: {text}")
+        # print("align_locally called with chunk_tensor shape:", chunk_tensor.shape)
+        # input("Press Enter to continue...")  # Debug pause to inspect inputs
         if self.model is None or self.lexicon is None:
              return {"phones": [], "words": []}
 
@@ -495,6 +713,21 @@ class LocalAligner:
             return {"phones": [], "words": []}
 
         # 3. Decode (Reference Algorithm)
+        # try:
+        #     ali = align_beam_viterbi(
+        #         logp=logp,
+        #         graph=graph,
+        #         entry_bias=entry_bias,
+        #         p_stay=self.p_stay,
+        #         beam_size=self.beam_size,
+        #         word_sil_label=self.word_sil_label
+        #     )
+        # except Exception as e:
+        #     print(f"❌ Viterbi failed: {e}")
+        #     return {"phones": [], "words": []}
+        
+        sil_phone_id = self.phone_to_id.get(self.sil_phone) if self.sil_phone else None
+        
         try:
             ali = align_beam_viterbi(
                 logp=logp,
@@ -502,7 +735,14 @@ class LocalAligner:
                 entry_bias=entry_bias,
                 p_stay=self.p_stay,
                 beam_size=self.beam_size,
-                word_sil_label=self.word_sil_label
+                word_sil_label=self.word_sil_label,
+                # --- 核心物理挂载 ---
+                boundary_lambda=self.boundary_lambda,
+                boundary_context_s=self.boundary_context_s,
+                frame_hop_s=self.frame_hop,
+                sil_phone_id=sil_phone_id,
+                min_sil_dur_ms=self.min_sil_dur_ms,
+                sil_enter_cost=self.sil_enter_cost
             )
         except Exception as e:
             print(f"❌ Viterbi failed: {e}")

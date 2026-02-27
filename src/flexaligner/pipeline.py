@@ -198,6 +198,10 @@ class FlexAligner:
         # 2. 读取 TSV
         try:
             df = pd.read_csv(tsv_path, sep='\t')
+            # print(f"   -> Loaded manifest with {len(df)} chunks. Target duration: {target_duration:.2f}s")
+            # print(f"   Columns: {df.columns.tolist()}")
+            # print(f"   Sample rows:\n{df.head()}")
+            # input("Check manifest data, press Enter to continue...")  # Debug pause to inspect manifest data
         except Exception as e:
             raise RuntimeError(f"Failed to parse TSV: {e}")
 
@@ -211,6 +215,8 @@ class FlexAligner:
         for _, row in tqdm(df.iterrows(), total=len(df), desc="Loading Audio", disable=not verbose):
             chunk_id = row['chunk_id']
             text = str(row.get('text', row.get('words', ''))).strip()
+            # print(f"Processing chunk_id: {chunk_id}, text: '{text}'")  # Debug print for chunk info
+            # input("Check chunk info, press Enter to continue...")  # Debug pause to inspect chunk info
             start = float(row['start_s'])
             end = float(row['end_s'])
 
@@ -258,7 +264,8 @@ class FlexAligner:
         for chunk in chunks:
             chunk_start = chunk.start_time
             chunk_end = chunk.end_time
-            
+            # print(f"\nProcessing chunk '{chunk.chunk_id}': {chunk_start:.3f}s - {chunk_end:.3f}s, text: '{chunk.text}'")
+            # input("Press Enter to align this chunk...")  # Debug pause before alignment
             # A. 核心对齐推理
             result = self.aligner.align_locally(chunk.tensor, chunk.text, file_id=chunk.chunk_id)
             

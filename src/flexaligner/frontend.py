@@ -233,6 +233,13 @@ class TextFrontend:
         return final_tokens
 
     def get_phonemes(self, text: str, lang: str) -> List[str]:
+        
+        if getattr(self.config, 'raw_phoneme_mode', False):
+            # 将 sil 统一为小写，其他保持原样（或按你字典要求大写）
+            tokens = text.strip().split()
+            # 这里统一转大写去查字典，只有 sil 保留小写
+            return [w.lower() if w.lower() == "sil" else w.upper() for w in tokens]
+        
         cleaned_text = self.clean_text(text, lang)
         
         if lang == "en":

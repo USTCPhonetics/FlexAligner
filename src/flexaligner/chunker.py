@@ -161,6 +161,8 @@ class CTCChunker:
 
     @torch.inference_mode()
     def find_chunks(self, audio_tensor: torch.Tensor, text_list: List[str], file_id: str = "unknown") -> List[AudioChunk]:
+        # print(f"find_chunks called with file_id: {file_id}, text_list: {text_list}")
+        # input("Check find_chunks inputs, press Enter to continue...")  # Debug pause to inspect inputs
         if self.model is None: raise RuntimeError("CTC 模型未加载")
 
         if self.verbose:
@@ -233,11 +235,84 @@ class CTCChunker:
         audio_dur_s = float(audio_tensor.size(0)) / 16000
         internal_chunks = self._pad_chunks(internal_chunks, word_objects, audio_dur_s)
 
-        # 6. Physical Extraction & Object Creation
+        # # 6. Physical Extraction & Object Creation
+        # final_chunks = []
+        # sr = 16000
+        # for i, c in enumerate(internal_chunks):
+        #     # chunks2.py: s0 = int(round(c.start * sr))
+        #     s_samp = int(round(c.start * sr))
+        #     e_samp = int(round(c.end * sr))
+        #     s_samp = max(0, min(s_samp, audio_tensor.size(0)))
+        #     e_samp = max(0, min(e_samp, audio_tensor.size(0)))
+            
+        #     if e_samp <= s_samp: continue
+
+        #     chunk_id_str = f"{file_id}.chunk{i+1:03d}"
+            
+        #     chunk_obj = AudioChunk(
+        #         tensor=audio_tensor[s_samp:e_samp].clone(),
+        #         start_time=c.start,
+        #         end_time=c.end,
+        #         text=" ".join(c.words),
+        #         chunk_id=chunk_id_str
+        #     )
+        #     final_chunks.append(chunk_obj)
+
+        # self._log(f"Found {len(final_chunks)} chunks.")
+
+        # if self.chunks_out_dir:
+        #     self._save_intermediate_results(final_chunks, file_id)
+
+        # 
+        
+        # ==========================================================
+        # 6. Physical Extraction & Object Creation (全局单调对齐装甲)
+        # ==========================================================
         final_chunks = []
         sr = 16000
+        
+        # 🛡️ 预计算阶段：扫描全局序列，为每个 Chunk 锁定在纯净 text_list 中的绝对起始坐标
+        chunk_starts = [0] * len(internal_chunks)
+        orig_cursor = 0
+        
         for i, c in enumerate(internal_chunks):
-            # chunks2.py: s0 = int(round(c.start * sr))
+            # 异常防御：如果当前 chunk 被 CTC 切空了，起点直接继承当前游标
+            if not c.words:
+                chunk_starts[i] = orig_cursor
+                continue
+                
+            # 1. 抓取当前 Chunk 的第一个词作为“寻星镜”锚点 (去数字/小写)
+            anchor_ctc = ''.join(filter(str.isalpha, c.words[0].lower()))
+            
+            # 2. 游标在原始序列中推进，直到命中锚点
+            while orig_cursor < len(text_list):
+                anchor_orig = ''.join(filter(str.isalpha, text_list[orig_cursor].lower()))
+                if anchor_orig == anchor_ctc:
+                    break
+                orig_cursor += 1
+                
+            chunk_starts[i] = min(orig_cursor, len(text_list))
+            
+            # 3. 匹配完起点后，用内部循环把当前 Chunk 剩下的词全“消化”掉
+            # 保证下一次外层循环寻星时，游标已经跨过了当前 Chunk 的领空
+            for cw in c.words[1:]:
+                cw_clean = ''.join(filter(str.isalpha, cw.lower()))
+                while orig_cursor < len(text_list) - 1:
+                    orig_cursor += 1
+                    tw_clean = ''.join(filter(str.isalpha, text_list[orig_cursor].lower()))
+                    if tw_clean == cw_clean:
+                        break
+                        
+            # 消化完当前 chunk 的最后一个词后，游标必须往前再走一格，准备迎接下个 chunk
+            orig_cursor += 1 
+
+        # 🛡️ 压入终点坐标，确保最后一个 Chunk 像黑洞一样吸收所有剩余残骸
+        chunk_starts.append(len(text_list))
+        
+        # ==========================================================
+        # 🗡️ 切割阶段：根据绝对坐标无损切割
+        # ==========================================================
+        for i, c in enumerate(internal_chunks):
             s_samp = int(round(c.start * sr))
             e_samp = int(round(c.end * sr))
             s_samp = max(0, min(s_samp, audio_tensor.size(0)))
@@ -247,20 +322,22 @@ class CTCChunker:
 
             chunk_id_str = f"{file_id}.chunk{i+1:03d}"
             
+            # 🎯 物理级切割：左闭右开，严丝合缝
+            # 哪怕 chunk_starts[i] 和 [i+1] 之间隔了 10 个被 CTC 丢弃的 OOV
+            # 这行切片也能把它们完美打包进当前 Chunk 的尾部！
+            real_words = text_list[chunk_starts[i] : chunk_starts[i+1]]
+            
             chunk_obj = AudioChunk(
                 tensor=audio_tensor[s_samp:e_samp].clone(),
                 start_time=c.start,
                 end_time=c.end,
-                text=" ".join(c.words),
+                text=" ".join(real_words), 
                 chunk_id=chunk_id_str
             )
             final_chunks.append(chunk_obj)
 
         self._log(f"Found {len(final_chunks)} chunks.")
-
-        if self.chunks_out_dir:
-            self._save_intermediate_results(final_chunks, file_id)
-
+        
         return final_chunks
 
     def _save_intermediate_results(self, chunks: List[AudioChunk], file_id: str):
@@ -301,7 +378,9 @@ class CTCChunker:
                     "words": words_list,
                     "text": c.text
                 }
-                
+                # print(f"  - Saved chunk: {obj['chunk_id']} ({obj['start_s']:.3f}s - {obj['end_s']:.3f}s, dur={obj['dur_s']:.3f}s, words={len(words_list)})")
+                # print(f"text: '{c.text}'")
+                # input("Check saved chunk info, press Enter to continue...")  # Debug pause to inspect saved chunk info
                 fj.write(json.dumps(obj, ensure_ascii=False) + "\n")
                 # TSV 也是用的 rounded values
                 ft.write(f"{c.chunk_id}\t{obj['start_s']}\t{obj['end_s']}\t{obj['dur_s']}\t{obj['text']}\n")
@@ -319,16 +398,84 @@ class CTCChunker:
         # English patch omitted for brevity (same as before)
         return lexicon
 
+    # def _words_to_pronunciations(self, words: List[str]):
+    #     out = []
+    #     for w in words:
+    #         w_norm = w.strip().lower()
+    #         if not w_norm: continue
+    #         if w_norm not in self.lexicon:
+                
+    #             if self.verbose: print(f"⚠️  [CTCChunker] OOV Word: '{w_norm}'")
+    #             raise ValueError(f"[CTCChunker] OOV Word: {w_norm}")
+    #         out.append([self.lexicon[w_norm]])
+    #     return out
+    
     def _words_to_pronunciations(self, words: List[str]):
+        # print(f"words to convert: {words}")
+        # input("check words:")
         out = []
         for w in words:
-            w_norm = w.strip().lower()
-            if not w_norm: continue
-            if w_norm not in self.lexicon:
-                if self.verbose: print(f"⚠️  [CTCChunker] OOV Word: '{w_norm}'")
-                raise ValueError(f"[CTCChunker] OOV Word: {w_norm}")
-            out.append([self.lexicon[w_norm]])
+            w_clean = w.strip()
+            if not w_clean: continue
+            
+            # 构建多维探测形态
+            w_upper = w_clean.upper()
+            w_lower = w_clean.lower()
+            # 🛡️ [核心降维装甲] 剥离数字 (例如 IY1 -> IY, AE2 -> AE)
+            w_no_digit = ''.join([c for c in w_upper if not c.isdigit()])
+            
+            # 1. 第一级：绝对精确匹配 (如果 Chunker 词表升级了，优先用精确的)
+            if w_upper in self.lexicon:
+                out.append([self.lexicon[w_upper]])
+                
+            # 2. 第二级：降维打击 (Chunker 词表只有 IY，没有 IY1，在这里被完美接住)
+            elif w_no_digit in self.lexicon:
+                # if self.verbose: print(f"  [Downgrade] {w_clean} -> {w_no_digit}")
+                out.append([self.lexicon[w_no_digit]])
+                
+            # 3. 第三级：小写兜底
+            elif w_lower in self.lexicon:
+                out.append([self.lexicon[w_lower]])
+                
+            # 4. 第四级：原词兜底 (如 sil)
+            elif w_clean in self.lexicon:
+                out.append([self.lexicon[w_clean]])
+                
+            else:
+                # 破防了，真正的 OOV
+                if self.verbose: print(f"⚠️  [CTCChunker] OOV Word: '{w_clean}' (Tried: {w_no_digit})")
+                raise ValueError(f"[CTCChunker] OOV Word: {w_clean}")
+        # print(f"Pronunciations: {out}")
+        # input("check pronunciations:")
         return out
+    
+    # def _words_to_pronunciations(self, words: List[str]):
+    #     out = []
+    #     print("lexicon keys sample:", list(self.lexicon.keys())[:10])
+    #     input("check lexicon:")
+    #     for w in words:
+    #         w_clean = w.strip()
+    #         if not w_clean: continue
+            
+    #         # // Modified: 大小写多级降级装甲 (Fallback Strategy)
+    #         w_lower = w_clean.lower()
+    #         w_upper = w_clean.upper()
+            
+    #         # 1. 试探小写 (兼容普通英文单词)
+    #         if w_lower in self.lexicon:
+    #             out.append([self.lexicon[w_lower]])
+    #         # 2. 试探大写 (兼容 TIMIT 这种硬核大写音素 AW1)
+    #         elif w_upper in self.lexicon:
+    #             out.append([self.lexicon[w_upper]])
+    #         # 3. 试探原词 (防备某些带特殊符号或驼峰拼写的变态字典)
+    #         elif w_clean in self.lexicon:
+    #             out.append([self.lexicon[w_clean]])
+    #         else:
+    #             # 破防了，真正的 OOV
+    #             if self.verbose: print(f"⚠️  [CTCChunker] OOV Word: '{w_clean}'")
+    #             raise ValueError(f"[CTCChunker] OOV Word: {w_clean}")
+                
+    #     return out
 
     def _beam_search(self, log_probs, words, prons_per_word, beam_width=10):
         beam = [PronCandidate(phones=[], pron_choice_idxs=[], score=0.0)]
