@@ -74,3 +74,5 @@ chunks_out/*
 tests/testfiles/zh/flexaligner-1
 tests/testfiles/zh/flexaligner-01
 tests/testfiles/zh/flexaligner-0
+notebook
+

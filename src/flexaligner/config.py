@@ -75,6 +75,10 @@ class AlignmentConfig:
     sil_cost: float = -0.5
     align_beam_size: int = 400
     p_stay: float = 0.92
+    min_sil_dur_ms : float = 0.0
+    sil_enter_cost : float = -0.5
+    sil_at_ends: bool = True
+    
     
     # 🔴 物理真理：修改后的 Wav2Vec2 Stride=1 => 10ms
     frame_hop_s: float = 0.01
@@ -82,8 +86,11 @@ class AlignmentConfig:
     boundary_lambda: float = 0.0
     boundary_context_s: float = 0.06
     
+    
     chunks_out_dir : Optional[str] = "chunks_out" # 可选的输出目录参数，默认为 "chunks_out"
     verbose: bool = False # 是否开启详细日志输出
+    use_g2p: bool = False # 是否启用 G2P 模块（默认关闭，适合纯音素输入）
+    
     # src/flexaligner/config.py
 
     # src/flexaligner/config.py 中的 __post_init__ 关键部分修正

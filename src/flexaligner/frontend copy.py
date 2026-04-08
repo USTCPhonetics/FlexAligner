@@ -41,6 +41,7 @@ class TextFrontend:
         jieba.initialize()
         
         # 加载自定义词典（如果有）
+        # 这一步会用到 self._vocab_cache，所以必须放在上面初始化之后
         if self.config.get("lexicon_path"):
             self._load_custom_lexicon(self.config["lexicon_path"])
 
@@ -49,25 +50,11 @@ class TextFrontend:
         # 依赖检查
         self._check_dependencies()
 
-        # Modified: 补全英语清洗规则字典，作为 Slow-Path 的降噪映射表
+        # 英语清洗规则
         self._en_abbreviations = {
-            r"\bi'm\b": "i am",
-            r"\bi've\b": "i have",
-            r"\bit's\b": "it is",
-            r"\bthat's\b": "that is",
-            r"\bdon't\b": "do not",
-            r"\bcan't\b": "cannot",
-            r"\bwon't\b": "will not",
-            r"\bdidn't\b": "did not",
-            r"\bdoesn't\b": "does not",
-            r"\bthere's\b": "there is",
-            r"\bhe's\b": "he is",
-            r"\bshe's\b": "she is",
-            r"\bwe're\b": "we are",
-            r"\bthey're\b": "they are",
-            r"\bwouldn't\b": "would not",
-            r"\bshouldn't\b": "should not",
-            r"\bcouldn't\b": "could not"
+            # r"i'm": "i am", r"it's": "it is", r"don't": "do not",
+            # r"can't": "cannot", r"won't": "will not", r"n't": " not",
+            # r"'ll": " will", r"'ve": " have", r"'re": " are", r"'d": " would",
         }
         self._en_symbols = {r"&": " and ", r"@": " at ", r"\+": " plus "}
 
@@ -160,22 +147,30 @@ class TextFrontend:
         if not raw: return ""
 
         text = ""
+        # 1. 尝试使用 utf-8-sig (可以自动处理带或不带 BOM 的 UTF-8)
         try:
             text = raw.decode('utf-8-sig')
         except UnicodeDecodeError:
+            # 2. 如果失败，且不是 FAST 模式，尝试 chardet
             if self.mode != "FAST" and chardet is not None:
                 try:
                     res = chardet.detect(raw)
                     encoding = res['encoding'] or 'utf-8'
                     text = raw.decode(encoding, errors='ignore')
                 except:
+                    # chardet 失败时的兜底
                     text = raw.decode('gb18030', errors='ignore')
             else:
+                # 3. FAST 模式或无 chardet，尝试常见中文编码
                 try:
                     text = raw.decode('gb18030')
                 except UnicodeDecodeError:
+                    # 最后的兜底：忽略错误强制解码
                     text = raw.decode('utf-8', errors='ignore')
 
+        # 4. 统一清洗：去除 BOM (虽然 utf-8-sig 应该去除了，但为了防止其他编码遗留，再洗一次)
+        # 去除 Windows 换行符
+        # 去除首尾空白
         return text.replace('\ufeff', '').replace('\r\n', '\n').strip()
 
     def detect_language(self, text: str) -> str:
@@ -184,48 +179,54 @@ class TextFrontend:
         if len(re.findall(r'[a-zA-Z]', text)) > 0: return "en"
         return "unknown"
 
+    # def clean_text(self, text: str, lang: str) -> str:
+    #     if not text: return ""
+    #     if lang == "en":
+    #         text = text.lower()
+    #         for p, r in self._en_abbreviations.items(): text = re.sub(p, r, text)
+    #         for p, r in self._en_symbols.items(): text = re.sub(p, r, text)
+    #         text = self._normalize_numbers(text)
+    #         text = re.sub(r"[^a-z0-9 ]", " ", text)
+    #         return " ".join(text.split())
+    #     elif lang == "zh":
+    #         # 保留汉字、字母、数字
+    #         text = re.sub(r"[^\u4e00-\u9fa5a-zA-Z0-9\s]", " ", text)
+    #         return " ".join(text.split())
+    #     return text
     def clean_text(self, text: str, lang: str) -> str:
         if not text: return ""
         
+        # Modified: 插入初始状态探针，监控 Raw Data
+        print(f"[状态追踪] 初始输入: '{text}'")
+
         if lang == "en":
             text = text.lower()
+            # Modified: 监控统一小写化后的状态
+            print(f"[状态追踪] 1. lower() 处理后: '{text}'")
+
+            for p, r in self._en_abbreviations.items(): 
+                text = re.sub(p, r, text)
+            # Modified: 监控缩写字典映射（"it's" 正常应在此处发生相变，变为 "it is"）
+            print(f"[状态追踪] 2. abbreviations 替换后: '{text}'")
+
+            for p, r in self._en_symbols.items(): 
+                text = re.sub(p, r, text)
+            # Modified: 监控特殊符号字典的正则替换
+            print(f"[状态追踪] 3. symbols 替换后: '{text}'")
+
+            text = self._normalize_numbers(text)
+            # Modified: 监控数字归一化模块输出
+            print(f"[状态追踪] 4. _normalize_numbers 后: '{text}'")
+
+            text = re.sub(r"[^a-z0-9 ]", " ", text)
+            # Modified: 监控高频过滤层。如果上游未处理 "it's" 中的单引号，此处将被强制清洗为空格
+            print(f"[状态追踪] 5. 符号白名单过滤后: '{text}'")
+
+            result = " ".join(text.split())
+            # Modified: 监控最终空格塌缩后的形态
+            print(f"[状态追踪] 6. 最终输出: '{result}'")
             
-            # Modified: 第一步，剥离绝对噪声，保留字母、数字、空格和单引号
-            text = re.sub(r"[^a-z0-9 ']", " ", text)
-            
-            raw_tokens = text.split()
-            aligned_tokens = []
-            
-            # Modified: 第二步，基于先验字典进行多路复用处理
-            for token in raw_tokens:
-                # 剥离首尾可能存在的孤立单引号（引用符），保留单词内部的单引号
-                token = token.strip("'")
-                if not token: continue
-                
-                # 核心逻辑：Fast-Path 查表
-                # 考虑到不同字典对大小写的敏感度，进行多级碰撞测试
-                if token in self._vocab_cache or token.upper() in self._vocab_cache:
-                    aligned_tokens.append(token)
-                else:
-                    # 核心逻辑：Slow-Path 兜底降噪
-                    fallback_token = token
-                    
-                    for p, r in self._en_abbreviations.items(): 
-                        fallback_token = re.sub(p, r, fallback_token)
-                    for p, r in self._en_symbols.items(): 
-                        fallback_token = re.sub(p, r, fallback_token)
-                        
-                    fallback_token = self._normalize_numbers(fallback_token)
-                    
-                    # 最终物理粉碎：如果展开后仍然带有单引号（意味着不在缩写字典里），强行抹除
-                    fallback_token = re.sub(r"[^a-z0-9 ]", " ", fallback_token)
-                    
-                    # 因为替换可能产生空格（如数字展开），重新切分收容
-                    for sub_token in fallback_token.split():
-                        if sub_token:
-                            aligned_tokens.append(sub_token)
-            print(f"[Frontend] Cleaned EN text: {' '.join(aligned_tokens)}")                
-            return " ".join(aligned_tokens)
+            return result
             
         elif lang == "zh":
             # 保留汉字、字母、数字
@@ -272,6 +273,32 @@ class TextFrontend:
 
         return final_tokens
 
+    # def get_phonemes(self, text: str, lang: str) -> List[str]:
+        
+    #     if getattr(self.config, 'raw_phoneme_mode', False):
+    #         # 将 sil 统一为小写，其他保持原样（或按你字典要求大写）
+    #         tokens = text.strip().split()
+    #         # 这里统一转大写去查字典，只有 sil 保留小写
+    #         return [w.lower() if w.lower() == "sil" else w.upper() for w in tokens]
+        
+    #     cleaned_text = self.clean_text(text, lang)
+        
+    #     # if lang == "en":
+    #     #     if self.config.get("use_g2p", False):
+    #     #         return [p for p in self.g2p(cleaned_text) if p.strip() != ""]
+    #     #     return cleaned_text.split()
+    #     if lang == "en":
+    #         return cleaned_text.split()
+                
+    #     elif lang == "zh":
+    #         raw_tokens = cleaned_text.split()
+    #         final_tokens = []
+    #         for token in raw_tokens:
+    #             sub_tokens = self._recursive_split_zh(token)
+    #             final_tokens.extend(sub_tokens)
+    #         return final_tokens
+            
+    #     return []
     def get_phonemes(self, text: str, lang: str) -> List[str]:
         # [极客防线] 如果是强制纯音素直通模式，直接 bypass
         if getattr(self.config, 'raw_phoneme_mode', False):

@@ -633,30 +633,158 @@ class LocalAligner:
     def _log_header(self, title: str):
         if self.verbose: print(f"\n=== {title} ===")
 
+    # def _load_resources(self):
+    #     # Lexicon
+    #     lex_path = self.config.get("lexicon_path")
+    #     if lex_path:
+    #         self.lexicon = PronouncingDictionary.from_path(lex_path)
+    #     else:
+    #         self.lexicon = PronouncingDictionary()
+
+    #     # Model
+    #     model_path = self.config.get("align_model_path")
+    #     if not model_path: return
+
+    #     self._log(f"Loading model from {model_path}...")
+        
+    #     # Load Logic (Local vs Cloud)
+    #     is_local = os.path.isdir(model_path)
+    #     load_kwargs = {}
+    #     print(f"[info]: model path {model_path}")
+    #     if not is_local:
+            
+            
+    #         load_kwargs["subfolder"] = f"{self.config.get('lang', 'zh')}/aligner"
+            
+    #         print(f"\[info\]: loading from cloud path---{ load_kwargs['subfolder'] }")
+
+    #     try:
+    #         self.processor = AutoProcessor.from_pretrained(model_path, **load_kwargs)
+    #         self.model = AutoModelForCTC.from_pretrained(model_path, **load_kwargs).to(self.device)
+    #     except Exception:
+    #         # Fallback
+    #         self.processor = AutoProcessor.from_pretrained(model_path)
+    #         self.model = AutoModelForCTC.from_pretrained(model_path).to(self.device)
+    
+    #     self.model.eval()
+    #     if self.processor:
+    #         self.phone_to_id = self.processor.tokenizer.get_vocab()
+
     def _load_resources(self):
-        # Lexicon
+        # =====================================================================
+        # 1. 基础物理词表加载
+        # =====================================================================
         lex_path = self.config.get("lexicon_path")
         if lex_path:
             self.lexicon = PronouncingDictionary.from_path(lex_path)
+            # print(f"[info] loaded local lexicon from {lex_path}")
         else:
             self.lexicon = PronouncingDictionary()
+            # print("[info] initialized empty lexicon")
 
-        # Model
+        # =====================================================================
+        # 🛡️ 2. 增量装甲：全量吸收 G2P 巨型字典，打通终极闭环
+        # =====================================================================
+        # if self.config.get("lang", "zh") == "en":
+        #     try:
+        #         from g2p_en.g2p import G2p
+        #         g2p_inst = G2p()
+        #         cmu_dict = g2p_inst.cmu
+                
+        #         added_words = 0
+        #         for w, prons in cmu_dict.items():
+        #             w_upper = w.upper()
+                    
+        #             # 坚守原则：本地手工打磨的字典优先级最高，绝对不覆盖
+        #             if w_upper not in self.lexicon:
+        #                 # 剔除潜在的标点符号，提取最纯净的声学 ID
+        #                 clean_pron = [p for p in prons[0] if p.isalnum()]
+                        
+        #                 # [全地形兼容探针] 强行绕过类的封装，注入数据
+        #                 try:
+        #                     if hasattr(self.lexicon, 'add_word'):
+        #                         self.lexicon.add_word(w_upper, clean_pron)
+        #                     elif isinstance(self.lexicon, dict) or hasattr(self.lexicon, '__setitem__'):
+        #                         # 大多数发音字典映射格式为: Word -> List[List[Phone]]
+        #                         self.lexicon[w_upper] = [clean_pron]
+        #                     elif hasattr(self.lexicon, '_dict'):
+        #                         self.lexicon._dict[w_upper] = [clean_pron]
+        #                     added_words += 1
+        #                 except Exception as inner_e:
+        #                     pass # 忽略极少数无法兼容的奇葩单词
+                            
+        #         # print(f"[info] 🚀 Aligner G2P Augmentation: {added_words} OOV words injected into RAM.")
+        #     except Exception as e:
+        #         print(f"[warning] Aligner G2P augmentation failed: {e}")
+        if self.config.get("lang", "zh") == "en":
+            try:
+                from g2p_en.g2p import G2p
+                g2p_inst = G2p()
+                cmu_dict = g2p_inst.cmu
+                
+                added_words = 0
+                
+                # ---------------------------------------------------------
+                # [战术修正] 提前解包 PronouncingDictionary 提取底层词表
+                # 避免在 13 万次循环中反复触发 TypeError，实现 O(1) 极速哈希查询
+                # ---------------------------------------------------------
+                local_words = set()
+                if isinstance(self.lexicon, dict):
+                    local_words = set(self.lexicon.keys())
+                elif hasattr(self.lexicon, '_dict'):
+                    local_words = set(self.lexicon._dict.keys())
+                elif hasattr(self.lexicon, 'words'):
+                    local_words = set(self.lexicon.words)
+                
+                for w, prons in cmu_dict.items():
+                    w_upper = w.upper()
+                    
+                    # 坚守原则：本地手工打磨的字典优先级最高，绝对不覆盖
+                    # 使用提取出的纯净 Set 进行判定，或使用 Try-Except 兜底
+                    if local_words:
+                        is_known = w_upper in local_words
+                    else:
+                        try:
+                            is_known = w_upper in self.lexicon
+                        except TypeError:
+                            is_known = False
+
+                    if not is_known:
+                        # 剔除潜在的标点符号，提取最纯净的声学 ID
+                        clean_pron = [p for p in prons[0] if p.isalnum()]
+                        
+                        # [全地形兼容探针] 强行绕过类的封装，注入数据
+                        try:
+                            if hasattr(self.lexicon, 'add_word'):
+                                self.lexicon.add_word(w_upper, clean_pron)
+                            elif isinstance(self.lexicon, dict) or hasattr(self.lexicon, '__setitem__'):
+                                self.lexicon[w_upper] = [clean_pron]
+                            elif hasattr(self.lexicon, '_dict'):
+                                self.lexicon._dict[w_upper] = [clean_pron]
+                            added_words += 1
+                        except Exception:
+                            pass # 忽略极少数无法兼容的奇葩单词
+                            
+                # 建议把这行打印打开一次，看看这针“强心剂”到底打进去了多少词
+                print(f"[info] 🚀 Aligner G2P Augmentation: {added_words} OOV words injected into RAM.")
+            except Exception as e:
+                print(f"[warning] Aligner G2P augmentation failed: {e}")
+
+        # =====================================================================
+        # 3. 核心计算图与模型装载 (保留原有逻辑)
+        # =====================================================================
         model_path = self.config.get("align_model_path")
         if not model_path: return
 
         self._log(f"Loading model from {model_path}...")
         
-        # Load Logic (Local vs Cloud)
         is_local = os.path.isdir(model_path)
         load_kwargs = {}
         print(f"[info]: model path {model_path}")
+        
         if not is_local:
-            
-            
             load_kwargs["subfolder"] = f"{self.config.get('lang', 'zh')}/aligner"
-            
-            print(f"\[info\]: loading from cloud path---{ load_kwargs['subfolder'] }")
+            # print(f"[info]: loading from cloud path---{ load_kwargs['subfolder'] }")
 
         try:
             self.processor = AutoProcessor.from_pretrained(model_path, **load_kwargs)
@@ -669,13 +797,13 @@ class LocalAligner:
         self.model.eval()
         if self.processor:
             self.phone_to_id = self.processor.tokenizer.get_vocab()
-
+    
     @torch.inference_mode()
     def align_locally(self, chunk_tensor: torch.Tensor, text: str, file_id: str = "segment") -> Dict[str, List[AlignmentSegment]]:
         """
         Executes reference alignment logic and adapts output to Pipeline format.
         """
-        # print(f"Aligning chunk '{file_id}' with text: {text}")
+        print(f"Aligning chunk '{file_id}' with text: {text}")
         # print("align_locally called with chunk_tensor shape:", chunk_tensor.shape)
         # input("Press Enter to continue...")  # Debug pause to inspect inputs
         if self.model is None or self.lexicon is None:

@@ -62,3 +62,16 @@ def load_text(path: str) -> List[str]:
 def export_textgrid(result: AlignmentResult, output_path: str):
     """[待填充] 负责将结果缝合成 TextGrid 并保存"""
     pass
+
+
+
+
+@dataclass
+class AlignmentArtifacts:
+    waveform: torch.Tensor          # 原始音频张量 (1D)
+    logits: torch.Tensor            # Wav2Vec2 原始输出 (T x V)
+    log_probs: torch.Tensor         # 经过 LogSoftmax 的概率 (T x V)
+    trellis: torch.Tensor           # DP 积累的能量矩阵 (T x N)
+    viterbi_path: list              # 回溯的坐标轨迹
+    text_tokens: list               # 展开后的音素/字符列表
+    frame_hop_s: float              # 帧移时间分辨率 (如 0.02s)

@@ -106,17 +106,102 @@ class CTCChunker:
     def _log_header(self, title: str):
         if self.verbose: print(f"\n=== {title} ===")
 
-    def _load_resources(self):
-        lex_path = self.config.get("lexicon_path")
-        self.lexicon = self._read_lexicon(lex_path)
-        if self.verbose: print(f"  - Lexicon loaded: {len(self.lexicon)} words")
+    # def _load_resources(self):
+    #     lex_path = self.config.get("lexicon_path")
+    #     self.lexicon = self._read_lexicon(lex_path)
+    #     print(f"[info] loaded lexicon with {len(self.lexicon)} entries from {lex_path}")
+    #     # input("Check lexicon load, press Enter to continue...")  # Debug pause to inspect lexicon load
+    #     if self.verbose: print(f"  - Lexicon loaded: {len(self.lexicon)} words")
         
+    #     model_path = self.config.get("chunk_model_path")
+    #     if not model_path: return
+
+    #     self._log(f"Requesting model: {model_path}")
+    #     load_kwargs = {}
+    #     print(f"[info] loading model from {model_path}")
+    #     if not os.path.isdir(model_path):
+    #         load_kwargs["subfolder"] = f"{self.lang}/chunker"
+    #         self._log(f"Mode: Cloud Repo ({load_kwargs['subfolder']})")
+    #     else:
+    #         self._log("Mode: Local Override")
+
+    #     try:
+    #         self.processor = AutoProcessor.from_pretrained(model_path, **load_kwargs)
+    #         self.model = Wav2Vec2ForCTC.from_pretrained(model_path, **load_kwargs).to(self.device)
+    #         self.model.eval()
+    #         self._log("Successfully loaded model.")
+    #     except Exception as e:
+    #         self._log(f"Routing failed ({e}), falling back to root...")
+    #         try:
+    #             self.processor = AutoProcessor.from_pretrained(model_path)
+    #             self.model = Wav2Vec2ForCTC.from_pretrained(model_path).to(self.device)
+    #         except Exception as final_e:
+    #             raise RuntimeError(f"Model load failed: {final_e}")
+
+    #     if hasattr(self.processor, "tokenizer"):
+    #         self.phone_to_id = self.processor.tokenizer.get_vocab()
+    #         # Resolve blank token
+    #         if self.blank_token in self.phone_to_id:
+    #             self.blank_id = self.phone_to_id[self.blank_token]
+    #         elif self.processor.tokenizer.pad_token_id is not None:
+    #             self.blank_id = self.processor.tokenizer.pad_token_id
+    #         else:
+    #             self.blank_id = 0
+            
+    #         # English Hotfix
+    #         if self.lang == "en":
+    #             self.garbage_tokens = {"O", "[UNK]", "<unk>"}
+    #             self.fuzzy_map = {}
+    #             for token, pid in self.phone_to_id.items():
+    #                 self.fuzzy_map[token] = pid
+    #                 pure_token = ''.join(filter(str.isalpha, token))
+    #                 if pure_token and pure_token not in self.fuzzy_map:
+    #                     self.fuzzy_map[pure_token] = pid
+    #             self._log(f"🇬🇧 English Hotfix Applied: Fuzzy map built with {len(self.fuzzy_map)} entries.")
+    #     else:
+    #         self.blank_id = 0
+    def _load_resources(self):
+        # =====================================================================
+        # 1. 加载本地基础词典
+        # =====================================================================
+        lex_path = self.config.get("lexicon_path")
+        self.lexicon = self._read_lexicon(lex_path) if lex_path else {}
+        # print(f"[info] loaded local lexicon with {len(self.lexicon)} entries from {lex_path}")
+        
+        # =====================================================================
+        # 🛡️ 2. 核心增量：吸收 G2P 巨型字典，一次性消除 OOV
+        # =====================================================================
+        if self.lang == "en":
+            try:
+                from g2p_en.g2p import G2p
+                g2p_inst = G2p()
+                cmu_dict = g2p_inst.cmu  # 提取内置的 CMU 字典 { 'hello': [['HH', 'AH0', 'L', 'OW1']], ... }
+                
+                added_words = 0
+                for w, prons in cmu_dict.items():
+                    w_upper = w.upper()
+                    # 坚守原则：本地词典优先级最高，不覆盖已有定义
+                    if w_upper not in self.lexicon and w not in self.lexicon:
+                        # 默认取第一种发音变体，并剔除附带的潜在标点
+                        clean_pron = [p for p in prons[0] if p.isalnum()]
+                        self.lexicon[w_upper] = clean_pron
+                        added_words += 1
+                        
+                # print(f"[info] 🚀 G2P augmentation complete: added {added_words} OOV words into RAM.")
+            except Exception as e:
+                print(f"[warning] G2P dictionary augmentation failed: {e}")
+
+        if self.verbose: print(f"  - Total Lexicon size: {len(self.lexicon)} words")
+
+        # =====================================================================
+        # 3. 加载声学模型与分词器
+        # =====================================================================
         model_path = self.config.get("chunk_model_path")
         if not model_path: return
 
         self._log(f"Requesting model: {model_path}")
         load_kwargs = {}
-        print(f"[info] loading model from {model_path}")
+        # print(f"[info] loading model from {model_path}")
         if not os.path.isdir(model_path):
             load_kwargs["subfolder"] = f"{self.lang}/chunker"
             self._log(f"Mode: Cloud Repo ({load_kwargs['subfolder']})")
@@ -136,8 +221,12 @@ class CTCChunker:
             except Exception as final_e:
                 raise RuntimeError(f"Model load failed: {final_e}")
 
+        # =====================================================================
+        # 4. 音素映射与降维池化 (Fuzzy Map)
+        # =====================================================================
         if hasattr(self.processor, "tokenizer"):
             self.phone_to_id = self.processor.tokenizer.get_vocab()
+            
             # Resolve blank token
             if self.blank_token in self.phone_to_id:
                 self.blank_id = self.phone_to_id[self.blank_token]
@@ -146,16 +235,26 @@ class CTCChunker:
             else:
                 self.blank_id = 0
             
-            # English Hotfix
+            # English Hotfix 终极加固
             if self.lang == "en":
                 self.garbage_tokens = {"O", "[UNK]", "<unk>"}
                 self.fuzzy_map = {}
+                
                 for token, pid in self.phone_to_id.items():
                     self.fuzzy_map[token] = pid
+                    self.fuzzy_map[token.upper()] = pid
+                    self.fuzzy_map[token.lower()] = pid
+                    
+                    # 降维池化：将带有数字的补充音素映射回基础 ID
+                    # 例如 'OW2' 会在这里找到对应 'OW' 的 ID
                     pure_token = ''.join(filter(str.isalpha, token))
-                    if pure_token and pure_token not in self.fuzzy_map:
-                        self.fuzzy_map[pure_token] = pid
-                self._log(f"🇬🇧 English Hotfix Applied: Fuzzy map built with {len(self.fuzzy_map)} entries.")
+                    if pure_token:
+                        if pure_token.upper() not in self.fuzzy_map:
+                            self.fuzzy_map[pure_token.upper()] = pid
+                        if pure_token.lower() not in self.fuzzy_map:
+                            self.fuzzy_map[pure_token.lower()] = pid
+                            
+                self._log(f"🇬🇧 English Hotfix Applied: Omni-Fuzzy map built with {len(self.fuzzy_map)} entries.")
         else:
             self.blank_id = 0
 
@@ -189,8 +288,9 @@ class CTCChunker:
             print(f"  - Calculated SPF: {spf:.6f} (was fixed 0.02)")
 
         # 2. Beam Search
+        # print(f"Converting words to pronunciations for text: {text_list}")
         prons_per_word = self._words_to_pronunciations(text_list)
-        
+        # print(f"Pronunciations per word: {prons_per_word}")
         best_candidate = None
         for attempt_beam in [self.beam_size, 50, 200, 1000]:
             best_candidate = self._beam_search(log_probs, text_list, prons_per_word, beam_width=attempt_beam)
@@ -235,33 +335,33 @@ class CTCChunker:
         audio_dur_s = float(audio_tensor.size(0)) / 16000
         internal_chunks = self._pad_chunks(internal_chunks, word_objects, audio_dur_s)
 
-        # # 6. Physical Extraction & Object Creation
-        # final_chunks = []
-        # sr = 16000
-        # for i, c in enumerate(internal_chunks):
-        #     # chunks2.py: s0 = int(round(c.start * sr))
-        #     s_samp = int(round(c.start * sr))
-        #     e_samp = int(round(c.end * sr))
-        #     s_samp = max(0, min(s_samp, audio_tensor.size(0)))
-        #     e_samp = max(0, min(e_samp, audio_tensor.size(0)))
+        # 6. Physical Extraction & Object Creation
+        final_chunks = []
+        sr = 16000
+        for i, c in enumerate(internal_chunks):
+            # chunks2.py: s0 = int(round(c.start * sr))
+            s_samp = int(round(c.start * sr))
+            e_samp = int(round(c.end * sr))
+            s_samp = max(0, min(s_samp, audio_tensor.size(0)))
+            e_samp = max(0, min(e_samp, audio_tensor.size(0)))
             
-        #     if e_samp <= s_samp: continue
+            if e_samp <= s_samp: continue
 
-        #     chunk_id_str = f"{file_id}.chunk{i+1:03d}"
+            chunk_id_str = f"{file_id}.chunk{i+1:03d}"
             
-        #     chunk_obj = AudioChunk(
-        #         tensor=audio_tensor[s_samp:e_samp].clone(),
-        #         start_time=c.start,
-        #         end_time=c.end,
-        #         text=" ".join(c.words),
-        #         chunk_id=chunk_id_str
-        #     )
-        #     final_chunks.append(chunk_obj)
+            chunk_obj = AudioChunk(
+                tensor=audio_tensor[s_samp:e_samp].clone(),
+                start_time=c.start,
+                end_time=c.end,
+                text=" ".join(c.words),
+                chunk_id=chunk_id_str
+            )
+            final_chunks.append(chunk_obj)
 
-        # self._log(f"Found {len(final_chunks)} chunks.")
+        self._log(f"Found {len(final_chunks)} chunks.")
 
-        # if self.chunks_out_dir:
-        #     self._save_intermediate_results(final_chunks, file_id)
+        if self.chunks_out_dir:
+            self._save_intermediate_results(final_chunks, file_id)
 
         # 
         
@@ -335,7 +435,7 @@ class CTCChunker:
                 chunk_id=chunk_id_str
             )
             final_chunks.append(chunk_obj)
-
+            print(f"  - Created chunk: {chunk_obj.chunk_id} ({chunk_obj.start_time:.3f}s - {chunk_obj.end_time:.3f}s, dur={(chunk_obj.end_time-chunk_obj.start_time):.3f}s, text='{chunk_obj.text}')")
         self._log(f"Found {len(final_chunks)} chunks.")
         
         return final_chunks
@@ -378,8 +478,8 @@ class CTCChunker:
                     "words": words_list,
                     "text": c.text
                 }
-                # print(f"  - Saved chunk: {obj['chunk_id']} ({obj['start_s']:.3f}s - {obj['end_s']:.3f}s, dur={obj['dur_s']:.3f}s, words={len(words_list)})")
-                # print(f"text: '{c.text}'")
+                print(f"  - Saved chunk: {obj['chunk_id']} ({obj['start_s']:.3f}s - {obj['end_s']:.3f}s, dur={obj['dur_s']:.3f}s, words={len(words_list)})")
+                print(f"text: '{c.text}'")
                 # input("Check saved chunk info, press Enter to continue...")  # Debug pause to inspect saved chunk info
                 fj.write(json.dumps(obj, ensure_ascii=False) + "\n")
                 # TSV 也是用的 rounded values
@@ -410,115 +510,230 @@ class CTCChunker:
     #         out.append([self.lexicon[w_norm]])
     #     return out
     
-    def _words_to_pronunciations(self, words: List[str]):
-        # print(f"words to convert: {words}")
-        # input("check words:")
-        out = []
-        for w in words:
-            w_clean = w.strip()
-            if not w_clean: continue
-            
-            # 构建多维探测形态
-            w_upper = w_clean.upper()
-            w_lower = w_clean.lower()
-            # 🛡️ [核心降维装甲] 剥离数字 (例如 IY1 -> IY, AE2 -> AE)
-            w_no_digit = ''.join([c for c in w_upper if not c.isdigit()])
-            
-            # 1. 第一级：绝对精确匹配 (如果 Chunker 词表升级了，优先用精确的)
-            if w_upper in self.lexicon:
-                out.append([self.lexicon[w_upper]])
-                
-            # 2. 第二级：降维打击 (Chunker 词表只有 IY，没有 IY1，在这里被完美接住)
-            elif w_no_digit in self.lexicon:
-                # if self.verbose: print(f"  [Downgrade] {w_clean} -> {w_no_digit}")
-                out.append([self.lexicon[w_no_digit]])
-                
-            # 3. 第三级：小写兜底
-            elif w_lower in self.lexicon:
-                out.append([self.lexicon[w_lower]])
-                
-            # 4. 第四级：原词兜底 (如 sil)
-            elif w_clean in self.lexicon:
-                out.append([self.lexicon[w_clean]])
-                
-            else:
-                # 破防了，真正的 OOV
-                if self.verbose: print(f"⚠️  [CTCChunker] OOV Word: '{w_clean}' (Tried: {w_no_digit})")
-                raise ValueError(f"[CTCChunker] OOV Word: {w_clean}")
-        # print(f"Pronunciations: {out}")
-        # input("check pronunciations:")
-        return out
-    
     # def _words_to_pronunciations(self, words: List[str]):
+    #     # print(f"words to convert: {words}")
+    #     # input("check words:")
     #     out = []
-    #     print("lexicon keys sample:", list(self.lexicon.keys())[:10])
-    #     input("check lexicon:")
     #     for w in words:
     #         w_clean = w.strip()
     #         if not w_clean: continue
             
-    #         # // Modified: 大小写多级降级装甲 (Fallback Strategy)
-    #         w_lower = w_clean.lower()
+    #         # 构建多维探测形态
     #         w_upper = w_clean.upper()
+    #         w_lower = w_clean.lower()
+    #         # 🛡️ [核心降维装甲] 剥离数字 (例如 IY1 -> IY, AE2 -> AE)
+    #         w_no_digit = ''.join([c for c in w_upper if not c.isdigit()])
             
-    #         # 1. 试探小写 (兼容普通英文单词)
-    #         if w_lower in self.lexicon:
-    #             out.append([self.lexicon[w_lower]])
-    #         # 2. 试探大写 (兼容 TIMIT 这种硬核大写音素 AW1)
-    #         elif w_upper in self.lexicon:
+    #         # 1. 第一级：绝对精确匹配 (如果 Chunker 词表升级了，优先用精确的)
+    #         if w_upper in self.lexicon:
     #             out.append([self.lexicon[w_upper]])
-    #         # 3. 试探原词 (防备某些带特殊符号或驼峰拼写的变态字典)
+                
+    #         # 2. 第二级：降维打击 (Chunker 词表只有 IY，没有 IY1，在这里被完美接住)
+    #         elif w_no_digit in self.lexicon:
+    #             # if self.verbose: print(f"  [Downgrade] {w_clean} -> {w_no_digit}")
+    #             out.append([self.lexicon[w_no_digit]])
+                
+    #         # 3. 第三级：小写兜底
+    #         elif w_lower in self.lexicon:
+    #             out.append([self.lexicon[w_lower]])
+                
+    #         # 4. 第四级：原词兜底 (如 sil)
     #         elif w_clean in self.lexicon:
     #             out.append([self.lexicon[w_clean]])
+                
     #         else:
     #             # 破防了，真正的 OOV
-    #             if self.verbose: print(f"⚠️  [CTCChunker] OOV Word: '{w_clean}'")
+    #             if self.verbose: print(f"⚠️  [CTCChunker] OOV Word: '{w_clean}' (Tried: {w_no_digit})")
     #             raise ValueError(f"[CTCChunker] OOV Word: {w_clean}")
-                
+    #     # print(f"Pronunciations: {out}")
+    #     # input("check pronunciations:")
     #     return out
+    
+    # def _words_to_pronunciations(self, words: List[str]):
+    #     out = []
+    #     for w in words:
+    #         w_clean = w.strip()
+    #         if not w_clean: continue
+            
+    #         w_upper = w_clean.upper()
+    #         w_no_digit = ''.join([c for c in w_upper if not c.isdigit()])
+            
+    #         # ==========================================================
+    #         # 🛡️ 维度 A：它本来就是个纯音素 (如 'sil', 'IY1', 'HH')
+    #         # ==========================================================
+    #         if w_upper in self.lexicon:
+    #             out.append([self.lexicon[w_upper]])
+    #             continue
+    #         elif w_no_digit in self.lexicon:
+    #             out.append([self.lexicon[w_no_digit]])
+    #             continue
+    #         elif w_clean in self.lexicon:
+    #             out.append([self.lexicon[w_clean]])
+    #             continue
+                
+    #         # ==========================================================
+    #         # 🗡️ 维度 B：如果走到这里，说明它是单词 (如 'we', 'huh', 'and')
+    #         # 启动内置 G2P 进行物理粉碎
+    #         # ==========================================================
+    #         # 延迟加载，不污染全局环境
+    #         if not hasattr(self, '_internal_g2p'):
+    #             from g2p_en import G2p
+    #             self._internal_g2p = G2p()
+                
+    #         phonemes = self._internal_g2p(w_clean) # 例如 "and" -> ['AE1', 'N', 'D']
+            
+    #         word_ids = []
+    #         for p in phonemes:
+    #             p_clean = ''.join([c for c in p.upper() if not c.isdigit()]).strip()
+    #             # 过滤掉 G2P 可能产生的标点符号
+    #             if not p_clean or p_clean in ["'", ".", ",", "?", "!"]: 
+    #                 continue
+                    
+    #             if p_clean in self.lexicon:
+    #                 word_ids.append(self.lexicon[p_clean])
+    #             else:
+    #                 if self.verbose: print(f"⚠️ [CTCChunker] G2P 解析出的音素不在词表: '{p_clean}'")
+            
+    #         if word_ids:
+    #             # 🎯 核心：把单词粉碎后的一组音素 ID，作为一个整体 Append 进去！
+    #             out.append(word_ids)
+    #         else:
+    #             # 破防了，这玩意儿连 G2P 都救不回来
+    #             if self.verbose: print(f"❌ [CTCChunker] 彻底无法解析的 OOV: '{w_clean}'")
+    #             raise ValueError(f"[CTCChunker] OOV Word: {w_clean}")
+
+    #     return out
+    def _words_to_pronunciations(self, words: List[str]):
+        out = []
+        # print(f"Converting words to pronunciations: {words}")
+        # print(f"lexicon keys sample: {list(self.lexicon.keys())[:30]}")
+        for w in words:
+            w_clean = w.strip()
+            if not w_clean: continue
+            
+            w_upper = w_clean.upper()
+            w_lower = w_clean.lower()
+            # 🛡️ 核心降维逻辑：剥离数字 (例如 IY1 -> IY, AH0 -> AH)
+            w_no_digit = ''.join([c for c in w_upper if not c.isdigit()])
+            
+            # 1. 第一级：完全精确匹配 (如 'SH', 'sil')
+            if w_upper in self.lexicon:
+                out.append([self.lexicon[w_upper]])
+                
+            # 2. 第二级：降维打击 (完美接住前端传来的 IY1)
+            elif w_no_digit in self.lexicon:
+                out.append([self.lexicon[w_no_digit]])
+                
+            # 3. 兜底匹配 (如原始的小写 sil)
+            elif w_lower in self.lexicon:
+                out.append([self.lexicon[w_lower]])
+                
+            elif w_clean in self.lexicon:
+                out.append([self.lexicon[w_clean]])
+                
+            else:
+                # 只有真正连降维都不认识的乱码才会走到这里
+                if self.verbose: 
+                    print(f"⚠️ [CTCChunker] OOV Phoneme: '{w_clean}' (Tried: '{w_no_digit}')")
+                # raise ValueError(f"[CTCChunker] 无法识别的音素符号: {w_clean}")
+                print(f"⚠️ [CTCChunker] OOV Phoneme: '{w_clean}' (Tried: '{w_no_digit}') - Skipping this word.")
+                # 安排一个 sil记号，让它在后续的 beam search 中被当作无声处理掉
+                out.append([["sil"]])
+                
+        return out
+    # def _beam_search(self, log_probs, words, prons_per_word, beam_width=10):
+    #     beam = [PronCandidate(phones=[], pron_choice_idxs=[], score=0.0)]
+    #     for i, word in enumerate(words):
+    #         new_beam = []
+    #         variants = prons_per_word[i]
+    #         for cand in beam:
+    #             for p_idx, pron in enumerate(variants):
+    #                 if len(pron) > 0 and isinstance(pron[0], list): pron = pron[0]
+                    
+    #                 # Inter-word token logic (Strictly matching chunks2.py: if phones...)
+    #                 current_phones = list(cand.phones)
+    #                 inter_token = self.config.get("inter_word_token", None)
+    #                 if current_phones and inter_token: 
+    #                     current_phones.append(inter_token)
+                    
+    #                 new_phones = current_phones + pron
+    #                 new_ids = []
+    #                 valid_pron = True
+    #                 for p in new_phones:
+    #                     if not isinstance(p, str): continue
+    #                     if p in self.phone_to_id: new_ids.append(self.phone_to_id[p])
+    #                     elif p == "O": continue
+    #                     else: 
+    #                         # Try fuzzy
+    #                         p_pure = ''.join(filter(str.isalpha, p))
+    #                         if p_pure in self.phone_to_id: new_ids.append(self.phone_to_id[p_pure])
+    #                         else: 
+    #                             valid_pron = False; break
+                    
+    #                 if not valid_pron: continue
+    #                 try:
+    #                     trellis = build_trellis(log_probs, new_ids, self.blank_id)
+    #                     score = float(torch.max(trellis[-1, -1]).item())
+    #                 except: score = -float("inf")
+                    
+    #                 if score > -1e8:
+    #                     new_beam.append(PronCandidate(new_phones, cand.pron_choice_idxs + [p_idx], score))
+    #         if not new_beam: return None
+    #         new_beam.sort(key=lambda x: x.score, reverse=True)
+    #         beam = new_beam[:beam_width]
+    #     return beam[0] if beam else None
 
     def _beam_search(self, log_probs, words, prons_per_word, beam_width=10):
-        beam = [PronCandidate(phones=[], pron_choice_idxs=[], score=0.0)]
+        """
+        // Modified: 彻底移除了导致时间复杂度爆炸的局部 DP 评估 (build_trellis)。
+        // 采用 O(N) 的贪心构建逻辑，毫秒级返回最可能的基础音素序列。
+        // 真正的对齐运算应当延后至整个序列构建完毕后进行单次计算。
+        """
+        current_phones = []
+        pron_choice_idxs = []
+        
         for i, word in enumerate(words):
-            new_beam = []
             variants = prons_per_word[i]
-            for cand in beam:
-                for p_idx, pron in enumerate(variants):
-                    if len(pron) > 0 and isinstance(pron[0], list): pron = pron[0]
+            valid_pron_found = False
+            
+            # 贪心策略：遍历该词的所有发音变体，采纳第一个合法的发音
+            for p_idx, pron in enumerate(variants):
+                if len(pron) > 0 and isinstance(pron[0], list): 
+                    pron = pron[0]
+                
+                # 词间符号逻辑 (Inter-word token)
+                temp_phones = list(current_phones)
+                inter_token = self.config.get("inter_word_token", None)
+                if temp_phones and inter_token: 
+                    temp_phones.append(inter_token)
+                
+                temp_phones.extend(pron)
+                
+                # 验证当前发音变体的合法性 (避免 OOV 导致整个序列崩溃)
+                is_valid = True
+                for p in pron:
+                    if not isinstance(p, str): continue
+                    if p in self.phone_to_id or p == "O": continue
                     
-                    # Inter-word token logic (Strictly matching chunks2.py: if phones...)
-                    current_phones = list(cand.phones)
-                    inter_token = self.config.get("inter_word_token", None)
-                    if current_phones and inter_token: 
-                        current_phones.append(inter_token)
-                    
-                    new_phones = current_phones + pron
-                    new_ids = []
-                    valid_pron = True
-                    for p in new_phones:
-                        if not isinstance(p, str): continue
-                        if p in self.phone_to_id: new_ids.append(self.phone_to_id[p])
-                        elif p == "O": continue
-                        else: 
-                            # Try fuzzy
-                            p_pure = ''.join(filter(str.isalpha, p))
-                            if p_pure in self.phone_to_id: new_ids.append(self.phone_to_id[p_pure])
-                            else: 
-                                valid_pron = False; break
-                    
-                    if not valid_pron: continue
-                    try:
-                        trellis = build_trellis(log_probs, new_ids, self.blank_id)
-                        score = float(torch.max(trellis[-1, -1]).item())
-                    except: score = -float("inf")
-                    
-                    if score > -1e8:
-                        new_beam.append(PronCandidate(new_phones, cand.pron_choice_idxs + [p_idx], score))
-            if not new_beam: return None
-            new_beam.sort(key=lambda x: x.score, reverse=True)
-            beam = new_beam[:beam_width]
-        return beam[0] if beam else None
-
+                    # 尝试模糊匹配 (Fuzzy Match)
+                    p_pure = ''.join(filter(str.isalpha, p))
+                    if p_pure not in self.phone_to_id:
+                        is_valid = False
+                        break
+                
+                if is_valid:
+                    current_phones = temp_phones
+                    pron_choice_idxs.append(p_idx)
+                    valid_pron_found = True
+                    break # 找到首个合法发音，立刻跳出变体循环
+            
+            if not valid_pron_found:
+                # 如果所有变体都不合法，交由上层异常处理逻辑 (记录 OOV)
+                return None 
+        
+        # 返回伪造了满分 (score=0.0) 的候选对象，满足上层 API 接口需求
+        return PronCandidate(phones=current_phones, pron_choice_idxs=pron_choice_idxs, score=0.0)
+    
     def _phones_to_word_segments_robust(self, token_segs, words, prons):
         word_segs = []
         wi = 0 
@@ -592,6 +807,8 @@ def build_trellis(log_probs, targets, blank_id):
         emit = trellis[t - 1, :-1] + lp_t[targets_t]
         trellis[t, 1:] = torch.maximum(stay, emit)
     return trellis
+
+
 
 def backtrace(trellis, log_probs, targets, blank_id):
     _T = trellis.size(0) - 1
