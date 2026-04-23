@@ -31,7 +31,8 @@ src/*.egg-info/
 *.tsv
 *.phones.*
 *.words.*
-
+*.npy
+*.pt
 # --- 核心数据与模型 (绝对不要传到 GitHub，这些该去 HuggingFace) ---
 # 忽略所有存放模型权重的文件夹
 models/

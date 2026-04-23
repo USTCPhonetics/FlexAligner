@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import List, Dict, Tuple, Optional, Set
 from pathlib import Path
 from transformers import AutoModelForCTC, AutoProcessor
-
+import soundfile as sf
 # ==========================================
 #  1. Reference Data Structures (完全复刻)
 # ==========================================
@@ -48,7 +48,45 @@ class AlignmentSegment:
     start: float
     end: float
     score: float = 0.0
+    
+@dataclass
+class AcousticEvidence:
+    chunk_id: str
+    log_probs: np.ndarray        # (T, V)
+    num_frames: int
+    vocab_size: int
+    frame_hop_s: float
+    duration_s: float    
+# @dataclass
+# class ChunkRecord:
+#     chunk_id: str
+#     audio_path: str
+#     text: str
+#     start_time: float
+#     end_time: float
+#     dur_s: float    
 
+# @dataclass
+# class ChunkEvidence:
+#     chunk_id: str
+#     audio_path: str
+#     text: str
+#     start_time: float
+#     end_time: float
+#     dur_s: float
+#     log_probs_path: str
+#     num_frames: int
+#     frame_hop_s: float
+#     vocab_size: int
+#     model_tag: str    
+#     phone_vocab_path: Optional[str] = None
+#     sample_rate: int = 16000
+@dataclass
+class DecodeResult:
+    chunk_id: str
+    phones: list
+    words: list
+    decode_tag: str    
 # ==========================================
 #  2. Reference Algorithms (逻辑 1:1 移植)
 # ==========================================
@@ -575,7 +613,7 @@ class PronouncingDictionary:
 # ==========================================
 
 class LocalAligner:
-    def __init__(self, config: dict, phone_to_id: Optional[Dict[str, int]] = None):
+    def __init__(self, config: dict, phone_to_id: Optional[Dict[str, int]] = None, decode_only: bool = False):
         self.config = config or {}
         self.device = torch.device(self.config.get("device", "cpu"))
         
@@ -608,14 +646,15 @@ class LocalAligner:
         self.min_sil_dur_ms = self.config.get("min_sil_dur_ms", 0.0)
         self.boundary_lambda = self.config.get("boundary_lambda", 200.0)
         self.boundary_context_s = self.config.get("boundary_context_s", 0.05)
+        self.decode_only = decode_only
         # Resources
         self.model = None
         self.processor = None
         self.lexicon = None
         self.phone_to_id = {}
-
+        
         # 1. Load Resources
-        self._load_resources()
+        self._load_resources(decode_only=self.decode_only)
 
         # 2. Vocab Injection
         if phone_to_id is not None:
@@ -626,259 +665,161 @@ class LocalAligner:
             if json_path and os.path.exists(json_path):
                 with open(json_path, 'r', encoding='utf-8') as f:
                     self.phone_to_id = json.load(f)
+        
 
     def _log(self, msg: str):
         if self.verbose: print(f"[LocalAligner] {msg}")
 
     def _log_header(self, title: str):
         if self.verbose: print(f"\n=== {title} ===")
-
-    # def _load_resources(self):
-    #     # Lexicon
-    #     lex_path = self.config.get("lexicon_path")
-    #     if lex_path:
-    #         self.lexicon = PronouncingDictionary.from_path(lex_path)
-    #     else:
-    #         self.lexicon = PronouncingDictionary()
-
-    #     # Model
-    #     model_path = self.config.get("align_model_path")
-    #     if not model_path: return
-
-    #     self._log(f"Loading model from {model_path}...")
-        
-    #     # Load Logic (Local vs Cloud)
-    #     is_local = os.path.isdir(model_path)
-    #     load_kwargs = {}
-    #     print(f"[info]: model path {model_path}")
-    #     if not is_local:
-            
-            
-    #         load_kwargs["subfolder"] = f"{self.config.get('lang', 'zh')}/aligner"
-            
-    #         print(f"\[info\]: loading from cloud path---{ load_kwargs['subfolder'] }")
-
-    #     try:
-    #         self.processor = AutoProcessor.from_pretrained(model_path, **load_kwargs)
-    #         self.model = AutoModelForCTC.from_pretrained(model_path, **load_kwargs).to(self.device)
-    #     except Exception:
-    #         # Fallback
-    #         self.processor = AutoProcessor.from_pretrained(model_path)
-    #         self.model = AutoModelForCTC.from_pretrained(model_path).to(self.device)
-    
-    #     self.model.eval()
-    #     if self.processor:
-    #         self.phone_to_id = self.processor.tokenizer.get_vocab()
-
-    def _load_resources(self):
-        # =====================================================================
-        # 1. 基础物理词表加载
-        # =====================================================================
-        lex_path = self.config.get("lexicon_path")
-        if lex_path:
-            self.lexicon = PronouncingDictionary.from_path(lex_path)
-            # print(f"[info] loaded local lexicon from {lex_path}")
-        else:
-            self.lexicon = PronouncingDictionary()
-            # print("[info] initialized empty lexicon")
-
-        # =====================================================================
-        # 🛡️ 2. 增量装甲：全量吸收 G2P 巨型字典，打通终极闭环
-        # =====================================================================
-        # if self.config.get("lang", "zh") == "en":
-        #     try:
-        #         from g2p_en.g2p import G2p
-        #         g2p_inst = G2p()
-        #         cmu_dict = g2p_inst.cmu
-                
-        #         added_words = 0
-        #         for w, prons in cmu_dict.items():
-        #             w_upper = w.upper()
-                    
-        #             # 坚守原则：本地手工打磨的字典优先级最高，绝对不覆盖
-        #             if w_upper not in self.lexicon:
-        #                 # 剔除潜在的标点符号，提取最纯净的声学 ID
-        #                 clean_pron = [p for p in prons[0] if p.isalnum()]
-                        
-        #                 # [全地形兼容探针] 强行绕过类的封装，注入数据
-        #                 try:
-        #                     if hasattr(self.lexicon, 'add_word'):
-        #                         self.lexicon.add_word(w_upper, clean_pron)
-        #                     elif isinstance(self.lexicon, dict) or hasattr(self.lexicon, '__setitem__'):
-        #                         # 大多数发音字典映射格式为: Word -> List[List[Phone]]
-        #                         self.lexicon[w_upper] = [clean_pron]
-        #                     elif hasattr(self.lexicon, '_dict'):
-        #                         self.lexicon._dict[w_upper] = [clean_pron]
-        #                     added_words += 1
-        #                 except Exception as inner_e:
-        #                     pass # 忽略极少数无法兼容的奇葩单词
-                            
-        #         # print(f"[info] 🚀 Aligner G2P Augmentation: {added_words} OOV words injected into RAM.")
-        #     except Exception as e:
-        #         print(f"[warning] Aligner G2P augmentation failed: {e}")
-        if self.config.get("lang", "zh") == "en":
-            try:
-                from g2p_en.g2p import G2p
-                g2p_inst = G2p()
-                cmu_dict = g2p_inst.cmu
-                
-                added_words = 0
-                
-                # ---------------------------------------------------------
-                # [战术修正] 提前解包 PronouncingDictionary 提取底层词表
-                # 避免在 13 万次循环中反复触发 TypeError，实现 O(1) 极速哈希查询
-                # ---------------------------------------------------------
-                local_words = set()
-                if isinstance(self.lexicon, dict):
-                    local_words = set(self.lexicon.keys())
-                elif hasattr(self.lexicon, '_dict'):
-                    local_words = set(self.lexicon._dict.keys())
-                elif hasattr(self.lexicon, 'words'):
-                    local_words = set(self.lexicon.words)
-                
-                for w, prons in cmu_dict.items():
-                    w_upper = w.upper()
-                    
-                    # 坚守原则：本地手工打磨的字典优先级最高，绝对不覆盖
-                    # 使用提取出的纯净 Set 进行判定，或使用 Try-Except 兜底
-                    if local_words:
-                        is_known = w_upper in local_words
-                    else:
-                        try:
-                            is_known = w_upper in self.lexicon
-                        except TypeError:
-                            is_known = False
-
-                    if not is_known:
-                        # 剔除潜在的标点符号，提取最纯净的声学 ID
-                        clean_pron = [p for p in prons[0] if p.isalnum()]
-                        
-                        # [全地形兼容探针] 强行绕过类的封装，注入数据
-                        try:
-                            if hasattr(self.lexicon, 'add_word'):
-                                self.lexicon.add_word(w_upper, clean_pron)
-                            elif isinstance(self.lexicon, dict) or hasattr(self.lexicon, '__setitem__'):
-                                self.lexicon[w_upper] = [clean_pron]
-                            elif hasattr(self.lexicon, '_dict'):
-                                self.lexicon._dict[w_upper] = [clean_pron]
-                            added_words += 1
-                        except Exception:
-                            pass # 忽略极少数无法兼容的奇葩单词
-                            
-                # 建议把这行打印打开一次，看看这针“强心剂”到底打进去了多少词
-                print(f"[info] 🚀 Aligner G2P Augmentation: {added_words} OOV words injected into RAM.")
-            except Exception as e:
-                print(f"[warning] Aligner G2P augmentation failed: {e}")
-
-        # =====================================================================
-        # 3. 核心计算图与模型装载 (保留原有逻辑)
-        # =====================================================================
-        model_path = self.config.get("align_model_path")
-        if not model_path: return
-
-        self._log(f"Loading model from {model_path}...")
-        
-        is_local = os.path.isdir(model_path)
-        load_kwargs = {}
-        print(f"[info]: model path {model_path}")
-        
-        if not is_local:
-            load_kwargs["subfolder"] = f"{self.config.get('lang', 'zh')}/aligner"
-            # print(f"[info]: loading from cloud path---{ load_kwargs['subfolder'] }")
-
-        try:
-            self.processor = AutoProcessor.from_pretrained(model_path, **load_kwargs)
-            self.model = AutoModelForCTC.from_pretrained(model_path, **load_kwargs).to(self.device)
-        except Exception:
-            # Fallback
-            self.processor = AutoProcessor.from_pretrained(model_path)
-            self.model = AutoModelForCTC.from_pretrained(model_path).to(self.device)
-    
-        self.model.eval()
-        if self.processor:
-            self.phone_to_id = self.processor.tokenizer.get_vocab()
-    
-    @torch.inference_mode()
-    def align_locally(self, chunk_tensor: torch.Tensor, text: str, file_id: str = "segment") -> Dict[str, List[AlignmentSegment]]:
+    def save_log_probs(self, evidence: AcousticEvidence, save_path: str):
         """
-        Executes reference alignment logic and adapts output to Pipeline format.
+        保存 Stage 2 产出的声学证据。
         """
-        print(f"Aligning chunk '{file_id}' with text: {text}")
-        # print("align_locally called with chunk_tensor shape:", chunk_tensor.shape)
-        # input("Press Enter to continue...")  # Debug pause to inspect inputs
-        if self.model is None or self.lexicon is None:
-             return {"phones": [], "words": []}
+        save_path = Path(save_path)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # 1. Forward (Match compute_logp_frames)
-        inputs = self.processor(chunk_tensor.numpy(), sampling_rate=16000, return_tensors="pt")
-        inputs = {k: v.to(self.device) for k, v in inputs.items()}
-        logits = self.model(**inputs).logits 
-        logp = torch.log_softmax(logits, dim=-1)[0].cpu().numpy() # (T, V)
+        payload = {
+            "chunk_id": evidence.chunk_id,
+            "log_probs": torch.from_numpy(evidence.log_probs),
+            "num_frames": evidence.num_frames,
+            "vocab_size": evidence.vocab_size,
+            "frame_hop_s": evidence.frame_hop_s,
+            "duration_s": evidence.duration_s,
+        }
+        torch.save(payload, save_path)
 
-        T = logp.shape[0]
-        actual_dur = chunk_tensor.size(0) / 16000.0
+    def build_decode_graph(self, text: str):
+        """
+        Stage 3: 只根据 text 构建发音图。
+        """
+        if self.lexicon is None:
+            raise RuntimeError("Lexicon not loaded.")
+
+        words = text.split()
+
+        graph, entry_bias = build_phone_graph_optional_sil(
+            words=words,
+            prondict=self.lexicon,
+            phone_to_id=self.phone_to_id,
+            sil_phone=self.sil_phone,
+            optional_sil_between_words=self.optional_sil,
+            optional_sil_at_start=self.sil_at_ends,
+            optional_sil_at_end=self.sil_at_ends,
+            sil_cost=self.sil_cost,
+        )
+        return graph, entry_bias
+    def decode_log_probs(
+        self,
+        log_probs: np.ndarray,
+        text: str,
+        file_id: str = "segment",
+        dump_tsv: bool = False
+    ) -> Dict[str, List[AlignmentSegment]]:
+        """
+        Stage 3: 只基于固定的 log_probs + text 进行解码。
+        """
+        if self.lexicon is None:
+            return {"phones": [], "words": []}
+
+        T = log_probs.shape[0]
 
         if self.verbose:
-            self._log_header(f"Aligning: {file_id}")
-            print(f"  - Frames: {T}, Duration: {actual_dur:.3f}s")
+            self._log_header(f"Decode: {file_id}")
+            print(f"  - Frames: {T}")
             print(f"  - Text: {text}")
 
-        # 2. Build Graph (Reference Algorithm)
-        words = text.split()
+        # 1. Build Graph
         try:
-            graph, entry_bias = build_phone_graph_optional_sil(
-                words=words,
-                prondict=self.lexicon,
-                phone_to_id=self.phone_to_id,
-                sil_phone=self.sil_phone,
-                optional_sil_between_words=self.optional_sil,
-                optional_sil_at_start=self.sil_at_ends,
-                optional_sil_at_end=self.sil_at_ends,
-                sil_cost=self.sil_cost
-            )
+            graph, entry_bias = self.build_decode_graph(text)
         except Exception as e:
             print(f"❌ Graph construction failed: {e}")
             return {"phones": [], "words": []}
 
-        # 3. Decode (Reference Algorithm)
-        # try:
-        #     ali = align_beam_viterbi(
-        #         logp=logp,
-        #         graph=graph,
-        #         entry_bias=entry_bias,
-        #         p_stay=self.p_stay,
-        #         beam_size=self.beam_size,
-        #         word_sil_label=self.word_sil_label
-        #     )
-        # except Exception as e:
-        #     print(f"❌ Viterbi failed: {e}")
-        #     return {"phones": [], "words": []}
-        
+        # 2. Decode
         sil_phone_id = self.phone_to_id.get(self.sil_phone) if self.sil_phone else None
-        
+
         try:
             ali = align_beam_viterbi(
-                logp=logp,
+                logp=log_probs,
                 graph=graph,
                 entry_bias=entry_bias,
                 p_stay=self.p_stay,
                 beam_size=self.beam_size,
                 word_sil_label=self.word_sil_label,
-                # --- 核心物理挂载 ---
                 boundary_lambda=self.boundary_lambda,
                 boundary_context_s=self.boundary_context_s,
                 frame_hop_s=self.frame_hop,
                 sil_phone_id=sil_phone_id,
                 min_sil_dur_ms=self.min_sil_dur_ms,
-                sil_enter_cost=self.sil_enter_cost
+                sil_enter_cost=self.sil_enter_cost,
             )
         except Exception as e:
             print(f"❌ Viterbi failed: {e}")
             return {"phones": [], "words": []}
 
-        # 4. Format Output (Frames -> Seconds)
-        # Using self.frame_hop from config to strictly match reference logic
-        
+        # 3. Format Output
+        result = self._format_alignment_result(ali)
+
+        if dump_tsv and self.align_out_dir:
+            self._save_tsv(file_id, result)
+
+        return result
+    def load_log_probs(self, load_path: str) -> AcousticEvidence:
+        """
+        读取 Stage 2 保存的声学证据。
+        """
+        payload = torch.load(load_path, map_location="cpu")
+
+        log_probs = payload["log_probs"]
+        if isinstance(log_probs, torch.Tensor):
+            log_probs = log_probs.numpy()
+
+        return AcousticEvidence(
+            chunk_id=str(payload["chunk_id"]),
+            log_probs=log_probs,
+            num_frames=int(payload["num_frames"]),
+            vocab_size=int(payload["vocab_size"]),
+            frame_hop_s=float(payload["frame_hop_s"]),
+            duration_s=float(payload["duration_s"]),
+        )
+    @torch.inference_mode()
+    def forward_chunk(self, chunk_tensor: torch.Tensor, file_id: str = "segment") -> AcousticEvidence:
+        """
+        Stage 2: 只做声学前向，返回可复用的 log_probs 证据。
+        """
+        if self.model is None or self.processor is None:
+            raise RuntimeError("Aligner model/processor not loaded.")
+
+        if chunk_tensor.ndim > 1:
+            chunk_tensor = chunk_tensor.mean(dim=1)
+
+        inputs = self.processor(
+            chunk_tensor.numpy(),
+            sampling_rate=16000,
+            return_tensors="pt"
+        )
+        inputs = {k: v.to(self.device) for k, v in inputs.items()}
+
+        logits = self.model(**inputs).logits
+        logp = torch.log_softmax(logits, dim=-1)[0].detach().cpu().numpy()  # (T, V)
+
+        T, V = logp.shape
+        actual_dur = chunk_tensor.size(0) / 16000.0
+
+        if self.verbose:
+            self._log_header(f"Forward: {file_id}")
+            print(f"  - Frames: {T}, Duration: {actual_dur:.3f}s, Vocab: {V}")
+
+        return AcousticEvidence(
+            chunk_id=file_id,
+            log_probs=logp,
+            num_frames=T,
+            vocab_size=V,
+            frame_hop_s=self.frame_hop,
+            duration_s=actual_dur,
+        )
+    def _format_alignment_result(self, ali: AlignmentResult) -> Dict[str, List[AlignmentSegment]]:
         phones_out = []
         for lab, s, e in ali.phone_segments_f:
             start_t = self.offset_s + (s * self.frame_hop)
@@ -891,20 +832,389 @@ class LocalAligner:
             end_t = self.offset_s + (e * self.frame_hop)
             words_out.append(AlignmentSegment(lab, start_t, end_t))
 
-        result = {"phones": phones_out, "words": words_out}
+        return {"phones": phones_out, "words": words_out}
+    
 
-        # 5. Optional TSV Dump (Internal Debug)
-        if self.align_out_dir:
-            self._save_tsv(file_id, result)
+    def _load_resources(self, decode_only: bool = False):
+        # =====================================================================
+        # 1. 加载词典（Stage 3 需要）
+        # =====================================================================
+        lex_path = self.config.get("lexicon_path")
+        if lex_path:
+            self.lexicon = PronouncingDictionary.from_path(lex_path)
+        else:
+            self.lexicon = PronouncingDictionary()
 
-        return result
+        # 英语 G2P 增广，保留
+        if self.config.get("lang", "zh") == "en":
+            try:
+                from g2p_en.g2p import G2p
+                g2p_inst = G2p()
+                cmu_dict = g2p_inst.cmu
 
-    def _save_tsv(self, file_id, res):
-        out = Path(self.align_out_dir)
-        out.mkdir(parents=True, exist_ok=True)
-        for kind in ["phones", "words"]:
-            with open(out / f"{file_id}.{kind}.tsv", "w", newline="") as f:
-                writer = csv.writer(f, delimiter="\t")
-                writer.writerow(["start", "end", "label"])
-                for s in res[kind]:
-                    writer.writerow([f"{s.start:.4f}", f"{s.end:.4f}", s.label])
+                added_words = 0
+                local_words = set()
+                if isinstance(self.lexicon, dict):
+                    local_words = set(self.lexicon.keys())
+                elif hasattr(self.lexicon, '_dict'):
+                    local_words = set(self.lexicon._dict.keys())
+                elif hasattr(self.lexicon, 'words'):
+                    local_words = set(self.lexicon.words)
+
+                for w, prons in cmu_dict.items():
+                    w_upper = w.upper()
+                    if local_words:
+                        is_known = w_upper in local_words
+                    else:
+                        try:
+                            is_known = w_upper in self.lexicon
+                        except TypeError:
+                            is_known = False
+
+                    if not is_known:
+                        clean_pron = [p for p in prons[0] if p.isalnum()]
+                        try:
+                            if hasattr(self.lexicon, 'add_word'):
+                                self.lexicon.add_word(w_upper, clean_pron)
+                            elif isinstance(self.lexicon, dict) or hasattr(self.lexicon, '__setitem__'):
+                                self.lexicon[w_upper] = [clean_pron]
+                            elif hasattr(self.lexicon, '_dict'):
+                                self.lexicon._dict[w_upper] = [clean_pron]
+                            added_words += 1
+                        except Exception:
+                            pass
+            except Exception as e:
+                print(f"[warning] Aligner G2P augmentation failed: {e}")
+
+        # =====================================================================
+        # 2. 优先加载 phone vocab（Stage 3 需要）
+        # =====================================================================
+        # self.phone_to_id = {}
+
+        # json_path = self.config.get("phone_json_path")
+        # if json_path and os.path.exists(json_path):
+        #     with open(json_path, "r", encoding="utf-8") as f:
+        #         self.phone_to_id = json.load(f)
+
+        # =====================================================================
+        # 3. 如果是 decode-only，到这里就结束，不加载模型
+        # =====================================================================
+        # if decode_only:
+        #     if self.verbose:
+        #         self._log("Decode-only mode: skip loading aligner model/processor.")
+        #     return
+
+        # =====================================================================
+        # 4. 加载模型与 processor（只有 Stage 2/完整流程需要）
+        # =====================================================================
+        model_path = self.config.get("align_model_path")
+        if not model_path:
+            return
+
+        self._log(f"Loading model from {model_path}...")
+
+        is_local = os.path.isdir(model_path)
+        load_kwargs = {}
+
+        if not is_local:
+            load_kwargs["subfolder"] = f"{self.config.get('lang', 'zh')}/aligner"
+
+        try:
+            self.processor = AutoProcessor.from_pretrained(model_path, **load_kwargs)
+            self.model = AutoModelForCTC.from_pretrained(model_path, **load_kwargs).to(self.device)
+        except Exception:
+            self.processor = AutoProcessor.from_pretrained(model_path)
+            self.model = AutoModelForCTC.from_pretrained(model_path).to(self.device)
+
+        self.model.eval()
+
+        # 如果之前没从 phone_json_path 拿到 vocab，则从 processor 取
+        if not self.phone_to_id and self.processor:
+            self.phone_to_id = self.processor.tokenizer.get_vocab()
+    
+    @torch.inference_mode()
+    def align_locally(
+        self,
+        chunk_tensor: torch.Tensor,
+        text: str,
+        file_id: str = "segment"
+    ) -> Dict[str, List[AlignmentSegment]]:
+        """
+        兼容旧接口：内部改为 Stage 2 forward + Stage 3 decode。
+        """
+        print(f"Aligning chunk '{file_id}' with text: {text}")
+
+        if self.model is None or self.lexicon is None:
+            return {"phones": [], "words": []}
+
+        try:
+            evidence = self.forward_chunk(chunk_tensor, file_id=file_id)
+        except Exception as e:
+            print(f"❌ Forward failed: {e}")
+            return {"phones": [], "words": []}
+
+        return self.decode_log_probs(
+            log_probs=evidence.log_probs,
+            text=text,
+            file_id=file_id,
+            dump_tsv=True,
+        )
+    def _coerce_batch_item(self, item, idx: int = 0):
+        """
+        将 batch 输入统一规整成:
+        {
+            "chunk_id": str,
+            "audio_np": np.ndarray,   # mono float32, 16k expected by caller/pipeline
+            "num_samples": int,
+        }
+
+        支持的 item 形式:
+        1) torch.Tensor
+        2) np.ndarray
+        3) dict，包含:
+        - {"chunk_id": ..., "audio": np.ndarray/tensor}
+        - {"chunk_id": ..., "audio_path": "..."}
+        4) 任意对象，具有属性:
+        - .chunk_id
+        - .tensor 或 .audio_path
+        """
+        chunk_id = f"segment_{idx:06d}"
+        audio_np = None
+
+        # -------- case 1: raw tensor --------
+        if isinstance(item, torch.Tensor):
+            x = item.detach().cpu()
+            if x.ndim > 1:
+                x = x.mean(dim=1)
+            audio_np = x.numpy().astype(np.float32, copy=False)
+
+        # -------- case 2: raw numpy --------
+        elif isinstance(item, np.ndarray):
+            audio_np = item
+            if audio_np.ndim > 1:
+                audio_np = audio_np.mean(axis=1)
+            audio_np = audio_np.astype(np.float32, copy=False)
+
+        # -------- case 3: dict --------
+        elif isinstance(item, dict):
+            chunk_id = str(item.get("chunk_id", chunk_id))
+
+            if "audio" in item:
+                x = item["audio"]
+                if isinstance(x, torch.Tensor):
+                    x = x.detach().cpu()
+                    if x.ndim > 1:
+                        x = x.mean(dim=1)
+                    audio_np = x.numpy().astype(np.float32, copy=False)
+                elif isinstance(x, np.ndarray):
+                    if x.ndim > 1:
+                        x = x.mean(axis=1)
+                    audio_np = x.astype(np.float32, copy=False)
+                else:
+                    raise TypeError(f"Unsupported dict['audio'] type: {type(x)}")
+
+            elif "audio_path" in item:
+                wav, sr = sf.read(str(item["audio_path"]))
+                if sr != 16000:
+                    raise ValueError(
+                        f"forward_batch currently expects 16k audio chunks, got sr={sr} "
+                        f"for {item['audio_path']}"
+                    )
+                if wav.ndim > 1:
+                    wav = wav.mean(axis=1)
+                audio_np = wav.astype(np.float32, copy=False)
+
+            else:
+                raise ValueError("Dict item must contain 'audio' or 'audio_path'.")
+
+        # -------- case 4: object with attributes --------
+        else:
+            if hasattr(item, "chunk_id"):
+                chunk_id = str(item.chunk_id)
+
+            if hasattr(item, "tensor") and item.tensor is not None:
+                x = item.tensor.detach().cpu()
+                if x.ndim > 1:
+                    x = x.mean(dim=1)
+                audio_np = x.numpy().astype(np.float32, copy=False)
+
+            elif hasattr(item, "audio_path") and item.audio_path is not None:
+                wav, sr = sf.read(str(item.audio_path))
+                if sr != 16000:
+                    raise ValueError(
+                        f"forward_batch currently expects 16k audio chunks, got sr={sr} "
+                        f"for {item.audio_path}"
+                    )
+                if wav.ndim > 1:
+                    wav = wav.mean(axis=1)
+                audio_np = wav.astype(np.float32, copy=False)
+
+            else:
+                raise TypeError(
+                    f"Unsupported batch item type: {type(item)}. "
+                    f"Expected tensor / ndarray / dict / object with tensor or audio_path."
+                )
+
+        if audio_np is None or audio_np.size == 0:
+            raise ValueError(f"Empty audio for batch item: {chunk_id}")
+
+        return {
+            "chunk_id": chunk_id,
+            "audio_np": audio_np,
+            "num_samples": int(audio_np.shape[0]),
+        }    
+    @torch.inference_mode()
+    def forward_batch(
+        self,
+        chunk_records_or_arrays,
+        max_batch_items: int,
+        max_batch_frames: int,
+        sort_by_duration: bool = True
+    ):
+        """
+        Stage 2: 批量声学前向。
+        
+        参数
+        ----
+        chunk_records_or_arrays:
+            一个列表，元素可为:
+            - torch.Tensor
+            - np.ndarray
+            - {"chunk_id": ..., "audio": ...} / {"chunk_id": ..., "audio_path": ...}
+            - 具有 .chunk_id + .tensor / .audio_path 的对象
+        max_batch_items:
+            单个 micro-batch 最多包含多少条 chunk
+        max_batch_frames:
+            单个 micro-batch 允许的“估计总帧数”上限。
+            这里使用 len(audio)/16000/frame_hop 估计，而不是模型真实输出帧。
+        sort_by_duration:
+            是否按时长排序后再组 batch，以减少 padding 浪费。
+        
+        返回
+        ----
+        List[AcousticEvidence]
+        """
+        if self.model is None or self.processor is None:
+            raise RuntimeError("Aligner model/processor not loaded.")
+
+        if not chunk_records_or_arrays:
+            return []
+
+        if max_batch_items <= 0:
+            raise ValueError(f"max_batch_items must be > 0, got {max_batch_items}")
+        if max_batch_frames <= 0:
+            raise ValueError(f"max_batch_frames must be > 0, got {max_batch_frames}")
+
+        # ---------------------------------------------------------
+        # 1. 规整输入
+        # ---------------------------------------------------------
+        items = []
+        for i, raw_item in enumerate(chunk_records_or_arrays):
+            item = self._coerce_batch_item(raw_item, idx=i)
+            est_frames = max(1, int(round((item["num_samples"] / 16000.0) / self.frame_hop)))
+            item["est_frames"] = est_frames
+            item["orig_idx"] = i
+            items.append(item)
+
+        if sort_by_duration:
+            items.sort(key=lambda x: x["num_samples"])
+
+        # ---------------------------------------------------------
+        # 2. 组 micro-batch
+        # ---------------------------------------------------------
+        micro_batches = []
+        cur_batch = []
+        cur_frames = 0
+
+        for item in items:
+            need_new_batch = (
+                len(cur_batch) >= max_batch_items or
+                (len(cur_batch) > 0 and cur_frames + item["est_frames"] > max_batch_frames)
+            )
+            if need_new_batch:
+                micro_batches.append(cur_batch)
+                cur_batch = []
+                cur_frames = 0
+
+            cur_batch.append(item)
+            cur_frames += item["est_frames"]
+
+        if cur_batch:
+            micro_batches.append(cur_batch)
+
+        if self.verbose:
+            self._log_header("Forward Batch")
+            print(f"  - Total chunks: {len(items)}")
+            print(f"  - Micro-batches: {len(micro_batches)}")
+            print(f"  - max_batch_items={max_batch_items}, max_batch_frames={max_batch_frames}")
+
+        # ---------------------------------------------------------
+        # 3. 逐 micro-batch 前向
+        # ---------------------------------------------------------
+        outputs = [None] * len(items)
+
+        for mb_idx, batch in enumerate(micro_batches):
+            audio_list = [x["audio_np"] for x in batch]
+            chunk_ids = [x["chunk_id"] for x in batch]
+            raw_input_lengths = torch.tensor(
+                [x["num_samples"] for x in batch],
+                dtype=torch.long
+            )
+
+            inputs = self.processor(
+                audio_list,
+                sampling_rate=16000,
+                return_tensors="pt",
+                padding=True
+            )
+            inputs = {k: v.to(self.device) for k, v in inputs.items()}
+
+            logits = self.model(**inputs).logits              # (B, T_pad, V)
+            log_probs = torch.log_softmax(logits, dim=-1).detach().cpu()
+
+            B, T_pad, V = log_probs.shape
+
+            # 尽量使用模型自己的长度映射函数，得到每条样本的真实输出帧数
+            out_lengths = None
+            if hasattr(self.model, "_get_feat_extract_output_lengths"):
+                try:
+                    out_lengths = self.model._get_feat_extract_output_lengths(raw_input_lengths)
+                    out_lengths = out_lengths.detach().cpu().tolist()
+                except Exception:
+                    out_lengths = None
+
+            # fallback: 用输入长度按 padded 最大长度线性缩放
+            if out_lengths is None:
+                max_in_len = int(raw_input_lengths.max().item())
+                out_lengths = [
+                    max(1, int(round(T_pad * (int(n.item()) / max_in_len))))
+                    for n in raw_input_lengths
+                ]
+
+            for j in range(B):
+                T_real = int(out_lengths[j])
+                T_real = max(1, min(T_real, T_pad))
+
+                lp = log_probs[j, :T_real].numpy()
+                dur_s = batch[j]["num_samples"] / 16000.0
+
+                ev = AcousticEvidence(
+                    chunk_id=chunk_ids[j],
+                    log_probs=lp,
+                    num_frames=lp.shape[0],
+                    vocab_size=lp.shape[1],
+                    frame_hop_s=self.frame_hop,
+                    duration_s=dur_s,
+                )
+
+                outputs[batch[j]["orig_idx"]] = ev
+
+            if self.verbose:
+                total_est_frames = sum(x["est_frames"] for x in batch)
+                print(
+                    f"  - micro-batch {mb_idx + 1}/{len(micro_batches)}: "
+                    f"B={B}, T_pad={T_pad}, V={V}, est_frames={total_est_frames}"
+                )
+
+        # 按原始输入顺序返回
+        return outputs

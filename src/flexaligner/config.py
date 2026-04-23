@@ -91,10 +91,28 @@ class AlignmentConfig:
     verbose: bool = False # 是否开启详细日志输出
     use_g2p: bool = False # 是否启用 G2P 模块（默认关闭，适合纯音素输入）
     
-    # src/flexaligner/config.py
+    run_root: Optional[str] = None
+    evidence_out_dir: Optional[str] = None
+    decode_out_dir: Optional[str] = None
+    decode_tag: str = "default"
+    
+    input_manifest_path: Optional[str] = None
+    shard_size: int = 100
+    shard_id: Optional[int] = None
 
-    # src/flexaligner/config.py 中的 __post_init__ 关键部分修正
-
+    
+    stage1_num_workers: int = 1
+    stage1_file_batch_size: int = 1
+    
+    
+    stage2_num_workers: int = 1
+    stage2_max_batch_items: int = 32
+    stage2_max_batch_frames: int = 120000
+    stage2_sort_by_duration: bool = True
+    
+    stage3_num_workers: int = 1
+    stage3_chunk_batch_size: int = 200
+    
     def __post_init__(self):
         self.device = get_best_device(self.device)
         
