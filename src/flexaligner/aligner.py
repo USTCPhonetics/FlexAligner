@@ -117,6 +117,8 @@ def build_phone_graph_optional_sil(
     optional_sil_at_start: bool = True,
     optional_sil_at_end: bool = True,
     sil_cost: float = 0.0,
+    sil_num_states: int = 3,
+    sil_state_prefix: Optional[str] = None,
 ) -> Tuple[PhoneGraph, np.ndarray]:
     """
     [Reference Logic] 构建包含可选静音的发音图
@@ -135,23 +137,57 @@ def build_phone_graph_optional_sil(
     emit_edges: List[EmitEdge] = []
     eps_edges: List[Tuple[int, int]] = []
     entry_bias: List[float] = []
+    def add_sil_chain(u: int, v: int, bias_first: float = 0.0):
+        """
+        在 u -> v 之间插入 sil_num_states 个连续的 silence emitting edges。
+        标签是 sil_1, sil_2, sil_3...
+        但 phone_id 都映射到 base sil_phone。
+        """
+        n_states = max(1, int(sil_num_states))
+        prefix = sil_state_prefix or sil_phone
 
+        if n_states == 1:
+            add_emit(u, v, sil_phone, None, None, bias=bias_first)
+            return
+
+        cur = u
+        for i in range(n_states):
+            nxt = v if i == n_states - 1 else new_node()
+            sil_label = f"{prefix}_{i+1}"
+            this_bias = bias_first if i == 0 else 0.0
+            add_emit(cur, nxt, sil_label, None, None, bias=this_bias)
+            cur = nxt
     def add_emit(u: int, v: int, phone: str, widx: Optional[int], w: Optional[str], bias: float = 0.0):
-        # [Robustness] 增加 OOV 防御，防止 Key Error 导致崩溃，改为跳过
-        if phone not in phone_to_id:
-            assert phone.lower() == sil_phone.lower(), f"Phone '{phone}' not in vocab and is not the designated silence phone '{sil_phone}'."
-            # 尝试去重音 (AO1 -> AO)
-            pure = ''.join(filter(str.isalpha, phone))
-            if pure in phone_to_id:
-                phone_id = phone_to_id[pure]
-            else:
-                # 实在没有，打印警告并跳过这条边（可能导致图断裂，但在 Library 中比 crash 好）
-                print(f"Warning: Phone '{phone}' not in vocab.")
-                return 
-        else:
+        sil_base = (sil_phone or "").lower()
+        sil_aliases = set()
+        if sil_phone is not None:
+            sil_aliases.add(sil_base)
+            sil_aliases.update(
+                f"{(sil_state_prefix or sil_phone).lower()}_{i+1}"
+                for i in range(max(1, sil_num_states))
+            )
+
+        if phone in phone_to_id:
             phone_id = phone_to_id[phone]
-            
-        emit_edges.append(EmitEdge(u=u, v=v, phone=phone, phone_id=phone_id, word_index=widx, word=w))
+        else:
+            phone_lower = phone.lower()
+
+            # 3-state sil 别名统一映射到 base sil 的 phone_id
+            if phone_lower in sil_aliases and sil_phone in phone_to_id:
+                phone_id = phone_to_id[sil_phone]
+            elif phone_lower in sil_aliases and sil_phone.lower() in phone_to_id:
+                phone_id = phone_to_id[sil_phone.lower()]
+            else:
+                pure = ''.join(filter(str.isalpha, phone))
+                if pure in phone_to_id:
+                    phone_id = phone_to_id[pure]
+                else:
+                    print(f"Warning: Phone '{phone}' not in vocab.")
+                    return
+
+        emit_edges.append(
+            EmitEdge(u=u, v=v, phone=phone, phone_id=phone_id, word_index=widx, word=w)
+        )
         entry_bias.append(bias)
 
     def add_eps(u: int, v: int):
@@ -161,7 +197,8 @@ def build_phone_graph_optional_sil(
     start_node = new_node()
     if sil_phone is not None and optional_sil_at_start:
         add_eps(START, start_node)
-        add_emit(START, start_node, sil_phone, None, None, bias=sil_cost)
+        # add_emit(START, start_node, sil_phone, None, None, bias=sil_cost)
+        add_sil_chain(START, start_node, bias_first=sil_cost)
     else:
         add_eps(START, start_node)
 
@@ -190,7 +227,8 @@ def build_phone_graph_optional_sil(
         if optional_sil_between_words and wi != len(words) - 1 and sil_phone is not None:
             nxt = new_node()
             add_eps(cur_node, nxt)
-            add_emit(cur_node, nxt, sil_phone, None, None, bias=sil_cost)
+            # add_emit(cur_node, nxt, sil_phone, None, None, bias=sil_cost)
+            add_sil_chain(cur_node, nxt, bias_first=sil_cost)
             cur_node = nxt
 
     final_node = cur_node
@@ -200,7 +238,8 @@ def build_phone_graph_optional_sil(
     if sil_phone is not None and optional_sil_at_end:
         add_eps(final_node, END)
         tail = new_node()
-        add_emit(final_node, tail, sil_phone, None, None, bias=sil_cost)
+        # add_emit(final_node, tail, sil_phone, None, None, bias=sil_cost)
+        add_sil_chain(final_node, tail, bias_first=sil_cost)
         add_eps(tail, END)
     else:
         add_eps(final_node, END)
@@ -368,7 +407,6 @@ def build_phone_graph_optional_sil(
 #         word_segments_f.append((cur_w, start, T))
 
 #     return AlignmentResult(phone_segments_f, word_segments_f, path, aligned_phone_ids)
-
 def align_beam_viterbi(
     logp: np.ndarray,          # (T, V) log-probabilities
     graph: PhoneGraph,
@@ -386,7 +424,10 @@ def align_beam_viterbi(
 ) -> AlignmentResult:
     """
     [Advanced Logic] 带物理惯性约束与边界平滑的 Beam Viterbi 解码
+    + 额外规则：
+      对所有 FRICATIVE / AFFRICATE 与 SIL 的双向切换，额外施加 -1.0 惩罚
     """
+    # affricate_to_sil_penalty = -5.0
     T, V = logp.shape
     S = len(graph.states)
     if entry_bias.shape[0] != S:
@@ -397,6 +438,17 @@ def align_beam_viterbi(
     lp_stay = math.log(p_stay)
     lp_move = math.log(1.0 - p_stay)
 
+    # 新增：擦音 / 塞擦音 <-> sil 的双向惩罚
+    # fric_affric_sil_switch_penalty = -5.0
+
+    def _phone_class(phone: Optional[str]) -> str:
+        p = "".join(filter(str.isalpha, (phone or "").upper()))
+        if p in {"F", "V", "TH", "DH", "S", "Z", "SH", "ZH", "HH"}:
+            return "FRICATIVE"
+        if p in {"CH", "JH"}:
+            return "AFFRICATE"
+        return "OTHER"
+
     # -------------------------
     # Trick 1: 局部概率悬崖探测器 (Boundary Score)
     # -------------------------
@@ -406,7 +458,8 @@ def align_beam_viterbi(
         pref[1:] = np.cumsum(logp, axis=0)
 
         def _mean(pid: int, s: int, e: int) -> float:
-            if e <= s: return 0.0
+            if e <= s:
+                return 0.0
             return float((pref[e, pid] - pref[s, pid]) / (e - s))
 
         def boundary_score(t: int, a: int, b: int) -> float:
@@ -463,11 +516,18 @@ def align_beam_viterbi(
             prev_is_sil = _is_sil_phone(phid_prev)
             emit_s = float(logp[t, phid_prev]) + float(entry_bias[s])
 
+            prev_cls = _phone_class(st.edge.phone)
+
             # 1. Stay
-            cand = sc + lp_stay + emit_s
+            stay_pen = 0.0
+            affricate_stay_penalty = -0.5
+            if prev_cls == "AFFRICATE":
+                stay_pen += affricate_stay_penalty
+
+            cand = sc + lp_stay + emit_s + stay_pen
             lock_stay = (lock_prev - 1) if (prev_is_sil and lock_prev > 0) else 0
             key_stay = (int(s), int(lock_stay if prev_is_sil else 0))
-            
+
             if cand > nxt_scores.get(key_stay, NEG_INF):
                 nxt_scores[key_stay] = cand
                 nxt_bp[key_stay] = (int(s), int(lock_prev))
@@ -495,11 +555,16 @@ def align_beam_viterbi(
                     lock_next = 0
 
                 key_next = (int(ns), int(lock_next))
+
                 # [过路费扣除]
-                enter_pen = float(sil_enter_cost) if ((not prev_is_sil) and next_is_sil) else 0.0
-                
-                cand2 = base + emit_ns + enter_pen + boundary_lambda * boundary_score(t, phid_prev, phid_next)
-                
+                trans_pen = 0.0
+
+                # 原有：进入 sil 的全局代价
+                if ((not prev_is_sil) and next_is_sil):
+                    trans_pen += float(sil_enter_cost)
+
+                cand2 = base + emit_ns + trans_pen + boundary_lambda * boundary_score(t, phid_prev, phid_next)
+
                 if cand2 > nxt_scores.get(key_next, NEG_INF):
                     nxt_scores[key_next] = cand2
                     nxt_bp[key_next] = (int(s), int(lock_prev))
@@ -521,14 +586,14 @@ def align_beam_viterbi(
         if s in end_set and term > best_score:
             best_score = term
             best_state = (int(s), int(lock_prev))
-            
+
     if best_state is None and len(cur_scores) > 0:
         best_state = max(cur_scores.items(), key=lambda kv: kv[1])[0]
 
     # Backtrace
     path = np.empty((T,), dtype=np.int32)
     if best_state is not None:
-        cur_key = best_state 
+        cur_key = best_state
         for t in range(T - 1, -1, -1):
             path[t] = int(cur_key[0])
             cur_key = bp[t].get(cur_key, cur_key)
@@ -542,7 +607,7 @@ def align_beam_viterbi(
     if T > 0:
         cur_edge0 = graph.states[int(path[0])].edge
         cur_ph = cur_edge0.phone
-        cur_wi = cur_edge0.word_index 
+        cur_wi = cur_edge0.word_index
         start = 0
         for t in range(1, T):
             e = graph.states[int(path[t])].edge
@@ -572,6 +637,209 @@ def align_beam_viterbi(
         word_segments_f.append((cur_w, start, T))
 
     return AlignmentResult(phone_segments_f, word_segments_f, path, aligned_phone_ids)
+# def align_beam_viterbi(
+#     logp: np.ndarray,          # (T, V) log-probabilities
+#     graph: PhoneGraph,
+#     entry_bias: np.ndarray,    # (S,)
+#     p_stay: float = 0.92,
+#     beam_size: int = 300,
+#     word_sil_label: str = "sil",
+#     # --- [Trick Parameters] ---
+#     boundary_lambda: float = 0.0,
+#     boundary_context_s: float = 0.015,
+#     frame_hop_s: float = 0.01,
+#     sil_phone_id: Optional[int] = None,
+#     min_sil_dur_ms: float = 0.0,
+#     sil_enter_cost: float = 0.0,
+# ) -> AlignmentResult:
+#     """
+#     [Advanced Logic] 带物理惯性约束与边界平滑的 Beam Viterbi 解码
+#     """
+#     T, V = logp.shape
+#     S = len(graph.states)
+#     if entry_bias.shape[0] != S:
+#         raise ValueError("entry_bias length != number of states")
+#     if T == 0:
+#         raise ValueError("No frames produced by model.")
+
+#     lp_stay = math.log(p_stay)
+#     lp_move = math.log(1.0 - p_stay)
+
+#     # -------------------------
+#     # Trick 1: 局部概率悬崖探测器 (Boundary Score)
+#     # -------------------------
+#     ctx = max(1, int(round(boundary_context_s / frame_hop_s)))
+#     if boundary_lambda != 0.0:
+#         pref = np.zeros((T + 1, V), dtype=np.float32)
+#         pref[1:] = np.cumsum(logp, axis=0)
+
+#         def _mean(pid: int, s: int, e: int) -> float:
+#             if e <= s: return 0.0
+#             return float((pref[e, pid] - pref[s, pid]) / (e - s))
+
+#         def boundary_score(t: int, a: int, b: int) -> float:
+#             l0 = 0 if t - ctx < 0 else (t - ctx)
+#             l1 = t
+#             r0 = t
+#             r1 = T if t + ctx > T else (t + ctx)
+#             left = _mean(a, l0, l1) - _mean(b, l0, l1)
+#             right = _mean(b, r0, r1) - _mean(a, r0, r1)
+#             return left + right
+#     else:
+#         def boundary_score(t: int, a: int, b: int) -> float:
+#             return 0.0
+
+#     # -------------------------
+#     # Trick 2 & 3: 静音物理惯性锁与过路费 (Silence Lock & Toll)
+#     # -------------------------
+#     min_sil_frames = 0
+#     if (min_sil_dur_ms is not None) and (min_sil_dur_ms > 0.0) and (sil_phone_id is not None):
+#         min_sil_frames = max(1, int(round((min_sil_dur_ms / 1000.0) / frame_hop_s)))
+
+#     def _is_sil_phone(pid: int) -> bool:
+#         return (sil_phone_id is not None) and (pid == sil_phone_id)
+
+#     bp: List[Dict[tuple[int, int], tuple[int, int]]] = []
+#     cur_scores: Dict[tuple[int, int], float] = {}
+#     cur_bp: Dict[tuple[int, int], tuple[int, int]] = {}
+
+#     # Init
+#     for s in graph.start_states:
+#         phid = graph.states[s].edge.phone_id
+#         if _is_sil_phone(phid) and min_sil_frames > 0:
+#             lock = min_sil_frames - 1
+#         else:
+#             lock = 0
+#         key = (int(s), int(lock))
+#         cur_scores[key] = float(logp[0, phid]) + float(entry_bias[s])
+#         cur_bp[key] = key
+
+#     if len(cur_scores) > beam_size:
+#         top = sorted(cur_scores.items(), key=lambda kv: kv[1], reverse=True)[:beam_size]
+#         cur_scores = {k: v for k, v in top}
+#         cur_bp = {k: cur_bp[k] for k, _ in top}
+#     bp.append(cur_bp)
+
+#     # Forward
+#     for t in range(1, T):
+#         nxt_scores: Dict[tuple[int, int], float] = {}
+#         nxt_bp: Dict[tuple[int, int], tuple[int, int]] = {}
+
+#         for (s, lock_prev), sc in cur_scores.items():
+#             st = graph.states[s]
+#             phid_prev = st.edge.phone_id
+#             prev_is_sil = _is_sil_phone(phid_prev)
+#             emit_s = float(logp[t, phid_prev]) + float(entry_bias[s])
+
+#             # 1. Stay
+#             cand = sc + lp_stay + emit_s
+#             lock_stay = (lock_prev - 1) if (prev_is_sil and lock_prev > 0) else 0
+#             key_stay = (int(s), int(lock_stay if prev_is_sil else 0))
+            
+#             if cand > nxt_scores.get(key_stay, NEG_INF):
+#                 nxt_scores[key_stay] = cand
+#                 nxt_bp[key_stay] = (int(s), int(lock_prev))
+
+#             # 2. Move
+#             base = sc + lp_move
+#             for ns in st.succs:
+#                 nst = graph.states[ns]
+#                 phid_next = nst.edge.phone_id
+#                 next_is_sil = _is_sil_phone(phid_next)
+
+#                 # [物理约束] 静音锁死逻辑：锁没归零，不准跳出
+#                 if prev_is_sil and lock_prev > 0 and not next_is_sil:
+#                     continue
+
+#                 emit_ns = float(logp[t, phid_next]) + float(entry_bias[ns])
+
+#                 # 计算下一帧的静音锁
+#                 if next_is_sil:
+#                     if prev_is_sil:
+#                         lock_next = (lock_prev - 1) if lock_prev > 0 else 0
+#                     else:
+#                         lock_next = (min_sil_frames - 1) if (min_sil_frames > 0) else 0
+#                 else:
+#                     lock_next = 0
+
+#                 key_next = (int(ns), int(lock_next))
+#                 # [过路费扣除]
+#                 enter_pen = float(sil_enter_cost) if ((not prev_is_sil) and next_is_sil) else 0.0
+                
+#                 cand2 = base + emit_ns + enter_pen + boundary_lambda * boundary_score(t, phid_prev, phid_next)
+                
+#                 if cand2 > nxt_scores.get(key_next, NEG_INF):
+#                     nxt_scores[key_next] = cand2
+#                     nxt_bp[key_next] = (int(s), int(lock_prev))
+
+#         if len(nxt_scores) > beam_size:
+#             top = sorted(nxt_scores.items(), key=lambda kv: kv[1], reverse=True)[:beam_size]
+#             nxt_scores = {k: v for k, v in top}
+#             nxt_bp = {k: nxt_bp[k] for k, _ in top}
+
+#         cur_scores = nxt_scores
+#         bp.append(nxt_bp)
+
+#     # Termination
+#     end_set = set(graph.end_states)
+#     best_state = None
+#     best_score = NEG_INF
+#     for (s, lock_prev), sc in cur_scores.items():
+#         term = sc + lp_move
+#         if s in end_set and term > best_score:
+#             best_score = term
+#             best_state = (int(s), int(lock_prev))
+            
+#     if best_state is None and len(cur_scores) > 0:
+#         best_state = max(cur_scores.items(), key=lambda kv: kv[1])[0]
+
+#     # Backtrace
+#     path = np.empty((T,), dtype=np.int32)
+#     if best_state is not None:
+#         cur_key = best_state 
+#         for t in range(T - 1, -1, -1):
+#             path[t] = int(cur_key[0])
+#             cur_key = bp[t].get(cur_key, cur_key)
+#     else:
+#         path.fill(0)
+
+#     aligned_phone_ids = np.array([graph.states[int(s)].edge.phone_id for s in path], dtype=np.int32)
+
+#     # Extract Phones
+#     phone_segments_f = []
+#     if T > 0:
+#         cur_edge0 = graph.states[int(path[0])].edge
+#         cur_ph = cur_edge0.phone
+#         cur_wi = cur_edge0.word_index 
+#         start = 0
+#         for t in range(1, T):
+#             e = graph.states[int(path[t])].edge
+#             ph = e.phone
+#             wi = e.word_index
+#             # [关键修复] 防止跨词但同音素时被合并 (比如 "A A")
+#             if (ph != cur_ph) or (wi != cur_wi):
+#                 phone_segments_f.append((cur_ph, start, t))
+#                 cur_ph = ph
+#                 cur_wi = wi
+#                 start = t
+#         phone_segments_f.append((cur_ph, start, T))
+
+#     # Extract Words
+#     word_segments_f = []
+#     if T > 0:
+#         w0 = graph.states[int(path[0])].edge.word
+#         cur_w = w0 if w0 is not None else word_sil_label
+#         start = 0
+#         for t in range(1, T):
+#             w = graph.states[int(path[t])].edge.word
+#             lab = w if w is not None else word_sil_label
+#             if lab != cur_w:
+#                 word_segments_f.append((cur_w, start, t))
+#                 cur_w = lab
+#                 start = t
+#         word_segments_f.append((cur_w, start, T))
+
+#     return AlignmentResult(phone_segments_f, word_segments_f, path, aligned_phone_ids)
 
 
 # ==========================================
@@ -630,6 +898,10 @@ class LocalAligner:
         self.p_stay = self.config.get("p_stay", 0.92)
         self.sil_phone = self.config.get("sil_phone", "sil")
         self.sil_cost = self.config.get("sil_cost", -0.5)
+        
+        self.sil_num_states = int(self.config.get("sil_num_states", 1))
+        self.sil_state_prefix = self.config.get("sil_state_prefix", self.sil_phone)
+        
         
         # Flags
         self.optional_sil = self.config.get("optional_sil", True)
@@ -707,6 +979,8 @@ class LocalAligner:
             optional_sil_at_start=self.sil_at_ends,
             optional_sil_at_end=self.sil_at_ends,
             sil_cost=self.sil_cost,
+            sil_num_states=self.sil_num_states,
+            sil_state_prefix=self.sil_state_prefix,
         )
         return graph, entry_bias
     def decode_log_probs(

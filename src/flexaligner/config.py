@@ -104,7 +104,7 @@ class AlignmentConfig:
     stage1_num_workers: int = 1
     stage1_file_batch_size: int = 1
     
-    
+    sil_num_states: int = 1
     stage2_num_workers: int = 1
     stage2_max_batch_items: int = 32
     stage2_max_batch_frames: int = 120000
