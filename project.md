@@ -2,7 +2,7 @@
 
 > 文档状态：实施中
 > 建立日期：2026-08-11（Asia/Shanghai）
-> 当前阶段：Stage 4 — Stage 2 图、Viterbi、剪枝与二次解码实现
+> 当前阶段：Stage 6 — 包构建、真实模型 E2E 与发布演练
 
 ## 1. 当前目标
 
@@ -71,8 +71,8 @@
 | remote | 未配置 |
 | PyPI 项目 | 尚未创建或占位；最终名称/所有权 `[TBD-PKG-001]` |
 | 发布 | 未授权、未执行 |
-| 生产代码 | 包/API/CLI/占位接口及 NumPy Stage 1/Stage 2 核心已建立；完整管线尚未接入 |
-| 测试 | 509 项 fast tests 通过；分支覆盖率 92.85% |
+| 生产代码 | 严格英语 CPU 单文件管线、API/CLI、本地推理、TextGrid 事务及未来能力占位已接通 |
+| 测试 | 673 项禁网 fast tests 通过；分支覆盖率 92.31% |
 | reference | 仓内字节冻结并 hash guard；禁止进入生产 import、wheel 或 sdist |
 | E2E 资产 | 16 项候选资产 hash 与精确运行时预检通过；真实对齐 E2E 尚未运行 |
 | Stage 1 资源 | 精确 O(TN) 估算和显式 cell limit 已验证；安全默认值 `[TBD-ALG-005]` |
@@ -103,7 +103,8 @@
 - 局部结果平移/裁剪至全局时间轴；
 - words/phones tier 保持输入词序；
 - 只允许合并相邻 `NULL`；
-- 输出经临时写入、回读验证后原子替换。
+- 输出经临时写入、回读验证后以原子 no-clobber 操作发布；可选 metadata
+  与 TextGrid 的跨文件崩溃一致性仍为 `[TBD-OUT-001]`。
 
 更完整的迁移和验收规则见 `IMPLEMENTATION_PLAN.md` 与 `ACCEPTANCE.md`。
 

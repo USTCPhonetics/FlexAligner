@@ -15,7 +15,9 @@
 
 `Stage 4 — Stage 2 implementation` is complete at commit `d65ab6a`.
 
-`Stage 5 — inference, pipeline, CLI and output` is in progress.
+`Stage 5 — inference, pipeline, CLI and output` is complete at commit `6c1d4eb`.
+
+`Stage 6 — package, real-model E2E and release rehearsal` is in progress.
 
 ## Verified current state
 
@@ -73,20 +75,33 @@
 - Stage 2 resource complexity and limitations are recorded in
   `STAGE2_RESOURCE_REPORT.md`. The inherited `beam=400` is not claimed as an
   empirically safe bound; `TBD-ALG-005` remains open.
+- The strict English CPU single-file pipeline is implemented with strict
+  transcript/lexicon/WAV/model/vocabulary checks, lazy local-only inference and
+  sequential non-overlapping Chunker/Aligner sessions.
+- TextGrid and optional metadata are staged and read-back validated. Publication
+  uses an atomic no-clobber hard link, postcommit inode/byte/semantic validation
+  and ownership-aware rollback; cross-file crash consistency remains
+  `TBD-OUT-001`.
+- Stage 5 main-agent verification passes 673 socket-denied tests at 92.31%
+  branch coverage; Ruff checks/formats 71 files and strict mypy checks 20 source
+  files without errors.
+- Transcript words `sil` and `null` fail before model loading because current
+  tier labels reserve those identities; a future identity scheme is
+  `TBD-TEXT-001`.
 - No external service, GitHub repository or PyPI project has been changed.
 
 ## Active work
 
-- Main agent: Stage 5 architecture, integration order and acceptance audit.
-- Next parallel streams: strict input/TextGrid output, lazy local-only model
-  inference, and pipeline/API/CLI integration in disjoint files.
+- Main agent: Stage 6 distribution, E2E and release-evidence audit.
+- Parallel read-only streams: package/isolation smoke, frozen-model E2E
+  feasibility/execution, and CI/release workflow audit.
 
 ## Current capability state
 
 | Capability | State |
 |---|---|
-| Python API / CLI / capability discovery | available and Stage 1 tested |
-| English CPU single-file alignment | placeholder pending algorithm stages |
+| Python API / CLI / capability discovery | available and Stage 5 tested |
+| English CPU single-file alignment | available; frozen real-model E2E remains a release gate |
 | Mandarin | placeholder; typed failure verified |
 | GPU | placeholder; typed failure verified |
 | Batch | placeholder; typed failure and non-consumption verified |
@@ -100,20 +115,18 @@
 
 ## Next gate
 
-Stage 5 requires:
+Stage 6 requires:
 
-1. strict transcript, lexicon, WAV, model-directory and vocabulary validation;
-2. a lazy CPU-only Hugging Face adapter using local files only;
-3. an instrumented proof that the Chunker is released before the Aligner loads;
-4. clean Stage 1/Stage 2 orchestration with complete word-index coverage;
-5. merged words/phones tiers and atomically written, read-back-validated
-   TextGrid output;
-6. Python API and single-file CLI success/failure contracts with explicitly
-   uncalibrated metadata.
+1. build and audit the current wheel/sdist;
+2. install the exact wheel outside the source tree and smoke-test it;
+3. run the frozen English model E2E or record an exact `BLOCKED` prerequisite;
+4. audit the declared Python matrix and guarded release workflow;
+5. update README and acceptance evidence without publishing.
 
 ## Known blockers
 
-None for model-free Stage 5 implementation. The inference extra and frozen local
-assets are available for later integration evidence, but fast tests must remain
-model-free and network-disabled. PyPI ownership, remote history, real-model E2E
-execution and behavior-changing algorithm decisions remain open.
+No model-free implementation blocker remains. `TBD-E2E-001` may block the
+official frozen real-model run until an approved effective lexicon supplies
+`openphonetics`; this is being rechecked against current assets. Remote Python
+matrix evidence, PyPI ownership/Trusted Publisher setup, remote-history choice
+and behavior-changing algorithm decisions remain open.

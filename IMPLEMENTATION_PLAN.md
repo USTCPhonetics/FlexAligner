@@ -1,6 +1,6 @@
 # FlexAligner clean-room rebuild implementation plan
 
-> Status: ACCEPTED EXECUTION PLAN — Stage 5 in progress
+> Status: ACCEPTED EXECUTION PLAN — Stage 5 complete; Stage 6 in progress
 > Established: 2026-08-11 (Asia/Shanghai)
 > Local repository: `/Users/yiyi0369/projects/flexaligner-rebuild`
 > Algorithm reference: `/Users/yiyi0369/projects/flexaligner/align_single_cpu.py`
@@ -14,7 +14,7 @@ whose first implemented product path is:
 ```text
 English transcript + local lexicon + local CTC models + 16 kHz mono PCM16 WAV
     -> CPU-only two-stage forced alignment
-    -> validated, atomically written TextGrid
+    -> validated, atomically no-clobber-published TextGrid
 ```
 
 The implementation must preserve the accepted algorithm semantics of the current
@@ -85,7 +85,7 @@ an accepted decision, and vague history is not used to fill project state.
 - Stage 2 pronunciation graph plus two-pass Viterbi alignment;
 - strict input, vocabulary, path-completion and word-order failures;
 - words/phones TextGrid tiers;
-- temporary write, read-back validation and atomic replacement;
+- temporary write, read-back validation and atomic no-clobber publication;
 - optional uncalibrated Stage 1 confidence metadata whose semantics are named
   explicitly and never presented as calibrated probability;
 - Python API and `flexaligner` / `python -m flexaligner` CLI;
@@ -98,16 +98,16 @@ production implementation in this milestone:
 
 | Capability | Placeholder contract | Required behavior now |
 |---|---|---|
-| Mandarin | language/profile boundary | report unavailable; typed failure |
-| GPU | execution backend boundary | report unavailable; CPU remains explicit |
-| Batch | batch request/result boundary | report unavailable; never loop silently |
-| Web | service adapter boundary | report unavailable; no server dependency |
-| Automatic model download | model resolver boundary | local-path resolver only; remote resolver fails |
-| Multi-format audio | audio decoder boundary | WAV/PCM16 decoder only; other formats fail |
-| Automatic resampling | audio transform boundary | strict validator only; no implicit conversion |
-| Chinese segmentation | tokenizer boundary | English whitespace tokenizer only |
-| Default G2P | pronunciation provider boundary | lexicon provider only; OOV remains an error |
-| Confidence calibration | calibrator boundary | identity/uncalibrated marker only; calibrated request fails |
+| Mandarin | `Language.ZH` plus capability guard | report placeholder; typed failure |
+| GPU | `Device.CUDA/MPS` plus capability guard | report placeholder; CPU remains explicit |
+| Batch | `align_batch()` plus capability guard | report placeholder; never consume the iterable |
+| Web | `integration.web` capability plus `serve` CLI | report placeholder; no framework import or port bind |
+| Automatic model download | `ModelResolution.AUTO_DOWNLOAD` plus `models fetch` CLI | local paths only; fail before network access |
+| Multi-format audio | `AudioPolicy.MULTI_FORMAT` | strict WAV/PCM16 decoder only; other formats fail |
+| Automatic resampling | `AudioPolicy.AUTO_RESAMPLE` | strict validator only; no implicit conversion |
+| Chinese segmentation | `text.zh_segmentation` capability with Mandarin guard | English whitespace normalization only |
+| Default G2P | `PronunciationMode.G2P` | lexicon only; OOV remains an error |
+| Confidence calibration | `CalibrationMode.CALIBRATED` plus raw-score schema | uncalibrated marker only; calibrated request fails |
 
 Placeholder methods must not use `pass`, return empty success values, silently
 fall back, download assets, change input data or claim availability.
@@ -389,7 +389,7 @@ Gate:
 
 - failures leave no official output;
 - output is written to a temporary sibling, read back, validated and atomically
-  replaced;
+  published without overwriting an existing path;
 - normalized non-special word sequence equals the input exactly;
 - no network request occurs;
 - core execution remains CPU-only.
@@ -531,9 +531,10 @@ dependency on the unresolved choice.
 
 ## 12. Immediate execution order
 
-1. Complete Stage 0 documents and audit their consistency.
-2. Commit the governance-only baseline.
-3. Merge the three parallel design reviews into Stage 1 files.
-4. Run and record the Stage 1 gates.
-5. Continue one stage at a time; update `STATE.md` and `ACCEPTANCE.md` before
-   moving the active stage forward.
+1. Build and audit the Stage 5 wheel and sdist from the current committed source.
+2. Install that exact wheel outside the repository and run import/CLI smoke tests.
+3. Run the frozen English asset preflight and either execute the real-model E2E
+   or record its exact blocking prerequisite.
+4. Audit the supported-Python CI evidence and guarded release rehearsal without
+   publishing or changing a remote.
+5. Complete the Stage 7 cross-document and repository-state audit.

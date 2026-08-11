@@ -14,9 +14,10 @@
 </div>
 
 > **Rebuild status (2026-08-11):** this repository is a clean implementation
-> baseline. It is not published on PyPI, and the real English alignment path has
-> not yet passed its staged acceptance gates. The capability table below is the
-> authoritative public status; a placeholder is an importable contract that
+> baseline. The strict English CPU single-file path has passed its model-free
+> implementation gates, but the frozen real-model E2E and public-release gates
+> are still pending. It is not published on PyPI. The capability table below is
+> the authoritative public status; a placeholder is an importable contract that
 > fails explicitly, not a supported feature.
 
 ## Introduction / 简介
@@ -30,16 +31,15 @@ testable contracts. The target algorithm has two stages:
 2. **Local alignment / 局部对齐:** a constrained phone graph and two-pass
    Viterbi procedure estimate phone and word boundaries inside each chunk.
 
-The first real product path under development is deliberately narrow: English,
-CPU, one 16 kHz mono PCM16 WAV, an explicit transcript, a local pronunciation
-lexicon, and two local model directories. Inputs that do not satisfy the
-contract fail instead of silently dropping words. Successful output will be a
-validated, atomically written Praat TextGrid.
+The implemented product path is deliberately narrow: English, CPU, one 16 kHz
+mono PCM16 WAV, an explicit transcript, a local pronunciation lexicon, and two
+local model directories. Inputs that do not satisfy the contract fail instead
+of silently dropping words. A successful run publishes a read-back-validated
+Praat TextGrid with an atomic no-clobber filesystem operation.
 
 FlexAligner 保留原项目“CTC 宏观定位 + 局部精细对齐”的产品目标，
-但新代码库不继承旧核心的宽松回退行为。当前第一条真实实现链路
-仅面向英语、CPU、单文件、本地模型和本地词典；其他能力不会被静默
-伪装成已支持。
+但新代码库不继承旧核心的宽松回退行为。当前已实现的第一条链路仅面向
+英语、CPU、单文件、本地模型和本地词典；其他能力不会被静默伪装成已支持。
 
 ## Capability matrix
 
@@ -49,10 +49,10 @@ The package exposes machine-readable capability discovery through
 
 | Capability ID | Public status | Current meaning |
 |---|---|---|
-| `api.python` | `available` | Typed Python package surface is present; algorithm stages remain separately gated. |
-| `cli` | `available` | Version, capability discovery, and explicit placeholder commands are present. |
+| `api.python` | `available` | Import-safe Python API for the strict local English path and guarded placeholders. |
+| `cli` | `available` | Single-file alignment, version, discovery, and explicit placeholder commands are present. |
 | `capabilities.discovery` | `available` | Human-readable and JSON capability reports are present. |
-| `alignment.single_file.en.cpu` | `placeholder` | Target MVP; no accepted production alignment implementation yet. |
+| `alignment.single_file.en.cpu` | `available` | Strict local English CPU alignment; frozen real-model E2E remains a release gate. |
 | `language.zh` | `placeholder` | Mandarin is outside this milestone's real implementation. |
 | `device.gpu` | `placeholder` | CPU is the only planned MVP execution device. |
 | `alignment.batch` | `placeholder` | No batch execution or manifest recovery. |
@@ -64,8 +64,9 @@ The package exposes machine-readable capability discovery through
 | `pronunciation.g2p.default` | `placeholder` | OOV words fail; no default G2P fallback. |
 | `confidence.calibration` | `placeholder` | Any emitted reference score is explicitly uncalibrated. |
 
-An `available` interface is not evidence that the later alignment algorithm has
-passed. Acceptance status is tracked separately in `ACCEPTANCE.md`.
+`available` means a real implementation has passed its current implementation
+gate; it does not mean the package has passed the frozen-model or release gate.
+Acceptance evidence is tracked separately in `ACCEPTANCE.md`.
 
 ## Installation for development
 
@@ -95,7 +96,7 @@ network.
 
 ## Current CLI contract
 
-The implemented Stage 1 discovery surface is:
+The discovery surface is:
 
 ```bash
 flexaligner --version
@@ -103,9 +104,7 @@ flexaligner capabilities
 flexaligner capabilities --json
 ```
 
-The reserved single-file command shape is shown below for interface review. In
-the current Stage 1 package it raises `FeatureNotAvailableError` and must not
-create an official output:
+The implemented strict single-file command is:
 
 ```bash
 flexaligner align \
@@ -114,7 +113,8 @@ flexaligner align \
   --lexicon english.dict \
   --chunker-model /local/models/en/chunker \
   --aligner-model /local/models/en/aligner \
-  --output recording.TextGrid
+  --output recording.TextGrid \
+  --chunk-metadata recording.alignment.json
 ```
 
 `--text "..."` may replace `--text-file`; they are mutually exclusive.
@@ -132,7 +132,7 @@ Machine-readable failures use a stable envelope:
 
 ## Public Python surface
 
-Stage 1 reserves these imports:
+The public package exposes these imports:
 
 ```python
 from flexaligner import (
@@ -153,8 +153,19 @@ from flexaligner import (
 )
 ```
 
-The real alignment methods remain unavailable until their algorithm,
-differential, output, and frozen-model acceptance gates pass.
+`FlexAligner.align()` executes the strict English CPU path lazily. Future
+options are rejected before input, model, output, or network I/O.
+
+## Current limitations
+
+- WAV input must be uncompressed 16 kHz mono PCM16; no decode or resample fallback exists.
+- Models and lexicon must be explicit local paths; OOV words fail.
+- Transcript words `sil` and `null` are currently reserved tier labels and fail
+  before model loading (`TBD-TEXT-001`).
+- Reference gap behavior, the fixed 10 ms Stage 2 stride, and approved default
+  resource limits remain explicit algorithm questions.
+- Optional metadata and TextGrid are validated together in-process, but a crash
+  cannot be made atomic across two separate files (`TBD-OUT-001`).
 
 ## Validation and release policy
 
@@ -176,10 +187,10 @@ are absent; it never downloads a missing model.
 ## Scope and roadmap
 
 - [x] Governance, clean repository, package/API design, and explicit capability states.
-- [ ] Characterize the frozen local algorithm reference with model-free tests.
-- [ ] Implement Stage 1 CTC chunking with differential parity.
-- [ ] Implement Stage 2 graph/Viterbi/redecode with differential parity.
-- [ ] Implement strict local CPU inference and validated TextGrid output.
+- [x] Characterize the frozen local algorithm reference with model-free tests.
+- [x] Implement Stage 1 CTC chunking with differential parity.
+- [x] Implement Stage 2 graph/Viterbi/redecode with differential parity.
+- [x] Implement strict local CPU inference and validated TextGrid output.
 - [ ] Pass the frozen English real-model E2E.
 - [ ] Resolve package ownership/version/license/release `[TBD]` items.
 - [ ] Publish to PyPI only after separate authorization.

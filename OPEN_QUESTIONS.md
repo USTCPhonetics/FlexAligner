@@ -24,6 +24,7 @@ placeholder or explicit limitation.
 | TBD-PROV-001 | What canonical model-directory fingerprint format belongs in public provenance? | leave `model_fingerprints` empty; E2E manifest retains asset hashes | Public reproducibility schema |
 | TBD-INF-001 | Which Hugging Face processor/model architecture combinations are a supported public matrix? | validate the current AutoProcessor/AutoModelForCTC contract strictly; do not claim a broad matrix | Broad model compatibility claim |
 | TBD-THREAD-001 | Should an alignment restore the process-global Torch thread count after execution? | set only the requested positive CPU thread count inside the inference lifecycle; document process-global scope | Thread-isolation claim |
+| TBD-TEXT-001 | How should lexical words named `sil` or `null` coexist with the current special TextGrid labels? | reject them with a typed input error before model loading | Aligning those two English tokens |
 
 ## Non-questions fixed by current scope
 

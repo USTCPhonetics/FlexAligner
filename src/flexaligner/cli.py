@@ -1,4 +1,4 @@
-"""Command-line interface for capability discovery and guarded placeholders."""
+"""Command-line interface for strict alignment and guarded placeholders."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     capability_parser.add_argument("--json", action="store_true", dest="as_json")
 
     align_parser = subparsers.add_parser(
-        "align", help="Align one English PCM16 WAV once the core is available."
+        "align", help="Align one English 16 kHz mono PCM16 WAV with local models."
     )
     align_parser.add_argument("--audio", type=Path, required=True)
     transcript_group = align_parser.add_mutually_exclusive_group(required=True)

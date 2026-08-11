@@ -26,6 +26,10 @@ choices. An implementation choice is not rewritten as user authorization.
 | D-019 | Reject non-finite internal chunk boundaries explicitly before millisecond rounding with a stable `ValueError` | Stage 3 main-agent audit | Accepted safety correction for invalid input only; valid reference behavior unchanged |
 | D-020 | Implement Stage 2 as a NumPy-only graph/beam core while preserving complete-end, stable-tie, per-frame-bias, enter-cost and equal-phone current behavior | Stage 4 parity, exact-DP and main-agent cross-audit | Active implementation choice; equal-phone correction remains TBD-ALG-003 |
 | D-021 | Keep the two characterized duration conversions distinct: Viterbi silence locking uses `round`, while short-gap pruning uses `ceil` | Current reference behavior and Stage 4 differential evidence | Accepted parity behavior; 65 ms at 10 ms is respectively 6 locked frames and a 7-frame prune threshold |
+| D-022 | Fail closed when a local vocabulary has duplicate JSON members, the Chunker tokenizer mapping differs from `vocab.json`, or a posterior is not finite normalized log probability | Stage 5 adapter/pipeline cross-audit | Accepted invalid-model safety correction; valid reference inputs are unchanged |
+| D-023 | Publish output with a same-directory atomic no-clobber hard link, then revalidate identity, exact bytes and semantics; never overwrite a concurrent artifact | Stage 5 output transaction cross-audit | Active implementation choice; cross-file crash consistency remains TBD-OUT-001 |
+| D-024 | Reject transcript tokens `sil` and `null` before model loading because the current reference tier format uses them as reserved labels | Stage 5 word-identity audit | Accepted explicit limitation; a non-conflicting identity scheme remains TBD-TEXT-001 |
+| D-025 | Keep Chunker and Aligner model sessions non-overlapping, CPU-only and local-only; release the Chunker before loading the Aligner | Stage 5 lifecycle audit and current user scope | Active implementation choice |
 
 ## Pending algorithm decisions
 

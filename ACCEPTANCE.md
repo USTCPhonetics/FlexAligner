@@ -67,13 +67,13 @@
 
 | ID | Acceptance condition | Status | Evidence / command | Reviewer note |
 |---|---|---|---|---|
-| S5-001 | Strict WAV/text/lexicon/model/vocabulary validation is enforced | NOT_RUN | input matrix tests | |
-| S5-002 | Inference is CPU-only, local-only and lazily imports model dependencies | NOT_RUN | adapter tests/integration trace | |
-| S5-003 | Chunker and Aligner models are loaded sequentially rather than retained together | NOT_RUN | instrumented integration test | |
-| S5-004 | Pipeline preserves complete normalized input word order | NOT_RUN | integration/differential tests | |
-| S5-005 | TextGrid is temporary-written, read back, validated and atomically replaced | NOT_RUN | failure-injection tests | |
-| S5-006 | Failed runs leave no official success artifact | NOT_RUN | failure-injection tests | |
-| S5-007 | Confidence metadata is explicitly uncalibrated | NOT_RUN | schema/docs tests | |
+| S5-001 | Strict WAV/text/lexicon/model/vocabulary validation is enforced | PASS | 50 strict input tests; posterior/model negative integration tests; full 673-test gate | Includes duplicate JSON keys, exact Chunker token→ID mapping and reserved-label preflight |
+| S5-002 | Inference is CPU-only, local-only and lazily imports model dependencies | PASS | `test_hf_local.py` plus import-safety tests; 46 adapter/lifecycle tests | `local_files_only=True`, `trust_remote_code=False`; no top-level Torch/Transformers import |
+| S5-003 | Chunker and Aligner models are loaded sequentially rather than retained together | PASS | `test_model_lifecycle.py`; instrumented integration trace | `chunk.load→infer→close→align.load→infer→close`, including failure cleanup |
+| S5-004 | Pipeline preserves complete normalized input word order | PASS | 24 integration tests plus Stage 1/2 invariants | Repeated words remain index-distinct; incomplete or changed sequences fail |
+| S5-005 | TextGrid is temporary-written, read back, validated and atomically published without overwrite | PASS | 34 TextGrid/transaction tests | No-clobber hard-link commit; inode/bytes/semantic postvalidation; TBD-OUT-001 retained |
+| S5-006 | Failed runs leave no official success artifact | PASS | race, tamper, symlink and failure-injection tests | Rollback removes only artifacts still owned by that invocation |
+| S5-007 | Confidence metadata is explicitly uncalibrated | PASS | pipeline/API/metadata integration tests | Raw scores are finite `[0,1]`; `calibrated=false`, no calibrated score substitution |
 
 ## G. Requested placeholder interfaces
 
@@ -94,10 +94,10 @@
 
 | ID | Acceptance condition | Status | Evidence / command | Reviewer note |
 |---|---|---|---|---|
-| Q-001 | Formatter and linter pass with no ignored new violations | PASS | Ruff 0.16.2: 50 maintained files formatted; all checks passed | Immutable reference excluded and hash-guarded |
-| Q-002 | Strict static type check passes | PASS | mypy 2.3.0: no issues in 13 configured `src`/`scripts` files | Strict config |
+| Q-001 | Formatter and linter pass with no ignored new violations | PASS | Ruff 0.16.2: 71 maintained files formatted; all checks passed | Immutable reference excluded and hash-guarded |
+| Q-002 | Strict static type check passes | PASS | mypy 2.3.0: no issues in 20 configured `src`/`scripts` files | Strict config |
 | Q-003 | Fast tests pass on every supported Python version | NOT_RUN | CI matrix/local available versions | |
-| Q-004 | Coverage meets the recorded non-decreasing threshold | PASS | branch coverage 94.75%; D-015 threshold 85% | 348 tests, Python 3.10.8 |
+| Q-004 | Coverage meets the recorded non-decreasing threshold | PASS | branch coverage 92.31%; D-015 threshold 85% | 673 tests, Python 3.10.8, sockets disabled |
 | Q-005 | Wheel and sdist build from clean source and pass metadata checks | PASS | fresh Stage 3 Hatchling build; Twine/check-wheel/audit all pass | wheel `8bf98278...7868f`; sdist `6d83cb0c...be364` |
 | Q-006 | Built wheel installs and runs outside repository source tree | PASS | `/tmp/flexaligner-stage3-smoke.TPMkh3`; `pip check`, site-packages core import, CLI | Exact Stage 3 wheel used |
 | Q-007 | English real-model E2E passes with frozen assets, or is truthfully `BLOCKED` | NOT_RUN | E2E report and hashes | |
