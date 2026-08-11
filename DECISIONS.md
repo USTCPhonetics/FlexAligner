@@ -19,7 +19,9 @@ choices. An implementation choice is not rewritten as user authorization.
 | D-012 | Characterize and reach reference parity before behavior-changing corrections | Main-agent migration guard derived from “local logic is authoritative” | Active implementation choice |
 | D-013 | Do not publish to PyPI or mutate a remote repository without separate explicit authorization | Current scope and external-write safety | Active guard |
 | D-014 | Use a `src/` package layout and one canonical version source | Main-agent packaging design; aligned with current PyPA guidance | Active implementation choice |
-| D-015 | Set the first branch-coverage ratchet to 85% after a reviewed 88% Stage 1 baseline; future changes may hold or raise it but not silently lower it | Main-agent local gate evidence, 45 tests on Python 3.10.8 | Active implementation choice |
+| D-015 | Set the first branch-coverage ratchet to 85% after a reviewed 88% Stage 1 baseline; future changes may hold or raise it but not silently lower it | Main-agent local gate evidence, 50 Stage 1 tests on Python 3.10.8 | Active implementation choice |
+| D-016 | Vendor the authoritative script byte-for-byte as test evidence, while forbidding production imports and excluding it from wheel/sdist | Stage 2 portability and package-boundary audit | Active implementation choice |
+| D-017 | Bind offline model preflight to the committed candidate manifest and exact recorded runtime; missing or mismatched prerequisites fail closed | Stage 2 E2E-preflight audit | Active implementation choice; real alignment E2E remains pending |
 
 ## Pending algorithm decisions
 

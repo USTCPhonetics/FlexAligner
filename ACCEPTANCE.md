@@ -33,13 +33,13 @@
 
 | ID | Acceptance condition | Status | Evidence / command | Reviewer note |
 |---|---|---|---|---|
-| S2-001 | CI guards the frozen reference hash or an equivalent vendored oracle manifest | NOT_RUN | hash-guard test | |
-| S2-002 | Stage 1 reference semantics have model-free array tests | NOT_RUN | characterization test report | |
-| S2-003 | Stage 2 graph/path/prune/redecode semantics have model-free tests | NOT_RUN | characterization test report | |
-| S2-004 | Input, failure, word-order, TextGrid and atomic-write semantics have tests | NOT_RUN | characterization test report | |
-| S2-005 | Differential harness reports field-level mismatches and forbids casual golden refresh | NOT_RUN | harness tests / policy audit | |
-| S2-006 | Real-model fixture manifest records hashes, versions and provenance | NOT_RUN | manifest validation | |
-| S2-007 | Missing E2E assets produce `BLOCKED`/explicit preflight failure, never a passing skip | NOT_RUN | negative E2E preflight | |
+| S2-001 | CI guards the frozen reference hash or an equivalent vendored oracle manifest | PASS | byte `cmp`; SHA `9ed4e21e…835de1`; 7 guard tests; fresh dist audit | Vendored reference is test-only and denied from wheel/sdist |
+| S2-002 | Stage 1 reference semantics have model-free array tests | PASS | `test_stage1_reference.py`: 30 passed | Independent NumPy and exhaustive small-case oracles |
+| S2-003 | Stage 2 graph/path/prune/redecode semantics have model-free tests | PASS | `test_stage2_reference.py`: 26 passed | Exact-DP oracle plus named equal-phone limitation |
+| S2-004 | Input, failure, word-order, TextGrid and atomic-write semantics have tests | PASS | input 19 passed; TextGrid/output 6 passed; Stage 1 coverage negatives | Strict PCM16/16 kHz/mono and no skip/xfail |
+| S2-005 | Differential harness reports field-level mismatches and forbids casual golden refresh | PASS | differential tests 4 passed; characterization policy audit | A/B/C classes separated; no update-golden entry point |
+| S2-006 | Real-model fixture manifest records hashes, versions and provenance | PASS | 16/16 hashes plus exact 3.10.8/2.2.6/2.3.1/4.41.2 runtime preflight | Candidate fixture; real alignment E2E remains Q-007 |
+| S2-007 | Missing E2E assets produce `BLOCKED`/explicit preflight failure, never a passing skip | PASS | `test_verify_model_assets.py`: 7 passed; negative subprocess exits nonzero | Workflow binds committed manifest and exact runtime check |
 
 ## D. Stage 3 — Stage 1 implementation
 
@@ -94,11 +94,11 @@
 
 | ID | Acceptance condition | Status | Evidence / command | Reviewer note |
 |---|---|---|---|---|
-| Q-001 | Formatter and linter pass with no ignored new violations | PASS | Ruff 0.16.2: 22 files formatted; all checks passed | Verified 2026-08-11 |
-| Q-002 | Strict static type check passes | PASS | mypy 2.3.0: no issues under configured `src/tests/scripts` scope | Strict config |
+| Q-001 | Formatter and linter pass with no ignored new violations | PASS | Ruff 0.16.2: 43 maintained files formatted; all checks passed | Immutable reference excluded and hash-guarded |
+| Q-002 | Strict static type check passes | PASS | mypy 2.3.0: no issues in 11 configured `src`/`scripts` files | Strict config |
 | Q-003 | Fast tests pass on every supported Python version | NOT_RUN | CI matrix/local available versions | |
-| Q-004 | Coverage meets the recorded non-decreasing threshold | PASS | branch coverage 88.16%; D-015 threshold 85% | 50 tests, Python 3.10.8 |
-| Q-005 | Wheel and sdist build from clean source and pass metadata checks | PASS | Hatchling build; Twine/check-wheel/audit all pass | wheel `f3b6e47f...b9449`; sdist `3867f2c6...a5353` |
+| Q-004 | Coverage meets the recorded non-decreasing threshold | PASS | branch coverage 88.16%; D-015 threshold 85% | 149 tests, Python 3.10.8 |
+| Q-005 | Wheel and sdist build from clean source and pass metadata checks | PASS | fresh Hatchling build; Twine/check-wheel/audit all pass | wheel `f3b6e47f...b9449`; sdist `d87c8a08...7d801` |
 | Q-006 | Built wheel installs and runs outside repository source tree | PASS | `/tmp/flexaligner-wheel-smoke.Q5d5Vd`; `pip check`, import path, CLI | Final rebuilt wheel used |
 | Q-007 | English real-model E2E passes with frozen assets, or is truthfully `BLOCKED` | NOT_RUN | E2E report and hashes | |
 | Q-008 | No test or package import performs an undeclared network request | PASS | `pytest --disable-socket`; import-safety subprocess; offline env | Dependency installation is a separate networked setup step |
