@@ -4,7 +4,9 @@
 
 ## Current stage
 
-`Stage 0 — repository, governance and executable plan` is in progress.
+`Stage 0 — repository, governance and executable plan` is complete.
+
+`Stage 1 — package and interface skeleton` is in progress.
 
 ## Verified current state
 
@@ -12,6 +14,7 @@
   Git repository on branch `main`.
 - No Git remote is configured.
 - `IMPLEMENTATION_PLAN.md` has been created before production implementation.
+- The governance-only root commit is `833306e`.
 - The authoritative algorithm reference remains external at
   `/Users/yiyi0369/projects/flexaligner/align_single_cpu.py` with expected
   SHA-256 `9ed4e21e615718ddfd10930359f55769fb27a0d284599cce45a3fc755e835de1`.
@@ -21,7 +24,7 @@
 
 ## Active work
 
-- Main agent: governance baseline, acceptance matrix and Stage 0 audit.
+- Main agent: Stage 1 integration, package/API audit and acceptance evidence.
 - Parallel stream A: packaging and strict CI/CD design review.
 - Parallel stream B: architecture and placeholder-interface design review.
 - Parallel stream C: characterization, differential and E2E test design review.
@@ -44,7 +47,7 @@
 
 ## Next gate
 
-Stage 0 passes only after:
+Stage 0 passed after:
 
 1. all governance files exist and agree on scope;
 2. the current reference hash is independently rechecked;
@@ -52,11 +55,12 @@ Stage 0 passes only after:
 4. `git diff --check` and a cross-document audit pass;
 5. the governance-only baseline is committed locally.
 
-After that, Stage 1 may start.
+Stage 1 now requires an import-safe `src/` package, explicit placeholder behavior,
+packaging metadata, fast tests, CI workflow and guarded release workflow before
+algorithm migration begins.
 
 ## Known blockers
 
 None for Stage 0. PyPI ownership, final remote history strategy, the frozen E2E
 effective lexicon and behavior-changing algorithm decisions remain open but do
 not block the package/interface skeleton.
-

@@ -1,7 +1,7 @@
 # ACCEPTANCE MATRIX
 
-> Reviewer: main agent  
-> Rule: only the main agent changes a row to `PASS` after rerunning its evidence.  
+> Reviewer: main agent
+> Rule: only the main agent changes a row to `PASS` after rerunning its evidence.
 > Status vocabulary: `NOT_RUN`, `IN_PROGRESS`, `PASS`, `FAIL`, `BLOCKED`,
 > `PLACEHOLDER`, `N/A`.
 
@@ -14,7 +14,7 @@
 | S0-003 | Governance documents agree on fact authority, scope and placeholders | PASS | main-agent cross-document audit of six Markdown files | Accepted/user facts separated from implementation choices |
 | S0-004 | Reference file exists and SHA-256 matches the frozen value | PASS | `shasum -a 256 /Users/yiyi0369/projects/flexaligner/align_single_cpu.py` | `9ed4e21e...e835de1`, verified 2026-08-11 |
 | S0-005 | All unresolved material choices are visible as `[TBD]`/open questions | PASS | `rg 'TBD'`; `OPEN_QUESTIONS.md`; algorithm table in `DECISIONS.md` | Material unknowns mapped to stable IDs |
-| S0-006 | Governance-only baseline passes whitespace/diff checks and is committed | IN_PROGRESS | `git diff --check` passed; initial commit pending | |
+| S0-006 | Governance-only baseline passes whitespace/diff checks and is committed | PASS | `git diff --check`; root commit `833306e` | Governance baseline committed 2026-08-11 |
 
 ## B. Stage 1 — package, interfaces and CI/CD
 

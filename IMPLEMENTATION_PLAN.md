@@ -1,9 +1,9 @@
 # FlexAligner clean-room rebuild implementation plan
 
-> Status: ACCEPTED EXECUTION PLAN — Stage 0 in progress  
-> Established: 2026-08-11 (Asia/Shanghai)  
-> Local repository: `/Users/yiyi0369/projects/flexaligner-rebuild`  
-> Algorithm reference: `/Users/yiyi0369/projects/flexaligner/align_single_cpu.py`  
+> Status: ACCEPTED EXECUTION PLAN — Stage 1 in progress
+> Established: 2026-08-11 (Asia/Shanghai)
+> Local repository: `/Users/yiyi0369/projects/flexaligner-rebuild`
+> Algorithm reference: `/Users/yiyi0369/projects/flexaligner/align_single_cpu.py`
 > Reference SHA-256: `9ed4e21e615718ddfd10930359f55769fb27a0d284599cce45a3fc755e835de1`
 
 ## 1. Objective
