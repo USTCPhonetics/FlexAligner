@@ -33,7 +33,7 @@ def require_mapping(value: Any, *, field: str) -> dict[str, Any]:
     return value
 
 
-def validate_manifest_metadata(payload: dict[str, Any]) -> dict[str, str]:
+def validate_manifest_metadata(payload: dict[str, Any]) -> tuple[dict[str, str], str]:
     require_string(payload.get("fixture_id"), field="fixture_id")
     status = require_string(payload.get("status"), field="status")
     if status not in {"candidate", "approved"}:
@@ -49,7 +49,7 @@ def validate_manifest_metadata(payload: dict[str, Any]) -> dict[str, str]:
         for name, version in runtime_payload.items()
     }
     require_mapping(payload.get("provenance"), field="provenance")
-    return runtime
+    return runtime, status
 
 
 def verify_runtime(runtime: dict[str, str]) -> None:
@@ -110,6 +110,11 @@ def main() -> None:
         action="store_true",
         help="also require exact Python and installed-distribution versions",
     )
+    parser.add_argument(
+        "--require-approved",
+        action="store_true",
+        help="fail closed unless the manifest status is exactly 'approved'",
+    )
     args = parser.parse_args()
 
     if not args.manifest.is_file():
@@ -117,7 +122,12 @@ def main() -> None:
     payload = json.loads(args.manifest.read_text(encoding="utf-8"))
     if not isinstance(payload, dict) or payload.get("schema_version") != 1:
         raise RuntimeError("MODEL_E2E_BLOCKED: manifest schema_version must be 1")
-    runtime = validate_manifest_metadata(payload)
+    runtime, status = validate_manifest_metadata(payload)
+    if args.require_approved and status != "approved":
+        raise RuntimeError(
+            "MODEL_E2E_BLOCKED: manifest is not approved: "
+            f"status={status}, manifest={args.manifest}"
+        )
     if args.check_runtime:
         verify_runtime(runtime)
 

@@ -41,8 +41,11 @@ def test_fast_ci_has_read_only_permissions_and_no_privileged_trigger() -> None:
     assert "id-token: write" not in source
     assert "permissions:\n  contents: read" in source
     assert 'HF_HUB_OFFLINE: "1"' in source
+    assert 'HF_HUB_DISABLE_TELEMETRY: "1"' in source
     assert 'TRANSFORMERS_OFFLINE: "1"' in source
     assert "--disable-socket" in source
+    assert '-m "not model_e2e"' in source
+    assert "python -m build --no-isolation --sdist --wheel" in source
 
 
 def test_release_is_tag_only_and_oidc_is_confined_to_publish_job() -> None:
@@ -62,15 +65,27 @@ def test_release_is_tag_only_and_oidc_is_confined_to_publish_job() -> None:
     assert "python -m build" not in publish_block
 
 
+def test_build_backend_is_exact_and_used_without_isolation() -> None:
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'requires = ["hatchling==1.32.0"]' in pyproject
+    build_command = "python -m build --no-isolation --sdist --wheel"
+    assert build_command in _workflow_sources()["ci.yml"]
+    assert build_command in _workflow_sources()["release.yml"]
+
+
 def test_model_e2e_is_offline_and_fails_closed_without_manifest() -> None:
     source = _workflow_sources()["model-e2e.yml"]
     assert "pull_request:" not in source
     assert "pull_request_target:" not in source
     assert 'HF_HUB_OFFLINE: "1"' in source
+    assert 'HF_HUB_DISABLE_TELEMETRY: "1"' in source
     assert 'TRANSFORMERS_OFFLINE: "1"' in source
     assert "--no-index" in source
     assert "verify_model_assets.py" in source
+    assert "--check-runtime" in source
+    assert "--require-approved" in source
     assert "MODEL_E2E_BLOCKED" in source
+    assert "-m model_e2e" in source
     for downloader in ("curl ", "wget ", "huggingface-cli", "hf download"):
         assert downloader not in source
 

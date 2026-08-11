@@ -20,6 +20,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  HF_HUB_DISABLE_TELEMETRY: "1"
   FLEXALIGNER_E2E_ASSET_ROOT: ${{ vars.FLEXALIGNER_E2E_ASSET_ROOT }}
   FLEXALIGNER_E2E_WHEELHOUSE: ${{ vars.FLEXALIGNER_E2E_WHEELHOUSE }}
   HF_HUB_OFFLINE: "1"
@@ -108,7 +109,8 @@ jobs:
         run: |
           python scripts/verify_model_assets.py \
             tests/fixtures/e2e/asset_manifest.json \
-            --check-runtime
+            --check-runtime \
+            --require-approved
       - name: Prove the installed package imports outside the source tree
         shell: bash
         run: |

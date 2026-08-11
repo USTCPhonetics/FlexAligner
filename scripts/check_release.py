@@ -5,9 +5,13 @@ from __future__ import annotations
 
 import argparse
 import re
+import sys
 from pathlib import Path
 
-import tomli as tomllib
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # pragma: no cover - exercised by the configured Python 3.10 type/runtime gate
+    import tomli as tomllib
 
 STABLE_VERSION = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)")
 

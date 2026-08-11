@@ -51,6 +51,7 @@ def _run(
     *,
     env: dict[str, str] | None = None,
     check_runtime: bool = False,
+    require_approved: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     clean_env = os.environ.copy()
     if env:
@@ -58,6 +59,8 @@ def _run(
     command = [sys.executable, str(SCRIPT), str(manifest)]
     if check_runtime:
         command.append("--check-runtime")
+    if require_approved:
+        command.append("--require-approved")
     return subprocess.run(
         command,
         check=False,
@@ -127,6 +130,41 @@ def test_runtime_mismatch_is_an_explicit_blocker(tmp_path: Path) -> None:
 
     assert result.returncode != 0
     assert "MODEL_E2E_BLOCKED: Python version mismatch" in result.stderr
+
+
+def test_release_gate_blocks_candidate_manifest_before_asset_access(tmp_path: Path) -> None:
+    manifest = tmp_path / "manifest.json"
+    _write_manifest(
+        manifest,
+        _manifest_payload(
+            root=str(tmp_path),
+            files=[{"path": "absent.bin", "sha256": "0" * 64, "role": "model"}],
+        ),
+    )
+
+    result = _run(manifest, require_approved=True)
+
+    assert result.returncode != 0
+    assert "MODEL_E2E_BLOCKED: manifest is not approved" in result.stderr
+    assert "status=candidate" in result.stderr
+    assert "asset is absent" not in result.stderr
+
+
+def test_release_gate_accepts_approved_manifest(tmp_path: Path) -> None:
+    asset = tmp_path / "model.bin"
+    asset.write_bytes(b"approved-model")
+    manifest = tmp_path / "manifest.json"
+    payload = _manifest_payload(
+        root=str(tmp_path),
+        files=[{"path": "model.bin", "sha256": _sha256(asset), "role": "model"}],
+    )
+    payload["status"] = "approved"
+    _write_manifest(manifest, payload)
+
+    result = _run(manifest, require_approved=True)
+
+    assert result.returncode == 0
+    assert "MODEL_E2E_ASSETS_OK" in result.stdout
 
 
 def test_committed_candidate_manifest_has_frozen_runtime_and_provenance() -> None:

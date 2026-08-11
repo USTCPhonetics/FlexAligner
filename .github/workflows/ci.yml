@@ -15,6 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  HF_HUB_DISABLE_TELEMETRY: "1"
   HF_HUB_OFFLINE: "1"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
   TOKENIZERS_PARALLELISM: "false"
@@ -91,6 +92,7 @@ jobs:
       - name: Run network-denied fast suite with branch coverage
         run: >-
           python -m pytest
+          -m "not model_e2e"
           --disable-socket
           --cov=flexaligner
           --cov-report=term-missing
@@ -116,7 +118,7 @@ jobs:
           python -m pip install --upgrade pip==26.1.2
           python -m pip install --group package
       - name: Build one wheel and one source distribution
-        run: python -m build --sdist --wheel
+        run: python -m build --no-isolation --sdist --wheel
       - name: Check metadata and package inventory
         run: |
           python -m twine check --strict dist/*
