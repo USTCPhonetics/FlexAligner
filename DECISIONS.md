@@ -30,6 +30,9 @@ choices. An implementation choice is not rewritten as user authorization.
 | D-023 | Publish output with a same-directory atomic no-clobber hard link, then revalidate identity, exact bytes and semantics; never overwrite a concurrent artifact | Stage 5 output transaction cross-audit | Active implementation choice; cross-file crash consistency remains TBD-OUT-001 |
 | D-024 | Reject transcript tokens `sil` and `null` before model loading because the current reference tier format uses them as reserved labels | Stage 5 word-identity audit | Accepted explicit limitation; a non-conflicting identity scheme remains TBD-TEXT-001 |
 | D-025 | Keep Chunker and Aligner model sessions non-overlapping, CPU-only and local-only; release the Chunker before loading the Aligner | Stage 5 lifecycle audit and current user scope | Active implementation choice |
+| D-026 | Treat the frozen English manifest as engineering evidence while `status=candidate`; a release E2E must fail closed unless the manifest is explicitly `approved` | Stage 6 E2E and release audit | Active release guard; TBD-E2E-001 remains unresolved |
+| D-027 | Pin Hatchling exactly and build with `--no-isolation` after the pinned package group is installed | Stage 6 reproducibility audit | Active CI/release choice; current backend is 1.32.0 |
+| D-028 | Use the current reference/new double-run output as the E2E oracle; retain the pre-existing OpenPhonetics TextGrid only as a hashed legacy candidate | D-003 authority rule plus Stage 6 byte comparison | Accepted conflict resolution; no legacy-output expectations were merged |
 
 ## Pending algorithm decisions
 

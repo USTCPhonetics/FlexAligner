@@ -1,6 +1,6 @@
 # FlexAligner clean-room rebuild implementation plan
 
-> Status: ACCEPTED EXECUTION PLAN — Stage 5 complete; Stage 6 in progress
+> Status: EXECUTION COMPLETE — engineering baseline accepted; public release blocked
 > Established: 2026-08-11 (Asia/Shanghai)
 > Local repository: `/Users/yiyi0369/projects/flexaligner-rebuild`
 > Algorithm reference: `/Users/yiyi0369/projects/flexaligner/align_single_cpu.py`
@@ -531,10 +531,13 @@ dependency on the unresolved choice.
 
 ## 12. Immediate execution order
 
-1. Build and audit the Stage 5 wheel and sdist from the current committed source.
-2. Install that exact wheel outside the repository and run import/CLI smoke tests.
-3. Run the frozen English asset preflight and either execute the real-model E2E
-   or record its exact blocking prerequisite.
-4. Audit the supported-Python CI evidence and guarded release rehearsal without
-   publishing or changing a remote.
-5. Complete the Stage 7 cross-document and repository-state audit.
+1. Obtain explicit approval or replacement evidence for the fixture-only
+   `openphonetics` pronunciation, then change manifest status only through a
+   reviewed decision.
+2. Choose the public repository/history, PyPI owner/name and stable release
+   version; re-audit README/LICENSE attribution.
+3. Configure the protected `pypi` environment, Trusted Publisher, self-hosted
+   E2E runner, asset root and offline wheelhouse.
+4. Run the declared Python/OS matrix and dependency audit on the chosen remote.
+5. Only after every release blocker is cleared, create the stable tag and grant
+   the separate publication authorization required by D-013.

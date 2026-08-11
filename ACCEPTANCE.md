@@ -94,20 +94,20 @@
 
 | ID | Acceptance condition | Status | Evidence / command | Reviewer note |
 |---|---|---|---|---|
-| Q-001 | Formatter and linter pass with no ignored new violations | PASS | Ruff 0.16.2: 71 maintained files formatted; all checks passed | Immutable reference excluded and hash-guarded |
+| Q-001 | Formatter and linter pass with no ignored new violations | PASS | Ruff 0.16.2: 75 maintained files formatted; all checks passed | Immutable reference excluded and hash-guarded |
 | Q-002 | Strict static type check passes | PASS | mypy 2.3.0: no issues in 20 configured `src`/`scripts` files | Strict config |
-| Q-003 | Fast tests pass on every supported Python version | NOT_RUN | CI matrix/local available versions | |
-| Q-004 | Coverage meets the recorded non-decreasing threshold | PASS | branch coverage 92.31%; D-015 threshold 85% | 673 tests, Python 3.10.8, sockets disabled |
-| Q-005 | Wheel and sdist build from clean source and pass metadata checks | PASS | fresh Stage 3 Hatchling build; Twine/check-wheel/audit all pass | wheel `8bf98278...7868f`; sdist `6d83cb0c...be364` |
-| Q-006 | Built wheel installs and runs outside repository source tree | PASS | `/tmp/flexaligner-stage3-smoke.TPMkh3`; `pip check`, site-packages core import, CLI | Exact Stage 3 wheel used |
-| Q-007 | English real-model E2E passes with frozen assets, or is truthfully `BLOCKED` | NOT_RUN | E2E report and hashes | |
-| Q-008 | No test or package import performs an undeclared network request | PASS | `pytest --disable-socket`; import-safety subprocess; offline env | Dependency installation is a separate networked setup step |
+| Q-003 | Fast tests pass on every supported Python version | BLOCKED | local 3.10.8 and partial 3.12.12 each: 676 passed, 1 E2E deselected | No remote; 3.11/3.13/3.14 and Linux/Windows matrix have no current result |
+| Q-004 | Coverage meets the recorded non-decreasing threshold | PASS | branch coverage 92.31%; D-015 threshold 85% | 676 fast tests, Python 3.10.8, E2E marker deselected |
+| Q-005 | Wheel and sdist build from current source and pass metadata checks | PASS | Hatchling 1.32.0, `--no-isolation`; Twine strict/check-wheel/audit all pass | wheel `882337e5...b1199d32`; sdist `93b5fb63...79c51a82` |
+| Q-006 | Built wheel installs and runs outside repository source tree | PASS | `/tmp/flexaligner-stage6-audit.zF3bSS/wheel-venv`; `pip check`, site-packages import, CLI/capabilities | Exact final wheel `882337e5...b1199d32` used |
+| Q-007 | English real-model E2E passes with frozen assets, or is truthfully `BLOCKED` | BLOCKED | exact-wheel candidate E2E: 1 passed; TextGrid `ddbe0fec...e415f`; 16/16 assets | Engineering parity passes; release requires approved manifest and current status is `candidate` |
+| Q-008 | No test or package import performs an undeclared network request | PASS | 676 fast tests and exact-wheel E2E with socket disabled; offline model env | Dependency installation is a separate networked setup step |
 
 ## I. Stage 7 — final audit
 
 | ID | Acceptance condition | Status | Evidence / command | Reviewer note |
 |---|---|---|---|---|
-| F-001 | All required rows are `PASS`; intentional future features are `PLACEHOLDER` | NOT_RUN | acceptance audit script/manual review | |
-| F-002 | README claims map to tests/evidence and do not advertise placeholders as support | NOT_RUN | README capability audit | |
-| F-003 | `STATE`, decisions and open questions match the verified repository state | NOT_RUN | cross-document audit | |
-| F-004 | Working tree, commits, remotes and unexecuted publication steps are reported exactly | NOT_RUN | final Git/release audit | |
+| F-001 | All required rows are `PASS`; intentional future features are `PLACEHOLDER` | BLOCKED | main-agent acceptance audit | Q-003 remote matrix and Q-007 approved fixture remain blocked; no false PASS |
+| F-002 | README claims map to tests/evidence and do not advertise placeholders as support | PASS | README/runtime capability cross-audit; placeholder tests | English path available; ten requested future capabilities remain placeholder |
+| F-003 | `STATE`, decisions and open questions match the verified repository state | PASS | main-agent cross-document audit | Candidate E2E and public-release blockers are separated explicitly |
+| F-004 | Working tree, commits, remotes and unexecuted publication steps are reported exactly | PASS | final `git status`, `git log`, `git remote -v`, release-guard audit | Local main only; no remote, tag, GitHub/PyPI mutation or publish |

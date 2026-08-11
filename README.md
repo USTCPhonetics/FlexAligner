@@ -15,10 +15,11 @@
 
 > **Rebuild status (2026-08-11):** this repository is a clean implementation
 > baseline. The strict English CPU single-file path has passed its model-free
-> implementation gates, but the frozen real-model E2E and public-release gates
-> are still pending. It is not published on PyPI. The capability table below is
-> the authoritative public status; a placeholder is an importable contract that
-> fails explicitly, not a supported feature.
+> gates and an exact-wheel engineering E2E against the frozen local reference.
+> The fixture manifest remains `candidate`, so the approved-asset, remote-matrix
+> and public-release gates are still blocked. It is not published on PyPI. The
+> capability table below is the authoritative public status; a placeholder is
+> an importable contract that fails explicitly, not a supported feature.
 
 ## Introduction / 简介
 
@@ -52,7 +53,7 @@ The package exposes machine-readable capability discovery through
 | `api.python` | `available` | Import-safe Python API for the strict local English path and guarded placeholders. |
 | `cli` | `available` | Single-file alignment, version, discovery, and explicit placeholder commands are present. |
 | `capabilities.discovery` | `available` | Human-readable and JSON capability reports are present. |
-| `alignment.single_file.en.cpu` | `available` | Strict local English CPU alignment; frozen real-model E2E remains a release gate. |
+| `alignment.single_file.en.cpu` | `available` | Strict local English CPU alignment; candidate E2E passed, approved-asset release gate blocked. |
 | `language.zh` | `placeholder` | Mandarin is outside this milestone's real implementation. |
 | `device.gpu` | `placeholder` | CPU is the only planned MVP execution device. |
 | `alignment.batch` | `placeholder` | No batch execution or manifest recovery. |
@@ -65,8 +66,8 @@ The package exposes machine-readable capability discovery through
 | `confidence.calibration` | `placeholder` | Any emitted reference score is explicitly uncalibrated. |
 
 `available` means a real implementation has passed its current implementation
-gate; it does not mean the package has passed the frozen-model or release gate.
-Acceptance evidence is tracked separately in `ACCEPTANCE.md`.
+gate; it does not mean the package has passed the approved-asset or public
+release gate. Acceptance evidence is tracked separately in `ACCEPTANCE.md`.
 
 ## Installation for development
 
@@ -125,8 +126,12 @@ Machine-readable failures use a stable envelope:
 ```json
 {
   "code": "feature_not_available",
-  "message": "The requested capability is not available in this build.",
-  "context": {}
+  "message": "Capability 'alignment.batch' is placeholder: Batch execution is outside the first implementation milestone.",
+  "context": {
+    "capability": "alignment.batch",
+    "reason": "Batch execution is outside the first implementation milestone.",
+    "status": "placeholder"
+  }
 }
 ```
 
@@ -162,8 +167,11 @@ options are rejected before input, model, output, or network I/O.
 - Models and lexicon must be explicit local paths; OOV words fail.
 - Transcript words `sil` and `null` are currently reserved tier labels and fail
   before model loading (`TBD-TEXT-001`).
-- Reference gap behavior, the fixed 10 ms Stage 2 stride, and approved default
-  resource limits remain explicit algorithm questions.
+- Reference gap behavior (including the frozen fixture's tail gap), the fixed
+  10 ms Stage 2 stride, and approved default resource limits remain explicit
+  algorithm questions.
+- The frozen Hugging Face bundles emit weight-normalization migration warnings;
+  broader architecture compatibility remains `TBD-INF-001`.
 - Optional metadata and TextGrid are validated together in-process, but a crash
   cannot be made atomic across two separate files (`TBD-OUT-001`).
 
@@ -180,9 +188,10 @@ options are rejected before input, model, output, or network I/O.
   approval.
 - PyPI Trusted Publishing is not configured and publishing is not authorized.
 
-The dedicated E2E runner label, local manifest path, and offline dependency
-wheelhouse are deployment `[TBD]` values. The workflow fails closed when they
-are absent; it never downloads a missing model.
+The self-hosted runner provisioning, asset-root repository variable, and offline
+dependency wheelhouse are deployment `[TBD]` values. The manifest path is
+committed; the workflow fails closed when infrastructure or assets are absent
+and never downloads a missing model.
 
 ## Scope and roadmap
 
@@ -191,7 +200,8 @@ are absent; it never downloads a missing model.
 - [x] Implement Stage 1 CTC chunking with differential parity.
 - [x] Implement Stage 2 graph/Viterbi/redecode with differential parity.
 - [x] Implement strict local CPU inference and validated TextGrid output.
-- [ ] Pass the frozen English real-model E2E.
+- [x] Pass a socket-denied exact-wheel engineering E2E against the candidate frozen assets.
+- [ ] Approve the fixture pronunciation and pass the protected remote E2E gate.
 - [ ] Resolve package ownership/version/license/release `[TBD]` items.
 - [ ] Publish to PyPI only after separate authorization.
 

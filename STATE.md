@@ -17,7 +17,11 @@
 
 `Stage 5 — inference, pipeline, CLI and output` is complete at commit `6c1d4eb`.
 
-`Stage 6 — package, real-model E2E and release rehearsal` is in progress.
+`Stage 6 — package, real-model E2E and release rehearsal` is complete at commit
+`e694645`, with the approved-fixture release gate truthfully blocked.
+
+`Stage 7 — main-agent final audit` is complete. The engineering baseline is
+accepted; public release is `NO-GO` until the recorded blockers are resolved.
 
 ## Verified current state
 
@@ -48,8 +52,9 @@
   `git diff --check` also passed.
 - A committed candidate E2E manifest records 16 assets and exact Python/NumPy/
   Torch/Transformers versions. All hashes and exact runtime versions pass in
-  the frozen local OpenPhonetics environment; this is asset preflight evidence,
-  not yet a real alignment E2E.
+  the frozen local OpenPhonetics environment. At the Stage 2 gate this was only
+  asset preflight evidence; the Stage 6 real alignment evidence is recorded
+  below.
 - Current rebuilt distributions exclude `reference/` and tests. Fresh build
   audit after Stage 3 passed for wheel
   `8bf982789427ff8dc904278f6a5b563fb8cfd25fb79d11b8111b91f6f067868f`
@@ -88,20 +93,34 @@
 - Transcript words `sil` and `null` fail before model loading because current
   tier labels reserve those identities; a future identity scheme is
   `TBD-TEXT-001`.
+- The final Stage 6 wheel and sdist pass Twine strict, check-wheel-contents and
+  the repository inventory audit. Their SHA-256 values are respectively
+  `882337e536bda28814293f803cd88f62ce4d3f137183aeb8c1396799b1199d32`
+  and `93b5fb63560c6fa014fbb3a0994c271c22c69757302551ef0a2da79879c51a82`.
+- That exact wheel imports from an external `site-packages`, passes `pip check`,
+  version/CLI/capability smoke and the frozen candidate English E2E with sockets
+  disabled. The new and reference TextGrid bytes are identical at SHA-256
+  `ddbe0fecbbd7fc32442bd7b81ccb6257e391ab81970d398eb236de46a50e415f`.
+- Fast tests pass on local Python 3.10.8 and partially matched Python 3.12.12
+  environments (676 passed, one real-model marker deselected). The full declared
+  Python/OS matrix has not run and is `TBD-CI-001`.
+- The E2E manifest remains `candidate`. The release workflow now requires
+  `approved` and therefore fails closed on `TBD-E2E-001`; engineering success is
+  not reported as release approval.
 - No external service, GitHub repository or PyPI project has been changed.
 
 ## Active work
 
-- Main agent: Stage 6 distribution, E2E and release-evidence audit.
-- Parallel read-only streams: package/isolation smoke, frozen-model E2E
-  feasibility/execution, and CI/release workflow audit.
+- No implementation stage is active.
+- Awaiting user/external decisions for remote history, package ownership/version,
+  fixture approval and release infrastructure.
 
 ## Current capability state
 
 | Capability | State |
 |---|---|
 | Python API / CLI / capability discovery | available and Stage 5 tested |
-| English CPU single-file alignment | available; frozen real-model E2E remains a release gate |
+| English CPU single-file alignment | available; candidate E2E passed, approved-fixture release gate blocked |
 | Mandarin | placeholder; typed failure verified |
 | GPU | placeholder; typed failure verified |
 | Batch | placeholder; typed failure and non-consumption verified |
@@ -115,18 +134,18 @@
 
 ## Next gate
 
-Stage 6 requires:
+The next gate is public release readiness:
 
-1. build and audit the current wheel/sdist;
-2. install the exact wheel outside the source tree and smoke-test it;
-3. run the frozen English model E2E or record an exact `BLOCKED` prerequisite;
-4. audit the declared Python matrix and guarded release workflow;
-5. update README and acceptance evidence without publishing.
+1. approve or replace the candidate fixture pronunciation;
+2. choose the GitHub history/remote, PyPI owner/name and stable version;
+3. run the complete remote Python/OS matrix and dependency audit;
+4. configure Trusted Publishing, protected environment and offline E2E runner;
+5. request separate authorization before any tag/publish mutation.
 
 ## Known blockers
 
-No model-free implementation blocker remains. `TBD-E2E-001` may block the
-official frozen real-model run until an approved effective lexicon supplies
-`openphonetics`; this is being rechecked against current assets. Remote Python
-matrix evidence, PyPI ownership/Trusted Publisher setup, remote-history choice
-and behavior-changing algorithm decisions remain open.
+No engineering implementation blocker remains. Public release is blocked by
+`TBD-CI-001`, `TBD-E2E-001`, `TBD-PKG-001..003`, `TBD-LIC-001`,
+`TBD-REL-001` and the absence of a configured remote. Behavior-changing
+algorithm, output, provenance, compatibility and resource questions remain
+documented limitations rather than silently accepted fixes.

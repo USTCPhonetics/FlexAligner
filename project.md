@@ -1,8 +1,8 @@
 # FlexAligner 干净基线重建项目档案
 
-> 文档状态：实施中
+> 文档状态：工程验收完成；公开发布阻断
 > 建立日期：2026-08-11（Asia/Shanghai）
-> 当前阶段：Stage 6 — 包构建、真实模型 E2E 与发布演练
+> 当前阶段：Stage 7 — 主 agent 最终审计完成
 
 ## 1. 当前目标
 
@@ -72,9 +72,9 @@
 | PyPI 项目 | 尚未创建或占位；最终名称/所有权 `[TBD-PKG-001]` |
 | 发布 | 未授权、未执行 |
 | 生产代码 | 严格英语 CPU 单文件管线、API/CLI、本地推理、TextGrid 事务及未来能力占位已接通 |
-| 测试 | 673 项禁网 fast tests 通过；分支覆盖率 92.31% |
+| 测试 | 676 项禁网 fast tests 通过；分支覆盖率 92.31% |
 | reference | 仓内字节冻结并 hash guard；禁止进入生产 import、wheel 或 sdist |
-| E2E 资产 | 16 项候选资产 hash 与精确运行时预检通过；真实对齐 E2E 尚未运行 |
+| E2E 资产 | 16 项候选资产与精确运行时通过；确切 wheel 工程双跑通过，但候选发音未批准，发布门禁阻断 |
 | Stage 1 资源 | 精确 O(TN) 估算和显式 cell limit 已验证；安全默认值 `[TBD-ALG-005]` |
 | Stage 2 资源 | O(TB(1+d)) / O(TB) 复杂度已审计；`beam=400` 不是已验证安全上限 |
 
@@ -126,6 +126,8 @@
 | C-002 | 旧普通话实验曾使用 `optional_sph=False`；当前脚本默认 `True` | 普通话本里程碑仅占位，不继承旧实验特例 |
 | C-003 | 远端 README/代码描述多格式、批量、GPU、G2P 等能力；当前核心范围不实现 | README 能力表按新包实测重写；这些能力只留占位接口 |
 | C-004 | 远端核心与本地脚本虽同为“两阶段”，但终止、切块、图、评分和失败语义不同 | 不静默混合；新核心只以本地脚本为迁移参考 |
+| C-005 | 旧问题把 `openphonetics` 写成缺词典；当前候选词典已包含该发音并完成工程 E2E | 当前文件优先；技术 OOV 已消失，但发音批准仍为 `[TBD-E2E-001]` |
+| C-006 | OpenPhonetics 既有 TextGrid SHA 为 `78a69bf4…e3e00`，当前权威脚本与新实现输出均为 `ddbe0fec…e415f` | 旧文件只保留为 hashed legacy candidate，不作为 oracle，也不与当前输出静默合并 |
 
 ## 7. 文档职责
 
@@ -136,3 +138,5 @@
 | `STATE.md` | 当前已验证状态、正在进行的阶段和下一动作 |
 | `DECISIONS.md` | 已接受决定、实施决定及其依据 |
 | `OPEN_QUESTIONS.md` | 未决项、默认占位和阻塞范围 |
+| `REAL_MODEL_E2E_REPORT.md` | 冻结资产、确切 wheel、reference 差分及发布阻断证据 |
+| `FINAL_ACCEPTANCE_REPORT.md` | 工程验收结论、发行候选和最小发布前计划 |

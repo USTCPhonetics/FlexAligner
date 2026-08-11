@@ -11,8 +11,8 @@ placeholder or explicit limitation.
 | TBD-PKG-003 | What version should the first public release use? | development version `0.1.0.dev0` proposed | Public release metadata |
 | TBD-LIC-001 | Exact README and LICENSE carry-over/attribution text? | fetch fixed remote snapshot, audit before commit | README/license completion |
 | TBD-API-001 | Which legacy Python/CLI entry points need compatibility aliases? | no broad compatibility layer | Legacy callers only |
-| TBD-CI-001 | Do the exact tool pins and Python 3.10–3.14 matrix pass on every declared GitHub runner? | local Python 3.10 passes; coverage ratchet is fixed at 85% by D-015 | Remote matrix confirmation |
-| TBD-E2E-001 | What approved effective lexicon supplies the OOV word `openphonetics` in the English synthetic fixture? | E2E reports `BLOCKED`, never silently skips | Official real-model E2E |
+| TBD-CI-001 | Do the exact tool pins and Python 3.10–3.14 matrix pass on every declared GitHub runner? | local 3.10.8 and partial 3.12.12 pass; no remote/Actions result exists | Remote matrix confirmation |
+| TBD-E2E-001 | Will the fixture-only `openphonetics OW1 P AH0 N F AH0 N EH1 T IH0 K S` pronunciation be approved as release evidence? | candidate engineering E2E passes; `--require-approved` blocks release | Official real-model E2E |
 | TBD-REL-001 | What GitHub repository/workflow/environment will be registered as PyPI Trusted Publisher? | release workflow remains guarded and non-runnable for publish | Actual PyPI upload |
 | TBD-ALG-001 | Continuous coverage correction? | characterize current gap behavior first | Behavior-corrected MVP claim |
 | TBD-ALG-002 | Stage 2 stride policy? | preserve current 0.01 s for parity, report mismatch | Dynamic timing claim |
@@ -22,7 +22,7 @@ placeholder or explicit limitation.
 | TBD-OUT-001 | What crash-consistency protocol should cover optional metadata plus TextGrid across two files? | stage and validate both; commit metadata first and TextGrid last; roll back process-visible failures | Multi-artifact crash/power-loss atomicity claim |
 | TBD-API-002 | How should final phone intervals retain fixed-state word/phone provenance? | expose `word_index=None`, `phone_index=None`; do not infer missing provenance | Phone-to-word provenance claim |
 | TBD-PROV-001 | What canonical model-directory fingerprint format belongs in public provenance? | leave `model_fingerprints` empty; E2E manifest retains asset hashes | Public reproducibility schema |
-| TBD-INF-001 | Which Hugging Face processor/model architecture combinations are a supported public matrix? | validate the current AutoProcessor/AutoModelForCTC contract strictly; do not claim a broad matrix | Broad model compatibility claim |
+| TBD-INF-001 | Which Hugging Face processor/model architecture combinations are a supported public matrix? | validate the current AutoProcessor/AutoModelForCTC contract strictly; frozen bundles emit weight-normalization migration warnings; do not claim a broad matrix | Broad model compatibility claim |
 | TBD-THREAD-001 | Should an alignment restore the process-global Torch thread count after execution? | set only the requested positive CPU thread count inside the inference lifecycle; document process-global scope | Thread-isolation claim |
 | TBD-TEXT-001 | How should lexical words named `sil` or `null` coexist with the current special TextGrid labels? | reject them with a typed input error before model loading | Aligning those two English tokens |
 
