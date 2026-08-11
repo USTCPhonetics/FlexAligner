@@ -23,6 +23,11 @@
 `Stage 7 — main-agent final audit` is complete. The engineering baseline is
 accepted; public release is `NO-GO` until the recorded blockers are resolved.
 
+`Stage 8 — reviewed release decisions and implementation verification` is in
+progress. The user has accepted the public-alpha product choices and the local
+approved-fixture exact-wheel rerun passes; alpha metadata/inference constraints,
+manifest portability and remote release gates are not yet complete.
+
 ## Verified current state
 
 - `/Users/yiyi0369/projects/flexaligner-rebuild` is a newly initialized local
@@ -50,11 +55,11 @@ accepted; public release is `NO-GO` until the recorded blockers are resolved.
 - At the Stage 2 gate, the fast suite passed 149 tests with sockets disabled;
   Ruff, strict mypy, actionlint, reference byte comparison and
   `git diff --check` also passed.
-- A committed candidate E2E manifest records 16 assets and exact Python/NumPy/
-  Torch/Transformers versions. All hashes and exact runtime versions pass in
-  the frozen local OpenPhonetics environment. At the Stage 2 gate this was only
-  asset preflight evidence; the Stage 6 real alignment evidence is recorded
-  below.
+- At the Stage 2 gate, the then-candidate committed E2E manifest recorded 16
+  assets and exact Python/NumPy/Torch/Transformers versions. All hashes and exact
+  runtime versions passed in the frozen local OpenPhonetics environment. That
+  gate supplied only asset preflight evidence; D-033 approval and the later real
+  alignment evidence are recorded below.
 - Current rebuilt distributions exclude `reference/` and tests. Fresh build
   audit after Stage 3 passed for wheel
   `8bf982789427ff8dc904278f6a5b563fb8cfd25fb79d11b8111b91f6f067868f`
@@ -93,34 +98,56 @@ accepted; public release is `NO-GO` until the recorded blockers are resolved.
 - Transcript words `sil` and `null` fail before model loading because current
   tier labels reserve those identities; a future identity scheme is
   `TBD-TEXT-001`.
-- The final Stage 6 wheel and sdist pass Twine strict, check-wheel-contents and
-  the repository inventory audit. Their SHA-256 values are respectively
-  `882337e536bda28814293f803cd88f62ce4d3f137183aeb8c1396799b1199d32`
-  and `93b5fb63560c6fa014fbb3a0994c271c22c69757302551ef0a2da79879c51a82`.
-- That exact wheel imports from an external `site-packages`, passes `pip check`,
-  version/CLI/capability smoke and the frozen candidate English E2E with sockets
-  disabled. The new and reference TextGrid bytes are identical at SHA-256
+- The Stage 8 refreshed wheel and sdist pass Twine strict,
+  check-wheel-contents and the repository inventory audit. Their SHA-256 values
+  are respectively
+  `a33dcc22f8023e4b4a7905bf7ab78bd827e4576a3fae368f24850b89f0ac9558`
+  and `268e34970404c8c2c361a09358fc581db1185e23079eb9377f25dd4dc205569e`.
+- That exact wheel imports from the external target directory
+  `/tmp/flexaligner-stage8-final-wheel-site.uy5PIZ`, passes version/import/package
+  smoke and the D-033 approved English E2E with sockets disabled. The new and
+  reference TextGrid bytes are identical at SHA-256
   `ddbe0fecbbd7fc32442bd7b81ccb6257e391ab81970d398eb236de46a50e415f`.
 - Fast tests pass on local Python 3.10.8 and partially matched Python 3.12.12
   environments (676 passed, one real-model marker deselected). The full declared
   Python/OS matrix has not run and is `TBD-CI-001`.
-- The E2E manifest remains `candidate`. The release workflow now requires
-  `approved` and therefore fails closed on `TBD-E2E-001`; engineering success is
-  not reported as release approval.
+- The user approved the frozen `openphonetics` pronunciation only as a
+  release-E2E fixture. The repository-local manifest is `approved`, records
+  D-033 and `release-e2e-fixture-only`, and passes 16/16 exact-runtime preflight.
+  The rebuilt exact wheel passes the socket-denied E2E (`1 passed, 676
+  deselected`), so local Q007 is PASS. Protected remote E2E remains NOT_RUN.
+- The first public release is selected as the `PUBLIC_ALPHA` version
+  `0.1.0a1`. `pyproject.toml` still records `0.1.0.dev0`; version/classifier and
+  exact-artifact verification remain Stage 8 implementation work.
+- The selected distribution is `flexaligner`, with PyPI owner/organization
+  `ustcphonetics`. Availability, control and publisher binding have not been
+  externally verified.
+- The selected GitHub strategy is `REPLACE_MAIN_HISTORY` for the existing
+  `USTCPhonetics/FlexAligner` project. No merge/graft strategy is accepted, but
+  no remote replacement operation is authorized or configured.
+- MIT license, copyright, authorship, affiliation and citation identity are
+  approved from the fixed original remote README and linked LICENSE snapshot at
+  `c5361efe4b5d8ad02574dae1bd7caa89ed3e4af0`.
+- The v0.1 public-preview support boundary is accepted as D-034. Its disclosed
+  limitations remain limitations rather than silently accepted corrections.
 - No external service, GitHub repository or PyPI project has been changed.
 
 ## Active work
 
-- No implementation stage is active.
-- Awaiting user/external decisions for remote history, package ownership/version,
-  fixture approval and release infrastructure.
+- Stage 8 has applied and locally reverified the D-033 release fixture. It still
+  must implement `0.1.0a1` metadata and the D-034 narrow inference contract.
+- The approved fixture still has a repository-local path portability issue
+  tracked as `TBD-E2E-002`; no protected remote E2E pass is claimed yet.
+- Remote history replacement, CI execution, runner/environment configuration,
+  tag creation and publishing remain unconfigured and unauthorized external
+  operations.
 
 ## Current capability state
 
 | Capability | State |
 |---|---|
 | Python API / CLI / capability discovery | available and Stage 5 tested |
-| English CPU single-file alignment | available; candidate E2E passed, approved-fixture release gate blocked |
+| English CPU single-file alignment | available; D-033 approved-fixture exact-wheel E2E passes locally; protected remote E2E remains NOT_RUN |
 | Mandarin | placeholder; typed failure verified |
 | GPU | placeholder; typed failure verified |
 | Batch | placeholder; typed failure and non-consumption verified |
@@ -134,18 +161,25 @@ accepted; public release is `NO-GO` until the recorded blockers are resolved.
 
 ## Next gate
 
-The next gate is public release readiness:
+The next gate is public-alpha release readiness:
 
-1. approve or replace the candidate fixture pronunciation;
-2. choose the GitHub history/remote, PyPI owner/name and stable version;
-3. run the complete remote Python/OS matrix and dependency audit;
-4. configure Trusted Publishing, protected environment and offline E2E runner;
-5. request separate authorization before any tag/publish mutation.
+1. implement `0.1.0a1` metadata and the rest of the accepted preview contract,
+   then rebuild and reverify the exact alpha artifacts;
+2. remove the repo-local fixture path dependency tracked by `TBD-E2E-002`;
+3. obtain separate external authorization and a verified recovery snapshot
+   before directly replacing remote `main` (`TBD-REMOTE-001`);
+4. run the complete remote Python/OS matrix, dependency audit and offline E2E;
+5. configure and verify Trusted Publishing, the protected environment and the
+   offline E2E runner;
+6. request separate authorization before any remote push, default-branch change,
+   tag creation or PyPI publication.
 
 ## Known blockers
 
-No engineering implementation blocker remains. Public release is blocked by
-`TBD-CI-001`, `TBD-E2E-001`, `TBD-PKG-001..003`, `TBD-LIC-001`,
-`TBD-REL-001` and the absence of a configured remote. Behavior-changing
-algorithm, output, provenance, compatibility and resource questions remain
-documented limitations rather than silently accepted fixes.
+The Stage 7 engineering baseline remains accepted, but public release remains
+`NO-GO`. It is blocked by unfinished Stage 8 alpha metadata/inference work,
+`TBD-CI-001`, `TBD-REMOTE-001`, `TBD-E2E-002`, `TBD-REL-001`, the absence of a
+configured remote/tag and the absence of external-operation authorization.
+Behavior-changing algorithm, output, provenance, compatibility and resource
+questions remain disclosed preview limitations rather than silently accepted
+fixes.

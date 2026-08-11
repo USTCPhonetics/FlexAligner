@@ -1,9 +1,8 @@
-"""Non-skippable engineering E2E for the frozen English candidate fixture.
+"""Non-skippable release E2E for the approved frozen English fixture.
 
-The committed manifest is intentionally still ``candidate`` because approval of
-the fixture-only ``openphonetics`` pronunciation remains TBD-E2E-001.  This test
-can establish reproducible engineering parity, but the release workflow applies
-the separate ``--require-approved`` gate before it runs this suite.
+Decision D-033 approves the fixture-only ``openphonetics`` pronunciation with
+scope ``release-e2e-fixture-only``.  This suite independently requires that
+approval in addition to the release workflow's ``--require-approved`` preflight.
 """
 
 from __future__ import annotations
@@ -90,13 +89,17 @@ def _load_frozen_assets() -> FrozenAssets:
         pytest.fail("MODEL_E2E_BLOCKED: manifest schema_version must be 1")
 
     status = payload.get("status")
-    if status not in {"candidate", "approved"}:
-        pytest.fail(f"MODEL_E2E_BLOCKED: invalid manifest status: {status!r}")
+    if status != "approved":
+        pytest.fail(f"MODEL_E2E_BLOCKED: manifest is not approved: status={status!r}")
     provenance = payload.get("provenance")
     if not isinstance(provenance, dict):
         pytest.fail("MODEL_E2E_BLOCKED: manifest provenance must be an object")
-    if status == "candidate":
-        assert provenance.get("oov_pronunciation_approval") == "TBD-E2E-001"
+    if provenance.get("oov_pronunciation_approval") != "D-033":
+        pytest.fail("MODEL_E2E_BLOCKED: manifest approval decision must be D-033")
+    if provenance.get("scope") != "release-e2e-fixture-only":
+        pytest.fail("MODEL_E2E_BLOCKED: manifest approval scope is not release-E2E-only")
+    if provenance.get("approved_on") != "2026-08-11":
+        pytest.fail("MODEL_E2E_BLOCKED: manifest approval date is not frozen")
 
     root_env = _require_string(payload.get("root_env"), field="root_env")
     root_text = os.environ.get(root_env)
@@ -215,7 +218,7 @@ def _run_reference(
 
 @pytest.mark.model_e2e
 @pytest.mark.filterwarnings("error:A test tried to use socket\\.socket\\.")
-def test_frozen_english_candidate_matches_reference(
+def test_frozen_english_release_e2e_fixture_matches_reference(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

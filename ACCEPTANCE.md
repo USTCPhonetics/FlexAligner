@@ -38,7 +38,7 @@
 | S2-003 | Stage 2 graph/path/prune/redecode semantics have model-free tests | PASS | `test_stage2_reference.py`: 26 passed | Exact-DP oracle plus named equal-phone limitation |
 | S2-004 | Input, failure, word-order, TextGrid and atomic-write semantics have tests | PASS | input 19 passed; TextGrid/output 6 passed; Stage 1 coverage negatives | Strict PCM16/16 kHz/mono and no skip/xfail |
 | S2-005 | Differential harness reports field-level mismatches and forbids casual golden refresh | PASS | differential tests 4 passed; characterization policy audit | A/B/C classes separated; no update-golden entry point |
-| S2-006 | Real-model fixture manifest records hashes, versions and provenance | PASS | 16/16 hashes plus exact 3.10.8/2.2.6/2.3.1/4.41.2 runtime preflight | Candidate fixture; real alignment E2E remains Q-007 |
+| S2-006 | Real-model fixture manifest records hashes, versions and provenance | PASS | 16/16 hashes plus exact 3.10.8/2.2.6/2.3.1/4.41.2 runtime preflight | D-033 approved fixture; local exact-wheel alignment evidence is recorded separately at Q-007 |
 | S2-007 | Missing E2E assets produce `BLOCKED`/explicit preflight failure, never a passing skip | PASS | `test_verify_model_assets.py`: 7 passed; negative subprocess exits nonzero | Workflow binds committed manifest and exact runtime check |
 
 ## D. Stage 3 — Stage 1 implementation
@@ -94,20 +94,20 @@
 
 | ID | Acceptance condition | Status | Evidence / command | Reviewer note |
 |---|---|---|---|---|
-| Q-001 | Formatter and linter pass with no ignored new violations | PASS | Ruff 0.16.2: 75 maintained files formatted; all checks passed | Immutable reference excluded and hash-guarded |
+| Q-001 | Formatter and linter pass with no ignored new violations | PASS | Ruff 0.16.2: 76 maintained files formatted; all checks passed | Immutable reference excluded and hash-guarded |
 | Q-002 | Strict static type check passes | PASS | mypy 2.3.0: no issues in 20 configured `src`/`scripts` files | Strict config |
 | Q-003 | Fast tests pass on every supported Python version | BLOCKED | local 3.10.8 and partial 3.12.12 each: 676 passed, 1 E2E deselected | No remote; 3.11/3.13/3.14 and Linux/Windows matrix have no current result |
 | Q-004 | Coverage meets the recorded non-decreasing threshold | PASS | branch coverage 92.31%; D-015 threshold 85% | 676 fast tests, Python 3.10.8, E2E marker deselected |
-| Q-005 | Wheel and sdist build from current source and pass metadata checks | PASS | Hatchling 1.32.0, `--no-isolation`; Twine strict/check-wheel/audit all pass | wheel `882337e5...b1199d32`; sdist `93b5fb63...79c51a82` |
-| Q-006 | Built wheel installs and runs outside repository source tree | PASS | `/tmp/flexaligner-stage6-audit.zF3bSS/wheel-venv`; `pip check`, site-packages import, CLI/capabilities | Exact final wheel `882337e5...b1199d32` used |
-| Q-007 | English real-model E2E passes with frozen assets, or is truthfully `BLOCKED` | BLOCKED | exact-wheel candidate E2E: 1 passed; TextGrid `ddbe0fec...e415f`; 16/16 assets | Engineering parity passes; release requires approved manifest and current status is `candidate` |
-| Q-008 | No test or package import performs an undeclared network request | PASS | 676 fast tests and exact-wheel E2E with socket disabled; offline model env | Dependency installation is a separate networked setup step |
+| Q-005 | Wheel and sdist build from current source and pass metadata checks | PASS | Hatchling 1.32.0, `--no-isolation`; two byte-identical builds; Twine strict/check-wheel/audit all pass | wheel `a33dcc22...ac9558`; sdist `268e3497...5569e` |
+| Q-006 | Built wheel installs and runs outside repository source tree | PASS | `/tmp/flexaligner-stage8-final-wheel-site.uy5PIZ`; target install and external import-path audit | Exact wheel `a33dcc22...ac9558` used |
+| Q-007 | English real-model E2E passes with frozen assets, or is truthfully `BLOCKED` | PASS | D-033 approved manifest; 16/16 preflight; exact-wheel E2E `1 passed, 676 deselected`; TextGrid `ddbe0fec...e415f` | Local release fixture passes; protected remote runner remains NOT_RUN/BLOCKED by `TBD-E2E-002` and infrastructure |
+| Q-008 | No test or package import performs an undeclared network request | PASS | 676 fast tests and D-033 exact-wheel E2E with socket disabled; offline model env | Dependency installation is a separate networked setup step |
 
 ## I. Stage 7 — final audit
 
 | ID | Acceptance condition | Status | Evidence / command | Reviewer note |
 |---|---|---|---|---|
-| F-001 | All required rows are `PASS`; intentional future features are `PLACEHOLDER` | BLOCKED | main-agent acceptance audit | Q-003 remote matrix and Q-007 approved fixture remain blocked; no false PASS |
+| F-001 | All required rows are `PASS`; intentional future features are `PLACEHOLDER` | BLOCKED | main-agent acceptance audit | Q-003 remote matrix, protected remote E2E/infrastructure and alpha release work remain blocked; no false PASS |
 | F-002 | README claims map to tests/evidence and do not advertise placeholders as support | PASS | README/runtime capability cross-audit; placeholder tests | English path available; ten requested future capabilities remain placeholder |
-| F-003 | `STATE`, decisions and open questions match the verified repository state | PASS | main-agent cross-document audit | Candidate E2E and public-release blockers are separated explicitly |
-| F-004 | Working tree, commits, remotes and unexecuted publication steps are reported exactly | PASS | final `git status`, `git log`, `git remote -v`, release-guard audit | Local main only; no remote, tag, GitHub/PyPI mutation or publish |
+| F-003 | `STATE`, decisions and open questions match the verified repository state | PASS | D-029..D-034 main-agent cross-document audit | User decisions, local approved E2E and protected remote blockers are separated explicitly |
+| F-004 | Working tree, commits, remotes and unexecuted publication steps are reported exactly | PASS | Stage 8 `git status`, `git log`, `git remote -v`, release-guard audit | Local main only; no remote, tag, GitHub/PyPI mutation or publish; unrelated `.DS_Store` remains untracked |

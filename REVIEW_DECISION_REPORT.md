@@ -2,7 +2,7 @@
 
 > 日期：2026-08-11（Asia/Shanghai）
 >
-> 文档状态：**DRAFT — 待用户审阅；本文不构成已接受决策**
+> 文档状态：**REVIEWED — 用户批阅结果已接受，见 D-029 至 D-034**
 >
 > 本地工程基线：主 agent 基于测试证据判定 `ACCEPT`
 >
@@ -14,7 +14,7 @@
 用户已经明确选择干净基线重建，英语 CPU 单文件链路也已形成可安装、可测试的
 pip 包候选。
 
-现在需要审阅的不是全部技术 TBD，而是以下六组发布与产品边界：
+本报告提出了以下六组发布与产品边界供审阅：
 
 1. 首个公开版本是开发者预览，还是生产级产品；
 2. 新历史如何接入 GitHub；
@@ -23,9 +23,21 @@ pip 包候选。
 5. 是否批准候选发音只作为 release-E2E 测试夹具；
 6. 是否接受建议的 v0.1 支持边界。
 
-远程 CI、真实 runner、dependency audit 和 Trusted Publisher 是否真正通过，
+用户已于 2026-08-11 完成批阅；结果见下表。远程 CI、真实 runner、dependency
+audit 和 Trusted Publisher 是否真正通过，
 属于后续必须执行的验证，不是可以由用户主观批准为 `PASS` 的事项。即使本文所有
 方案获批，也不自动授权 push、改变默认分支、创建 tag 或上传 PyPI。
+
+| 决策 | 用户批阅结果 | 决策记录 |
+|---|---|---|
+| R-01 | `PUBLIC_ALPHA`，首个公开版本 `0.1.0a1` | D-029 |
+| R-02 | `REPLACE_MAIN_HISTORY`，直接替代现有 GitHub 主历史 | D-030 |
+| R-03 | distribution `flexaligner`；owner `ustcphonetics` | D-031 |
+| R-04 | 固定远端身份文本：README 提供作者/品牌/引用，LICENSE 提供 MIT/版权行 | D-032 |
+| R-05 | `APPROVE_FIXTURE_ONLY` | D-033 |
+| R-06 | `ACCEPT_PREVIEW_BUNDLE` | D-034 |
+
+本次回复没有授予任何外部操作权限，D-013 继续生效。
 
 ## 2. 本次审阅依据
 
@@ -33,26 +45,26 @@ pip 包候选。
 
 | 项目 | 2026-08-11 当前事实 |
 |---|---|
-| 本地仓库 | 本文审计的工程基线为 `main@11bbc9c`，共 15 个基线提交，不含本文草稿 |
+| 本地仓库 | 本轮决定落档前的基线为 `main@b594b9c`，共 16 个提交；本报告把它作为审阅前快照，不冒充提交后的 HEAD |
 | 本地 remote / tag | 均未配置或创建 |
-| 当前工作树 | 审计时跟踪文件无改动；除本文草稿外另有一个未跟踪 `.DS_Store`，因此不能称为完全 clean |
+| Stage 8 变更范围 | 本轮统一落档 16 个跟踪文件；另有一个不属于本轮的未跟踪 `.DS_Store`，不纳入提交 |
 | 远端只读复核 | `USTCPhonetics/FlexAligner` 的 `main`/HEAD 仍为 `c5361efe…`，`dev` 为 `ea3b5836…` |
-| 包元数据 | distribution 候选 `flexaligner`；版本 `0.1.0.dev0`；`Pre-Alpha` |
+| 包元数据 | distribution 已选定为 `flexaligner`；当前版本 `0.1.0.dev0`；`Pre-Alpha` |
 | PyPI 名称探测 | 官方 JSON 端点当前返回 404；这只表示未发现公开项目，**不证明名称一定可注册或归本项目所有** |
 | 工程门禁 | 676 项禁网 fast tests；92.31% branch coverage；Ruff、strict mypy、包审计通过 |
-| 候选真实 E2E | exact wheel、16/16 资产、冻结运行时通过；新旧 TextGrid 字节一致 |
-| E2E 发布状态 | manifest 仍为 `candidate`；release gate 按设计阻断 |
+| approved-fixture 本地 E2E | exact wheel、16/16 资产、冻结运行时通过；新旧 TextGrid 字节一致 |
+| E2E 发布状态 | D-033 approved 配置通过 16/16 preflight 与 exact-wheel 本地 E2E；protected remote E2E 尚未运行 |
 | 外部变更 | GitHub、PyPI、模型资产均未修改 |
 
 工程验收的详细证据见 `FINAL_ACCEPTANCE_REPORT.md`、`ACCEPTANCE.md` 和
 `REAL_MODEL_E2E_REPORT.md`。这里的 `ACCEPT` 是主 agent 的工程判定，不是
 “用户已经验收”或“已经批准发布”。
 
-## 3. 需要现在拍板的决定
+## 3. 已完成批阅的决定
 
 ### R-01 — 首个公开版本定位
 
-**推荐：`PUBLIC_ALPHA`。** 将首个公开版本定位为研究/开发者预览版：严格英语、
+**用户决定：`PUBLIC_ALPHA`。** 将首个公开版本定位为研究/开发者预览版：严格英语、
 CPU、单文件、用户自备本地模型与词典；不声称生产安全、广泛模型兼容、对齐准确率
 或行为纠错完成。
 
@@ -66,25 +78,16 @@ CPU、单文件、用户自备本地模型与词典；不声称生产安全、�
 
 ### R-02 — GitHub 仓库与历史接入
 
-**推荐：`PRESERVE_BOTH_INTEGRATION_PR`。** 继续使用现有
-`USTCPhonetics/FlexAligner` 产品地址。具体做法是从最新远端 `main` 新建集成分支，
-再用显式的 `--allow-unrelated-histories` merge 合入本地 rebuild tip，生成保留两边
-ancestry 的双父 merge commit，并把冲突后的最终工作树审计为纯重建代码；随后推送
-该分支，向受保护的 `main` 提交 PR。PR 自动证明的是 fast CI；完整模型 E2E、默认
-分支变更和 release gate 仍要走独立门禁。该方案保留干净的重建提交链，但整个 Git
-图不再是单根“全新历史”。
-
-集成验收必须逐路径证明 merge 后 tracked tree 与批准的 rebuild tree 完全一致，并
-再次核验 package inventory、生产 import 和 wheel/sdist 内容。旧代码仍存在于可检出
-的 Git 历史中，但不得存在于最终工作树、wheel 或 sdist。这是“干净生产树 + 双历史
-provenance”，不是“仓库历史中从未存在旧代码”。旧 `main` 会进入新 ancestry；独立
-`dev` 分支只要不删除仍可追溯，但不会自动进入新 `main` ancestry。
+**用户决定：`REPLACE_MAIN_HISTORY`。** 重建历史将直接替代现有
+`USTCPhonetics/FlexAligner` 主历史，不采用本报告原推荐的双历史 merge/graft。
+这是 GitHub 接入策略决定，不是 force-push、改变默认分支或删除远端引用的执行授权。
+执行前仍须只读核对精确 remote/branch/commit，建立可恢复快照，并获得单独外部授权。
 
 | 选项 | 优点 | 代价/风险 |
 |---|---|---|
-| `PRESERVE_BOTH_INTEGRATION_PR`（推荐） | 不 force-push；旧项目和重建过程都可追溯；可回滚 | 需要一次明确的双历史集成、tree equality 和 PR 审计 |
+| `PRESERVE_BOTH_INTEGRATION_PR`（原推荐，未选择） | 不 force-push；旧项目和重建过程都可追溯；可回滚 | 需要一次明确的双历史集成、tree equality 和 PR 审计 |
 | `NEW_REPOSITORY` | 新仓库保持完全独立历史 | 需要确定新 URL；旧项目迁移与用户发现路径要另行处理 |
-| `REPLACE_MAIN_HISTORY` | Git 图最简 | 会改写现有项目入口；破坏性最高，必须另行明确授权，不推荐 |
+| `REPLACE_MAIN_HISTORY`（用户选择） | Git 图最简 | 会改写现有项目入口；破坏性最高，必须另行明确授权 |
 
 执行前必须再次 fetch/核对远端最新状态。批准策略不等于授权 push 或切换默认分支。
 
@@ -92,15 +95,19 @@ provenance”，不是“仓库历史中从未存在旧代码”。旧 `main` �
 
 ### R-03 — PyPI 名称、所有者和首发版本
 
-**推荐：** distribution 使用 `flexaligner`；由机构/项目团队控制的 PyPI
+**用户决定：** distribution 使用 `flexaligner`，owner/organization 使用
+`ustcphonetics`；所有门禁通过前保持 `0.1.0.dev0`，首个公开预览使用
+`0.1.0a1`。PyPI 名称和 owner 的实际可创建/控制状态仍须在外部配置时验证。
+
+原审阅建议是由机构/项目团队控制的 PyPI
 账号或组织持有；所有门禁通过前保持 `0.1.0.dev0`，首个公开预览使用
 `0.1.0a1`。只有明确退出 Alpha / Pre-Alpha 定位后，才使用 final `0.1.0`。
 
-用户需要填写：
+批阅结果：
 
-- PyPI distribution：`flexaligner` / `[修改为：____]`
-- PyPI owner 或 organization 的确切账号：`[____]`
-- 首个公开版本：`0.1.0a1`（推荐预览）/ `0.1.0`（final）/ `[修改为：____]`
+- PyPI distribution：`flexaligner`
+- PyPI owner 或 organization：`ustcphonetics`
+- 首个公开版本：`0.1.0a1`
 
 当前 [PyPI project page](https://pypi.org/project/flexaligner/) 和 JSON 端点返回
 404，但这不是名称所有权证明。名称仍可能因为已注册但无 release、相似名称或管理
@@ -124,15 +131,18 @@ provenance”，不是“仓库历史中从未存在旧代码”。旧 `main` �
 - 指向 `USTCPhonetics/FlexAligner` 的项目 URL 和引用条目；
 - 对上游固定提交 `c5361efe…` 的 README/许可来源说明。
 
-**推荐：** 保留 MIT 和固定提交 provenance；由用户或实际权利人确认版权主体、
-作者、单位、品牌及引用文本。工程审计不能替代权利确认，也不会自行推定“作者”等于
-“版权人”。
+**用户决定：`APPROVE_CURRENT_TEXT`。** 固定远端 README 提供品牌、两位作者、
+USTC affiliation 和 citation；同一提交的远端 LICENSE 提供 MIT 正文及
+`Copyright (c) 2026 WANG Yiming`。远端 README 本身没有版权行，因此本文不把作者
+或 `ustcphonetics` owner 静默改写成版权主体。
 
-用户需要选择：
+审阅时提供的互斥选项是：
 
 - `APPROVE_CURRENT_TEXT`：确认当前文本可公开使用；或
 - `REVISE`：逐项给出版权主体、作者、单位、品牌、项目 URL、引用的精确修改；或
 - `LEGAL_REVIEW`：先保持 NO-GO，等待机构/法律审阅。
+
+用户选择 `APPROVE_CURRENT_TEXT`，精确来源边界按 D-032 记录。
 
 **不决定时的默认行为：** 不公开发布。
 
@@ -148,19 +158,19 @@ openphonetics OW1 P AH0 N F AH0 N EH1 T IH0 K S
 本地源目录没有 Git metadata。使用它时，新实现与权威 reference 的真实模型
 TextGrid 已达到字节一致。
 
-**推荐：`APPROVE_FIXTURE_ONLY`。** 仅批准它作为冻结的 release-E2E 测试材料。
+**用户决定：`APPROVE_FIXTURE_ONLY`。** 仅批准它作为冻结的 release-E2E 测试材料。
 该批准不表示它是语言学规范发音，不启用默认 G2P，不构成准确率金标准，也不把模型
 随包发布。
 
 | 选项 | 结果 |
 |---|---|
-| `APPROVE_FIXTURE_ONLY`（推荐） | 记录决定后同步审计 `status`、含 `candidate-v1` 的 `fixture_id` 和 approval provenance，再重跑门禁 |
+| `APPROVE_FIXTURE_ONLY`（用户选择） | 已同步审计 `status`、`fixture_id` 和 approval provenance；本地 exact-wheel 门禁已重跑通过 |
 | `REPLACE_FIXTURE` | 用户提供替代发音或更权威的版本化来源；重新冻结并完整重跑 |
 | `KEEP_CANDIDATE` | 继续作为工程证据；公开 release gate 保持 BLOCKED |
 
 ### R-06 — v0.1 支持边界包
 
-**推荐：`ACCEPT_PREVIEW_BUNDLE`。** 一次性确认以下边界，避免让没有对比实验的
+**用户决定：`ACCEPT_PREVIEW_BUNDLE`。** 一次性确认以下边界，避免让没有对比实验的
 算法问题阻塞开发者预览：
 
 1. 唯一真实链路仍是英语、CPU、单文件、16 kHz mono PCM16 WAV、本地模型、
@@ -168,7 +178,8 @@ TextGrid 已达到字节一致。
 2. wheel 不携带模型，也不自动下载；首版是“代码包 + 用户自备经验证的本地资产”。
 3. 基础包以 Python 3.10–3.14 为远程 fast-CI 目标；真实推理目前只有冻结的
    Python 3.10.8 / NumPy 2.2.6 / Torch 2.3.1 / Transformers 4.41.2 组合的
-   候选工程 E2E 证据。fixture 批准和远程门禁通过前，不把它写成发布支持认证。
+   approved-fixture 本地 E2E 证据。protected remote 门禁通过前，不把它写成
+   广泛发布支持认证。
 4. `[inference]` 当前的 `torch>=2.3,<3`、`transformers>=4.41,<6` 是 pip 解析器
    实际会使用的范围，不能只靠 README 把它降级为“不支持”。公开 alpha 前，默认采用
    `FROZEN_INFERENCE_CONTRACT`：主 agent 必须收窄实际依赖/运行时契约到有证据的
@@ -253,50 +264,24 @@ TextGrid 已达到字节一致。
 - 不自动下载、不静默回退、不用缺资产的 skip 伪造 E2E 成功；
 - 未经另行授权不修改远端、不打 tag、不上传 PyPI。
 
-## 8. 已发现的治理记录滞后
+## 8. 已发现并在 Stage 8 修订的治理记录
 
-这些是主 agent 后续应做的事实修订，不需要用户重新决定：
+以下事实滞后已经在本轮按权威顺序修订，不需要用户重新决定：
 
 1. `OPEN_QUESTIONS.md` 中 `TBD-LIC-001` 的“抓取并在提交前审计”已经完成；
-   当前真正未决的是权利人对最终归属文本的确认。
-2. `TBD-ALG-001` 的 characterize 已完成；当前待定的是是否纠正已记录的 gap。
-3. `DECISIONS.md` 的 D-017 仍写着 real alignment E2E pending；当前事实是候选
-   engineering E2E 已通过，但 approved-fixture release E2E 仍阻断。
+   D-032 又按用户批阅关闭了最终身份文本问题。
+2. `TBD-ALG-001` 的 characterize 已完成；D-034 选择在 alpha 披露并延期纠正。
+3. `DECISIONS.md` 的 D-017 曾写 real alignment E2E pending；当前 D-033
+   approved exact-wheel 本地 E2E 已通过，protected remote E2E 仍单独阻断。
 4. 工具 pins 和覆盖率门槛已经由 D-015、D-027 与 `pyproject.toml` 固定；
    `TBD-CI-001` 现在只剩远程矩阵的实际执行证据。
 
 这些冲突按权威顺序以当前代码、`STATE.md` 和最终实验输出为准；本文没有静默合并
-旧描述。建议在用户决定落档时一并更正治理文件。
+旧描述。关闭结果记录在 `OPEN_QUESTIONS.md` 的 resolved ledger。
 
-## 9. 用户可直接复制的最小回复
+## 9. 批阅结果落档
 
-```text
-R-01=PUBLIC_ALPHA
-R-02=PRESERVE_BOTH_INTEGRATION_PR
-目标 GitHub 仓库=USTCPhonetics/FlexAligner / [修改为：____]
-
-R-03:
-distribution=flexaligner
-PyPI owner/organization=[请填写：____]
-首个公开版本=0.1.0a1
-
-R-04=[从以下三种互斥写法中选择一种]
-  APPROVE_CURRENT_TEXT
-  或 REVISE：版权主体=[____]；作者=[____]；单位/品牌=[____]；项目 URL/引用=[____]
-  或 LEGAL_REVIEW
-
-R-05=APPROVE_FIXTURE_ONLY
-R-06=ACCEPT_PREVIEW_BUNDLE
-
-外部授权=AUTH_NONE
-```
-
-若除必填的 PyPI owner 和权利确认外全部接受推荐方案，也可以回复下列文本。注意，
-“同意推荐方案”本身不证明回复人有权代表其他作者、机构或权利人作出许可确认：
-
-```text
-除 R-04 的权利确认外，同意报告中的推荐方案。
-PyPI owner/organization=[____]；
-R-04=APPROVE_CURRENT_TEXT / LEGAL_REVIEW / REVISE（精确修改：[____]）；
-本轮只落档本地决定，不授权任何远端、tag 或 PyPI 操作。
-```
+批阅结果已经拆分写入独立的 `DECISIONS.md`、`STATE.md` 与
+`OPEN_QUESTIONS.md`：前者记录 D-029 至 D-034，第二份记录当前实施/验证状态，
+第三份列出仍未解决的问题并保留已关闭问题的 resolved ledger。任何远端替代、
+GitHub 设置、tag 或 PyPI 上传仍须按第 6 节逐项获得独立授权。

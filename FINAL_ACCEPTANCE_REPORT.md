@@ -11,8 +11,9 @@
 API/CLI、TextGrid 事务与未经校准的 raw confidence 均有测试证据。普通话和
 用户指定的九项未来能力保持显式占位，没有静默回退。
 
-当前仓库可以生成并安装 pip 包候选，但还不能公开发布。阻断项来自尚未完成
-的远程/账户/批准条件，而不是未完成的本地核心实现。
+当前仓库可以生成并安装 pip 包候选，但还不能公开发布。用户已经选定 public alpha、
+GitHub 直接替代策略、包名/owner、上游身份文本与 fixture-only 发音；剩余阻断项是
+尚未完成的 alpha 元数据/依赖契约、远程执行、账户配置和逐项外部授权。
 
 ## 2. 验收摘要
 
@@ -20,38 +21,39 @@ API/CLI、TextGrid 事务与未经校准的 raw confidence 均有测试证据。
 |---|---|---|
 | 治理、reference、Stage 1/2 | PASS | hash guard、三方 parity、独立 invariant/resource tests |
 | 严格 pipeline/API/CLI/TextGrid | PASS | 676 项 fast tests；92.31% branch coverage |
-| 格式、lint、严格类型 | PASS | Ruff 75 files；mypy 20 source/script files |
+| 格式、lint、严格类型 | PASS | Ruff 76 files；mypy 20 source/script files |
 | wheel/sdist | PASS | Twine strict、wheel contents、distribution inventory、仓外安装 |
-| 候选真实模型工程 E2E | PASS | exact wheel；16/16 assets；TextGrid 与 reference 字节一致 |
+| approved-fixture 本地 E2E | PASS | D-033；exact wheel；16/16 assets；TextGrid 与 reference 字节一致 |
 | 十项未来能力 | PLACEHOLDER | 类型化 pre-I/O failure；无下载、转换、回退或端口绑定 |
 | Python 3.10–3.14 全远程矩阵 | BLOCKED | 本地仅验证 3.10 与部分 3.12；仓库无 remote/Actions 结果 |
-| approved-fixture release E2E | BLOCKED | manifest 仍为 `candidate`；发布工作流 fail-closed |
-| PyPI 发布 | NO-GO | owner/name/version/Trusted Publisher/授权均未完成 |
+| protected remote release E2E | BLOCKED | runner/wheelhouse 未配置；manifest repo-local 路径尚不可移植 |
+| PyPI 发布 | NO-GO | alpha metadata/inference contract、remote、Trusted Publisher 与外部授权未完成 |
 
 完整逐项状态见 `ACCEPTANCE.md`；真实模型证据见
 `REAL_MODEL_E2E_REPORT.md`。
 
-## 3. 最终发行候选
+## 3. Stage 8 开发审计产物
 
 | Artifact | SHA-256 |
 |---|---|
-| `flexaligner-0.1.0.dev0-py3-none-any.whl` | `882337e536bda28814293f803cd88f62ce4d3f137183aeb8c1396799b1199d32` |
-| `flexaligner-0.1.0.dev0.tar.gz` | `93b5fb63560c6fa014fbb3a0994c271c22c69757302551ef0a2da79879c51a82` |
+| `flexaligner-0.1.0.dev0-py3-none-any.whl` | `a33dcc22f8023e4b4a7905bf7ab78bd827e4576a3fae368f24850b89f0ac9558` |
+| `flexaligner-0.1.0.dev0.tar.gz` | `268e34970404c8c2c361a09358fc581db1185e23079eb9377f25dd4dc205569e` |
 
 这些 artifact 位于临时审计目录，不是已发布文件；仓库原有 `dist/` 中的旧
 Stage 3 产物没有被当作最终证据，也没有覆盖或删除。
 
 ## 4. 最小发布前计划
 
-1. 审批或替换候选 `openphonetics` 发音，并通过单独决定把 manifest 改为
-   `approved`。
-2. 确认 GitHub 历史/remote、PyPI 名称与所有者、首个稳定版本，以及
-   README/LICENSE 最终归属文本。
-3. 配置自托管 E2E runner、冻结 asset root、离线 wheelhouse、受保护的
+1. 实施 `0.1.0a1` 元数据并完成 D-034 要求的窄推理依赖/运行时契约验证。
+2. 修复 `TBD-E2E-002`：让 repo-local fixture 与外部模型资产使用可移植的根目录
+   语义，再在目标 runner 复验。
+3. 在任何直接替代远端 `main` 前，重新核对目标 commit、建立可恢复快照，并取得
+   独立外部授权；本轮策略批准不是 force-push 授权。
+4. 配置自托管 E2E runner、冻结 asset root、离线 wheelhouse、受保护的
    `pypi` environment 和 Trusted Publisher。
-4. 在目标 remote 跑完 Python 3.10–3.14、Linux/Windows/macOS、wheel smoke
+5. 在目标 remote 跑完 Python 3.10–3.14、Linux/Windows/macOS、wheel smoke
    与 dependency-audit；任何失败均回到本地修复，不能降低断言。
-5. 通过所有门禁后再创建稳定 tag；只有用户另行明确授权，发布 job 才可执行。
+6. 通过所有门禁后，分别请求 tag 与 PyPI upload 授权；二者互不蕴含。
 
 ## 5. 未执行的外部动作
 

@@ -13,7 +13,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "verify_model_assets.py"
-CANDIDATE_MANIFEST = REPO_ROOT / "tests" / "fixtures" / "e2e" / "asset_manifest.json"
+RELEASE_E2E_MANIFEST = REPO_ROOT / "tests" / "fixtures" / "e2e" / "asset_manifest.json"
 
 
 def _sha256(path: Path) -> str:
@@ -167,11 +167,12 @@ def test_release_gate_accepts_approved_manifest(tmp_path: Path) -> None:
     assert "MODEL_E2E_ASSETS_OK" in result.stdout
 
 
-def test_committed_candidate_manifest_has_frozen_runtime_and_provenance() -> None:
-    payload = json.loads(CANDIDATE_MANIFEST.read_text(encoding="utf-8"))
+def test_committed_release_e2e_manifest_has_frozen_runtime_and_provenance() -> None:
+    payload = json.loads(RELEASE_E2E_MANIFEST.read_text(encoding="utf-8"))
 
     assert payload["schema_version"] == 1
-    assert payload["status"] == "candidate"
+    assert payload["fixture_id"] == "openphonetics-english-synthetic-release-e2e-v1"
+    assert payload["status"] == "approved"
     assert payload["root_env"] == "FLEXALIGNER_E2E_ASSET_ROOT"
     assert payload["runtime"] == {
         "python": "3.10.8",
@@ -180,7 +181,9 @@ def test_committed_candidate_manifest_has_frozen_runtime_and_provenance() -> Non
         "transformers": "4.41.2",
     }
     assert payload["provenance"]["source_revision"] is None
-    assert payload["provenance"]["oov_pronunciation_approval"] == "TBD-E2E-001"
+    assert payload["provenance"]["oov_pronunciation_approval"] == "D-033"
+    assert payload["provenance"]["scope"] == "release-e2e-fixture-only"
+    assert payload["provenance"]["approved_on"] == "2026-08-11"
 
     entries = payload["files"]
     roles = [entry["role"] for entry in entries]

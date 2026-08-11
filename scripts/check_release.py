@@ -31,8 +31,8 @@ def main() -> None:
         raise RuntimeError(f"Tag/version mismatch: tag={args.tag!r}, expected={expected_tag!r}")
     if STABLE_VERSION.fullmatch(version) is None:
         raise RuntimeError(
-            "Production PyPI workflow accepts only stable X.Y.Z versions; "
-            f"got {version!r}. TBD-PKG-003 remains unresolved."
+            "The current PyPI workflow still accepts only stable X.Y.Z versions; "
+            f"got {version!r}. D-029 alpha-version support is not implemented yet."
         )
     print(f"RELEASE_SOURCE_OK name={project['name']} version={version} tag={args.tag}")
 

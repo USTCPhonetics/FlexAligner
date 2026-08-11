@@ -509,35 +509,40 @@ Each acceptance row uses exactly one status:
 No row may change from `FAIL` to `PASS` merely by weakening its assertion or
 regenerating expected output.
 
-## 11. Initial unknowns
+## 11. Reviewed decisions and remaining unknowns
 
-- `[TBD-PKG-001]` final PyPI distribution name and owning organization/account.
-  `flexaligner` currently appears unregistered, but availability is not reserved.
-- `[TBD-PKG-002]` final public repository URL and whether this new local Git
-  history will replace or be merged into the existing remote history.
-- `[TBD-PKG-003]` final project version for the first public release.
-- `[TBD-LIC-001]` exact README/LICENSE carry-over and attribution text after a
-  source snapshot is copied and audited.
-- `[TBD-API-001]` compatibility aliases, if any, for the remote legacy API.
-- `[TBD-CI-001]` coverage threshold and fully pinned developer-tool versions.
-- `[TBD-E2E-001]` fixture-specific English lexicon containing `openphonetics` and
-  its approved provenance/hash.
-- `[TBD-REL-001]` PyPI Trusted Publisher repository, workflow and environment
-  configuration.
+The 2026-08-11 user review resolved the initial package/history/identity choices:
+
+- D-029: first public version `0.1.0a1` (`PUBLIC_ALPHA`);
+- D-030: directly replace the existing `USTCPhonetics/FlexAligner` main history;
+- D-031: distribution `flexaligner`, intended owner `ustcphonetics`;
+- D-032: use the fixed upstream README and linked LICENSE identity;
+- D-033: approve the stated pronunciation only as a release-E2E fixture;
+- D-034: accept the disclosed v0.1 preview boundary and no broad legacy aliases.
+
+The remaining questions are execution or post-alpha research items:
+
+- `[TBD-CI-001]` actual remote Python/OS matrix evidence;
+- `[TBD-REMOTE-001]` separately authorized, recoverable direct history replacement;
+- `[TBD-E2E-002]` a remote-portable split between external assets and the
+  repository-local fixture lexicon;
+- `[TBD-REL-001]` exact protected environment, approvers and Trusted Publisher;
 - `[TBD-ALG-001..005]` behavior corrections listed in section 5.
 
-Unknowns remain visible placeholders. They do not prevent work that has no
-dependency on the unresolved choice.
+Resolved choices do not grant external-operation permission and do not turn an
+unrun gate into a pass.
 
 ## 12. Immediate execution order
 
-1. Obtain explicit approval or replacement evidence for the fixture-only
-   `openphonetics` pronunciation, then change manifest status only through a
-   reviewed decision.
-2. Choose the public repository/history, PyPI owner/name and stable release
-   version; re-audit README/LICENSE attribution.
-3. Configure the protected `pypi` environment, Trusted Publisher, self-hosted
+1. Apply and reverify the D-033 approved manifest without weakening the
+   candidate fail-closed guard.
+2. Implement `0.1.0a1` metadata and the D-034 frozen inference contract, then
+   rebuild and test the exact artifacts.
+3. Remove the manifest's local-directory-name dependency before remote E2E.
+4. Obtain separate authorization and create a verified recovery snapshot before
+   directly replacing remote `main`.
+5. Configure the protected `pypi` environment, Trusted Publisher, self-hosted
    E2E runner, asset root and offline wheelhouse.
-4. Run the declared Python/OS matrix and dependency audit on the chosen remote.
-5. Only after every release blocker is cleared, create the stable tag and grant
-   the separate publication authorization required by D-013.
+6. Run the declared Python/OS matrix, dependency audit and protected model E2E.
+7. Only after every release blocker is cleared, request separate tag and PyPI
+   publication authorizations required by D-013.

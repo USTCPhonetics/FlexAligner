@@ -16,10 +16,11 @@
 > **Rebuild status (2026-08-11):** this repository is a clean implementation
 > baseline. The strict English CPU single-file path has passed its model-free
 > gates and an exact-wheel engineering E2E against the frozen local reference.
-> The fixture manifest remains `candidate`, so the approved-asset, remote-matrix
-> and public-release gates are still blocked. It is not published on PyPI. The
-> capability table below is the authoritative public status; a placeholder is
-> an importable contract that fails explicitly, not a supported feature.
+> The fixture-only `openphonetics` pronunciation is approved for release-E2E
+> use by D-033; protected remote-matrix, inference-resolution and publication
+> gates are still blocked. It is not published on PyPI. The capability table
+> below is the authoritative public status; a placeholder is an importable
+> contract that fails explicitly, not a supported feature.
 
 ## Introduction / 简介
 
@@ -53,7 +54,7 @@ The package exposes machine-readable capability discovery through
 | `api.python` | `available` | Import-safe Python API for the strict local English path and guarded placeholders. |
 | `cli` | `available` | Single-file alignment, version, discovery, and explicit placeholder commands are present. |
 | `capabilities.discovery` | `available` | Human-readable and JSON capability reports are present. |
-| `alignment.single_file.en.cpu` | `available` | Strict local English CPU alignment; candidate E2E passed, approved-asset release gate blocked. |
+| `alignment.single_file.en.cpu` | `available` | Strict local English CPU alignment; fixture-only release evidence is approved, while protected remote gates remain unrun. |
 | `language.zh` | `placeholder` | Mandarin is outside this milestone's real implementation. |
 | `device.gpu` | `placeholder` | CPU is the only planned MVP execution device. |
 | `alignment.batch` | `placeholder` | No batch execution or manifest recovery. |
@@ -168,8 +169,8 @@ options are rejected before input, model, output, or network I/O.
 - Transcript words `sil` and `null` are currently reserved tier labels and fail
   before model loading (`TBD-TEXT-001`).
 - Reference gap behavior (including the frozen fixture's tail gap), the fixed
-  10 ms Stage 2 stride, and approved default resource limits remain explicit
-  algorithm questions.
+  10 ms Stage 2 stride, and the absence of approved default resource limits
+  remain explicit algorithm and resource questions.
 - The frozen Hugging Face bundles emit weight-normalization migration warnings;
   broader architecture compatibility remains `TBD-INF-001`.
 - Optional metadata and TextGrid are validated together in-process, but a crash
@@ -201,8 +202,10 @@ and never downloads a missing model.
 - [x] Implement Stage 2 graph/Viterbi/redecode with differential parity.
 - [x] Implement strict local CPU inference and validated TextGrid output.
 - [x] Pass a socket-denied exact-wheel engineering E2E against the candidate frozen assets.
-- [ ] Approve the fixture pronunciation and pass the protected remote E2E gate.
-- [ ] Resolve package ownership/version/license/release `[TBD]` items.
+- [x] Approve the fixture-only pronunciation for release-E2E use.
+- [x] Decide the public-alpha identity: `flexaligner`, owner `ustcphonetics`, first public version `0.1.0a1`.
+- [x] Confirm the fixed upstream identity, authorship and MIT license text.
+- [ ] Implement alpha metadata/inference constraints and pass the protected remote E2E gate.
 - [ ] Publish to PyPI only after separate authorization.
 
 ## Authors and affiliation
@@ -238,5 +241,8 @@ The fixed README snapshot has SHA-256
 `LICENSE` preserves the text of that fixed commit's MIT license snapshot; the
 upstream source file's SHA-256 is
 `b1f12d62c29df3906f7a05b2a18e4faed00876170b75d0c50e2cf50317e00ee7`.
-Exact carry-over and attribution remain tracked as `TBD-LIC-001` until the main
-project audit closes that question.
+D-032 confirms this fixed upstream identity: the README supplies the authors,
+affiliation, brand and citation, while the linked LICENSE supplies the MIT text
+and `Copyright (c) 2026 WANG Yiming`. The local BibTeX keeps a plain URL instead
+of the upstream README's malformed Markdown-inside-BibTeX form; this is a
+non-semantic formatting correction.

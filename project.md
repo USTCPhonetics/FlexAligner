@@ -1,8 +1,8 @@
 # FlexAligner 干净基线重建项目档案
 
-> 文档状态：工程验收完成；公开发布阻断
+> 文档状态：工程验收完成；用户发布决策已落档；公开发布阻断
 > 建立日期：2026-08-11（Asia/Shanghai）
-> 当前阶段：Stage 7 — 主 agent 最终审计完成
+> 当前阶段：Stage 8 — 批阅决定实施与复验
 
 ## 1. 当前目标
 
@@ -68,13 +68,14 @@
 |---|---|
 | 路径 | `/Users/yiyi0369/projects/flexaligner-rebuild` |
 | Git | 新建本地仓库，默认分支 `main` |
-| remote | 未配置 |
-| PyPI 项目 | 尚未创建或占位；最终名称/所有权 `[TBD-PKG-001]` |
+| remote | 未配置；用户选择直接替代现有 `USTCPhonetics/FlexAligner` 主历史，但未授权执行 |
+| PyPI 项目 | distribution 选择为 `flexaligner`，owner/organization 选择为 `ustcphonetics`；外部存在性/控制权未验证 |
+| 首个公开版本 | `PUBLIC_ALPHA` / `0.1.0a1`；当前 `pyproject.toml` 仍为 `0.1.0.dev0`，待实施复验 |
 | 发布 | 未授权、未执行 |
 | 生产代码 | 严格英语 CPU 单文件管线、API/CLI、本地推理、TextGrid 事务及未来能力占位已接通 |
 | 测试 | 676 项禁网 fast tests 通过；分支覆盖率 92.31% |
 | reference | 仓内字节冻结并 hash guard；禁止进入生产 import、wheel 或 sdist |
-| E2E 资产 | 16 项候选资产与精确运行时通过；确切 wheel 工程双跑通过，但候选发音未批准，发布门禁阻断 |
+| E2E 资产 | 16 项资产与精确运行时通过；D-033 fixture-only approved exact-wheel 本地 E2E 通过；protected remote 门禁仍未运行 |
 | Stage 1 资源 | 精确 O(TN) 估算和显式 cell limit 已验证；安全默认值 `[TBD-ALG-005]` |
 | Stage 2 资源 | O(TB(1+d)) / O(TB) 复杂度已审计；`beam=400` 不是已验证安全上限 |
 
@@ -126,8 +127,10 @@
 | C-002 | 旧普通话实验曾使用 `optional_sph=False`；当前脚本默认 `True` | 普通话本里程碑仅占位，不继承旧实验特例 |
 | C-003 | 远端 README/代码描述多格式、批量、GPU、G2P 等能力；当前核心范围不实现 | README 能力表按新包实测重写；这些能力只留占位接口 |
 | C-004 | 远端核心与本地脚本虽同为“两阶段”，但终止、切块、图、评分和失败语义不同 | 不静默混合；新核心只以本地脚本为迁移参考 |
-| C-005 | 旧问题把 `openphonetics` 写成缺词典；当前候选词典已包含该发音并完成工程 E2E | 当前文件优先；技术 OOV 已消失，但发音批准仍为 `[TBD-E2E-001]` |
+| C-005 | 旧问题把 `openphonetics` 写成缺词典；当前 fixture 词典已包含该发音并完成工程 E2E | 当前文件优先；技术 OOV 已消失，且 D-033 已批准该发音仅作 release-E2E fixture |
 | C-006 | OpenPhonetics 既有 TextGrid SHA 为 `78a69bf4…e3e00`，当前权威脚本与新实现输出均为 `ddbe0fec…e415f` | 旧文件只保留为 hashed legacy candidate，不作为 oracle，也不与当前输出静默合并 |
+| C-007 | 审阅报告曾推荐保留新旧双历史；当前用户明确选择直接替代 GitHub 主历史 | 当前用户消息优先，采用 D-030；不折中为 merge/graft，也不把策略批准解释为外部执行授权 |
+| C-008 | 用户要求许可/版权/作者采用远端 README 身份，但远端 README 没有精确版权行 | README 提供作者/品牌/引用；同提交 LICENSE 提供 MIT 正文与 `Copyright (c) 2026 WANG Yiming`；不推定版权转让给组织 |
 
 ## 7. 文档职责
 
@@ -140,3 +143,4 @@
 | `OPEN_QUESTIONS.md` | 未决项、默认占位和阻塞范围 |
 | `REAL_MODEL_E2E_REPORT.md` | 冻结资产、确切 wheel、reference 差分及发布阻断证据 |
 | `FINAL_ACCEPTANCE_REPORT.md` | 工程验收结论、发行候选和最小发布前计划 |
+| `REVIEW_DECISION_REPORT.md` | 用户批阅选项、D-029..D-034 结果和外部授权边界 |

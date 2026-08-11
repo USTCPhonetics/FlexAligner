@@ -1,9 +1,10 @@
-# English real-model E2E candidate
+# English release E2E fixture
 
-This directory records a frozen, repository-local lexicon for the existing
-OpenPhonetics synthetic English fixture. It is test evidence, not a default G2P
-implementation and not a claim that the pronunciation is linguistically
-canonical.
+This directory records the approved, frozen, repository-local lexicon for the
+existing OpenPhonetics synthetic English release-E2E fixture. Decision `D-033`
+approves it only as release-E2E test evidence. It is not a default G2P
+implementation, a linguistically canonical pronunciation, or a distributable
+model asset.
 
 The transcript is:
 
@@ -26,11 +27,12 @@ Provenance:
   established. Hashes, not an inferred revision, are authoritative here.
 
 `asset_manifest.json` uses `FLEXALIGNER_E2E_ASSET_ROOT` as its root. For the
-current local candidate layout, set it to `/Users/yiyi0369/projects`. A trusted
+current local fixture layout, set it to `/Users/yiyi0369/projects`. A trusted
 runner may reproduce that relative layout under another absolute root. Missing
 variables, files, or hash mismatches must report `MODEL_E2E_BLOCKED`; they must
 never become a passing skip.
 
-The approval status of this fixture-specific OOV pronunciation remains tracked
-as `TBD-E2E-001`. It may support a provisional engineering E2E, but it does not
-activate the public default-G2P capability.
+The fixture-specific OOV pronunciation is approved by `D-033` with scope
+`release-e2e-fixture-only`. This approval allows the fail-closed release E2E to
+use the frozen row; it does not activate the public default-G2P capability or
+establish a general pronunciation standard.
