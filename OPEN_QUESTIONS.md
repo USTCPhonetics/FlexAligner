@@ -11,7 +11,7 @@ placeholder or explicit limitation.
 | TBD-PKG-003 | What version should the first public release use? | development version `0.1.0.dev0` proposed | Public release metadata |
 | TBD-LIC-001 | Exact README and LICENSE carry-over/attribution text? | fetch fixed remote snapshot, audit before commit | README/license completion |
 | TBD-API-001 | Which legacy Python/CLI entry points need compatibility aliases? | no broad compatibility layer | Legacy callers only |
-| TBD-CI-001 | What coverage threshold and tool pins should become the initial ratchet? | determine after first complete fast suite; no gate weakening | Final CI policy |
+| TBD-CI-001 | Do the exact tool pins and Python 3.10–3.14 matrix pass on every declared GitHub runner? | local Python 3.10 passes; coverage ratchet is fixed at 85% by D-015 | Remote matrix confirmation |
 | TBD-E2E-001 | What approved effective lexicon supplies the OOV word `openphonetics` in the English synthetic fixture? | E2E reports `BLOCKED`, never silently skips | Official real-model E2E |
 | TBD-REL-001 | What GitHub repository/workflow/environment will be registered as PyPI Trusted Publisher? | release workflow remains guarded and non-runnable for publish | Actual PyPI upload |
 | TBD-ALG-001 | Continuous coverage correction? | characterize current gap behavior first | Behavior-corrected MVP claim |
@@ -26,4 +26,3 @@ placeholder or explicit limitation.
 - No placeholder capability may trigger an automatic download or conversion.
 - Missing model assets are not grounds for claiming an E2E pass.
 - The local reference file overrides conflicting old-session descriptions.
-

@@ -19,6 +19,7 @@ choices. An implementation choice is not rewritten as user authorization.
 | D-012 | Characterize and reach reference parity before behavior-changing corrections | Main-agent migration guard derived from “local logic is authoritative” | Active implementation choice |
 | D-013 | Do not publish to PyPI or mutate a remote repository without separate explicit authorization | Current scope and external-write safety | Active guard |
 | D-014 | Use a `src/` package layout and one canonical version source | Main-agent packaging design; aligned with current PyPA guidance | Active implementation choice |
+| D-015 | Set the first branch-coverage ratchet to 85% after a reviewed 88% Stage 1 baseline; future changes may hold or raise it but not silently lower it | Main-agent local gate evidence, 45 tests on Python 3.10.8 | Active implementation choice |
 
 ## Pending algorithm decisions
 
@@ -33,4 +34,3 @@ The following are not accepted behavior changes yet:
 | TBD-ALG-005 | Final duration, token, trellis-cell and beam-work limits |
 
 Any resolution requires dedicated tests and an explicit new decision row.
-

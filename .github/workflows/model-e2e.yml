@@ -1,0 +1,126 @@
+name: Frozen model E2E
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      distribution_artifact:
+        description: Same-run artifact name containing the wheel built by the caller
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: model-e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FLEXALIGNER_E2E_MANIFEST: ${{ vars.FLEXALIGNER_E2E_MANIFEST }}
+  FLEXALIGNER_E2E_WHEELHOUSE: ${{ vars.FLEXALIGNER_E2E_WHEELHOUSE }}
+  HF_HUB_OFFLINE: "1"
+  OMP_NUM_THREADS: "1"
+  MKL_NUM_THREADS: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  TOKENIZERS_PARALLELISM: "false"
+  TRANSFORMERS_OFFLINE: "1"
+
+jobs:
+  model-e2e:
+    name: Offline frozen English CPU path
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - flexaligner-e2e
+    timeout-minutes: 60
+    steps:
+      - name: Check out source and tests
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Require the pre-provisioned offline dependency wheelhouse
+        shell: bash
+        run: |
+          if [ -z "$FLEXALIGNER_E2E_WHEELHOUSE" ]; then
+            echo "MODEL_E2E_BLOCKED: repository variable FLEXALIGNER_E2E_WHEELHOUSE is unset" >&2
+            exit 1
+          fi
+          if [ ! -d "$FLEXALIGNER_E2E_WHEELHOUSE" ]; then
+            echo "MODEL_E2E_BLOCKED: wheelhouse directory is absent: $FLEXALIGNER_E2E_WHEELHOUSE" >&2
+            exit 1
+          fi
+      - name: Install E2E tooling only from the frozen wheelhouse
+        shell: bash
+        run: |
+          python -m pip install \
+            --no-index \
+            --find-links "$FLEXALIGNER_E2E_WHEELHOUSE" \
+            pip==26.1.2
+          python -m pip install \
+            --no-index \
+            --find-links "$FLEXALIGNER_E2E_WHEELHOUSE" \
+            --group test \
+            --group package
+      - name: Download the caller's exact distributions
+        if: ${{ inputs.distribution_artifact != '' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ inputs.distribution_artifact }}
+          path: dist
+      - name: Build a distribution for scheduled or manual validation
+        if: ${{ inputs.distribution_artifact == '' }}
+        run: python -m build --no-isolation --wheel
+      - name: Locate exactly one wheel
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          wheels = sorted(Path("dist").glob("*.whl"))
+          if len(wheels) != 1:
+              raise RuntimeError(f"Expected exactly one E2E wheel, got: {wheels}")
+          with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as handle:
+              handle.write(f"FLEXALIGNER_E2E_WHEEL={wheels[0].resolve()}\n")
+          PY
+      - name: Install the exact wheel with inference dependencies offline
+        shell: bash
+        run: |
+          python -m pip install \
+            --no-index \
+            --find-links "$FLEXALIGNER_E2E_WHEELHOUSE" \
+            --force-reinstall \
+            "${FLEXALIGNER_E2E_WHEEL}[inference]"
+          python -m pip check
+      - name: Require and verify all frozen local model assets
+        shell: bash
+        run: |
+          if [ -z "$FLEXALIGNER_E2E_MANIFEST" ]; then
+            echo "MODEL_E2E_BLOCKED: repository variable FLEXALIGNER_E2E_MANIFEST is unset" >&2
+            exit 1
+          fi
+          python scripts/verify_model_assets.py "$FLEXALIGNER_E2E_MANIFEST"
+      - name: Prove the installed package imports outside the source tree
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP"
+          python -c "import flexaligner; print(flexaligner.__version__)"
+          flexaligner capabilities --json
+      - name: Run the non-skippable frozen-model suite without sockets
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP"
+          python -m pytest \
+            "$GITHUB_WORKSPACE/tests" \
+            -c "$GITHUB_WORKSPACE/pyproject.toml" \
+            -m model_e2e \
+            --disable-socket

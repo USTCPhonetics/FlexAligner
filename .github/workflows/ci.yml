@@ -1,0 +1,228 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  HF_HUB_OFFLINE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  TOKENIZERS_PARALLELISM: "false"
+  TRANSFORMERS_OFFLINE: "1"
+
+jobs:
+  quality:
+    name: Quality (Python 3.12)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install quality tools and package
+        run: |
+          python -m pip install --upgrade pip==26.1.2
+          python -m pip install --group quality -e .
+      - name: Check formatting
+        run: ruff format --check .
+      - name: Lint
+        run: ruff check .
+      - name: Type-check
+        run: mypy
+
+  unit-core:
+    name: Unit/core (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            python: "3.10"
+          - os: ubuntu-24.04
+            python: "3.11"
+          - os: ubuntu-24.04
+            python: "3.12"
+          - os: ubuntu-24.04
+            python: "3.13"
+          - os: ubuntu-24.04
+            python: "3.14"
+          - os: windows-2025
+            python: "3.10"
+          - os: windows-2025
+            python: "3.14"
+          - os: macos-15
+            python: "3.10"
+          - os: macos-15
+            python: "3.14"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install test tools and base package
+        run: |
+          python -m pip install --upgrade pip==26.1.2
+          python -m pip install --group test -e .
+      - name: Run network-denied fast suite with branch coverage
+        run: >-
+          python -m pytest
+          --disable-socket
+          --cov=flexaligner
+          --cov-report=term-missing
+          --cov-report=xml:coverage.xml
+
+  package:
+    name: Build and audit distributions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install packaging tools
+        run: |
+          python -m pip install --upgrade pip==26.1.2
+          python -m pip install --group package
+      - name: Build one wheel and one source distribution
+        run: python -m build --sdist --wheel
+      - name: Check metadata and package inventory
+        run: |
+          python -m twine check --strict dist/*
+          check-wheel-contents dist/*.whl
+          python scripts/audit_dist.py
+      - name: Upload immutable distribution candidates
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: python-package-distributions
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  wheel-smoke:
+    name: Wheel smoke (${{ matrix.os }}, Python ${{ matrix.python }})
+    needs: package
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            python: "3.10"
+          - os: ubuntu-24.04
+            python: "3.14"
+          - os: windows-2025
+            python: "3.10"
+          - os: windows-2025
+            python: "3.14"
+          - os: macos-15
+            python: "3.10"
+          - os: macos-15
+            python: "3.14"
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Download the exact built distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-package-distributions
+          path: dist
+      - name: Install the exact wheel
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip==26.1.2
+          python -m pip install --force-reinstall dist/*.whl
+      - name: Smoke-test outside the source tree
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP"
+          python -m pip check
+          python -c "import flexaligner; print(flexaligner.__version__)"
+          flexaligner --version
+          flexaligner capabilities --json > capabilities.json
+          python -c "import json; payload=json.load(open('capabilities.json', encoding='utf-8')); assert payload['schema_version'] == 1"
+
+  sdist-smoke:
+    name: Source distribution smoke (Python 3.12)
+    needs: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Download the exact built distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-package-distributions
+          path: dist
+      - name: Install the exact source distribution
+        run: |
+          python -m pip install --upgrade pip==26.1.2
+          python -m pip install --force-reinstall dist/*.tar.gz
+      - name: Smoke-test outside the source tree
+        run: |
+          cd "$RUNNER_TEMP"
+          python -m pip check
+          python -c "import flexaligner; print(flexaligner.__version__)"
+          flexaligner --version
+          flexaligner capabilities --json > capabilities.json
+          python -c "import json; payload=json.load(open('capabilities.json', encoding='utf-8')); assert payload['schema_version'] == 1"
+
+  dependency-audit:
+    name: Audit resolved base dependencies
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install security tool and base package
+        run: |
+          python -m pip install --upgrade pip==26.1.2
+          python -m pip install --group security .
+      - name: Query the vulnerability service strictly
+        run: pip-audit --local --strict

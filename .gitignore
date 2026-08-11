@@ -2,6 +2,8 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .coverage
+coverage.json
+coverage.xml
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
@@ -11,4 +13,3 @@ dist/
 htmlcov/
 *.TextGrid.tmp
 *.incomplete
-

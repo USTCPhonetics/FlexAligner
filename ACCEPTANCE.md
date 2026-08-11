@@ -20,14 +20,14 @@
 
 | ID | Acceptance condition | Status | Evidence / command | Reviewer note |
 |---|---|---|---|---|
-| S1-001 | `src/` package has one canonical version and imports without model/network side effects | NOT_RUN | isolated import smoke | |
-| S1-002 | Editable install and built-wheel install both expose `flexaligner` CLI | NOT_RUN | clean virtual environments | |
-| S1-003 | CLI help, version and capability discovery are deterministic | NOT_RUN | CLI snapshots/tests | |
-| S1-004 | All requested future capabilities have importable contracts | NOT_RUN | public API tests | |
-| S1-005 | Placeholder calls raise typed non-availability errors and do not silently fall back | NOT_RUN | placeholder behavior tests | |
-| S1-006 | Format, lint, strict type, test/coverage, build and wheel-smoke jobs are defined | NOT_RUN | workflow audit and local equivalent | |
-| S1-007 | Release workflow is event/environment guarded; only publish job has OIDC write permission | NOT_RUN | workflow security audit | |
-| S1-008 | Package metadata, README and license files are present and consistent | NOT_RUN | build metadata / `twine check` | |
+| S1-001 | `src/` package has one canonical version and imports without model/network side effects | PASS | `test_import_safety.py`; isolated wheel import from `site-packages`; metadata version `0.1.0.dev0` | No Torch/Transformers import or cwd write |
+| S1-002 | Editable install and built-wheel install both expose `flexaligner` CLI | PASS | `.venv` editable install; `/tmp/flexaligner-wheel-smoke.Q5d5Vd` final-wheel install | `pip check`, version and capabilities passed |
+| S1-003 | CLI help, version and capability discovery are deterministic | PASS | `tests/test_cli.py`; 9 tests | Human and JSON output stable |
+| S1-004 | All requested future capabilities have importable contracts | PASS | public symbols plus complete 14-entry capability report | Future enums do not imply availability |
+| S1-005 | Placeholder calls raise typed non-availability errors and do not silently fall back | PASS | `tests/test_placeholders.py`, `test_capabilities.py`, CLI tests | Guards precede input/model/output work |
+| S1-006 | Format, lint, strict type, test/coverage, build and wheel-smoke jobs are defined | PASS | local Ruff/mypy/50-test/88.16%-coverage/build checks; `ci.yml` | Remote matrix remains `TBD-CI-001` |
+| S1-007 | Release workflow is event/environment guarded; only publish job has OIDC write permission | PASS | `tests/test_workflow_security.py`; 5 tests; YAML parse | Static policy pass; no remote publish attempted |
+| S1-008 | Package metadata, README and license files are present and consistent | PASS | `twine check --strict`; `check-wheel-contents`; `audit_dist.py` | README/LICENSE upstream source hashes rechecked |
 
 ## C. Stage 2 — characterization and oracle
 
@@ -79,29 +79,29 @@
 
 | ID | Capability | Status | Evidence / command | Reviewer note |
 |---|---|---|---|---|
-| P-001 | Mandarin | NOT_RUN | capability/API tests | must remain placeholder |
-| P-002 | GPU | NOT_RUN | capability/API tests | must remain placeholder |
-| P-003 | Batch | NOT_RUN | capability/API tests | must remain placeholder |
-| P-004 | Web | NOT_RUN | capability/API tests | must remain placeholder |
-| P-005 | Automatic model download | NOT_RUN | capability/API tests | local resolver may be real |
-| P-006 | Multi-format audio | NOT_RUN | capability/API tests | WAV PCM16 only is real |
-| P-007 | Automatic resampling | NOT_RUN | capability/API tests | strict validator only is real |
-| P-008 | Chinese segmentation | NOT_RUN | capability/API tests | English whitespace only is real |
-| P-009 | Default G2P | NOT_RUN | capability/API tests | lexicon only is real |
-| P-010 | Confidence calibration | NOT_RUN | capability/API tests | uncalibrated metadata only is real |
+| P-001 | Mandarin | PLACEHOLDER | `language.zh` capability/API tests | Typed pre-I/O failure verified |
+| P-002 | GPU | PLACEHOLDER | `device.gpu` capability/API tests | No CPU fallback |
+| P-003 | Batch | PLACEHOLDER | `alignment.batch` tests | Iterable non-consumption verified |
+| P-004 | Web | PLACEHOLDER | `integration.web` CLI/API tests | No framework import or port bind |
+| P-005 | Automatic model download | PLACEHOLDER | `models.auto_download` tests | Fails before network access |
+| P-006 | Multi-format audio | PLACEHOLDER | `audio.multi_format` tests | Strict WAV implementation is a later stage |
+| P-007 | Automatic resampling | PLACEHOLDER | `audio.auto_resample` tests | No implicit conversion |
+| P-008 | Chinese segmentation | PLACEHOLDER | `text.zh_segmentation` report/require tests | Mandarin remains placeholder |
+| P-009 | Default G2P | PLACEHOLDER | `pronunciation.g2p.default` tests | No OOV fallback |
+| P-010 | Confidence calibration | PLACEHOLDER | `confidence.calibration` tests | Raw score contract remains uncalibrated |
 
 ## H. Stage 6 — quality, package and real-model evidence
 
 | ID | Acceptance condition | Status | Evidence / command | Reviewer note |
 |---|---|---|---|---|
-| Q-001 | Formatter and linter pass with no ignored new violations | NOT_RUN | `ruff format --check`; `ruff check` | |
-| Q-002 | Strict static type check passes | NOT_RUN | `mypy` | |
+| Q-001 | Formatter and linter pass with no ignored new violations | PASS | Ruff 0.16.2: 22 files formatted; all checks passed | Verified 2026-08-11 |
+| Q-002 | Strict static type check passes | PASS | mypy 2.3.0: no issues under configured `src/tests/scripts` scope | Strict config |
 | Q-003 | Fast tests pass on every supported Python version | NOT_RUN | CI matrix/local available versions | |
-| Q-004 | Coverage meets the recorded non-decreasing threshold | NOT_RUN | coverage report | |
-| Q-005 | Wheel and sdist build from clean source and pass metadata checks | NOT_RUN | `python -m build`; `twine check` | |
-| Q-006 | Built wheel installs and runs outside repository source tree | NOT_RUN | isolated wheel smoke | |
+| Q-004 | Coverage meets the recorded non-decreasing threshold | PASS | branch coverage 88.16%; D-015 threshold 85% | 50 tests, Python 3.10.8 |
+| Q-005 | Wheel and sdist build from clean source and pass metadata checks | PASS | Hatchling build; Twine/check-wheel/audit all pass | wheel `f3b6e47f...b9449`; sdist `3867f2c6...a5353` |
+| Q-006 | Built wheel installs and runs outside repository source tree | PASS | `/tmp/flexaligner-wheel-smoke.Q5d5Vd`; `pip check`, import path, CLI | Final rebuilt wheel used |
 | Q-007 | English real-model E2E passes with frozen assets, or is truthfully `BLOCKED` | NOT_RUN | E2E report and hashes | |
-| Q-008 | No test or package import performs an undeclared network request | NOT_RUN | network-denial tests/audit | |
+| Q-008 | No test or package import performs an undeclared network request | PASS | `pytest --disable-socket`; import-safety subprocess; offline env | Dependency installation is a separate networked setup step |
 
 ## I. Stage 7 — final audit
 
