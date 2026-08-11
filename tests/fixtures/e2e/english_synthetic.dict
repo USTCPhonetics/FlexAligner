@@ -1,0 +1,13 @@
+# Frozen fixture lexicon for english_synthetic.txt.
+# Known-word rows preserve source order from OpenPhonetics/word.dict.
+THIS DH IH0 S
+THIS DH IH1 S
+SYNTHETIC S IH0 N TH EH1 T IH0 K
+EXAMPLE IH0 G Z AE1 M P AH0 L
+SHOWS SH OW1 Z
+openphonetics OW1 P AH0 N F AH0 N EH1 T IH0 K S
+WORD W ER1 D
+AND AE1 N D
+AND AH0 N D
+PHONE F OW1 N
+ALIGNMENT AH0 L AY1 N M AH0 N T

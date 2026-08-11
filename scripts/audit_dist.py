@@ -34,6 +34,7 @@ DENIED_PARTS = {
     "artifacts",
     "htmlcov",
     "models",
+    "reference",
 }
 
 

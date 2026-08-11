@@ -1,0 +1,17 @@
+{
+  "schema_version": "1",
+  "snapshot": {
+    "source_path": "/Users/yiyi0369/projects/flexaligner/align_single_cpu.py",
+    "repository_path": "reference/align_single_cpu.py",
+    "copy_mode": "byte-for-byte",
+    "line_count": 2548,
+    "byte_count": 96230,
+    "sha256": "9ed4e21e615718ddfd10930359f55769fb27a0d284599cce45a3fc755e835de1"
+  },
+  "authority": {
+    "algorithm": "The current local source and this verified snapshot are the behavior oracle for parity migration.",
+    "remote": "USTCPhonetics/FlexAligner main@c5361efe4b5d8ad02574dae1bd7caa89ed3e4af0 supplies README, identity, license provenance and comparison context; its core is not the new algorithm authority.",
+    "production_import_policy": "Production package code must not import or execute the reference snapshot.",
+    "conflict_policy": "Current files override conflicting old-session descriptions; known limitations remain evidence until changed by an explicit decision."
+  }
+}

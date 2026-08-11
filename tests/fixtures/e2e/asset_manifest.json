@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "fixture_id": "openphonetics-english-synthetic-candidate-v1",
+  "status": "candidate",
+  "root_env": "FLEXALIGNER_E2E_ASSET_ROOT",
+  "runtime": {
+    "python": "3.10.8",
+    "numpy": "2.2.6",
+    "torch": "2.3.1",
+    "transformers": "4.41.2"
+  },
+  "provenance": {
+    "source_revision": null,
+    "source_revision_reason": "The local OpenPhonetics directory has no Git metadata.",
+    "word_dictionary_sha256": "f6548978de94dfdcfa4c4503c0d3983fd1a4a59fe6497c4f1e1d490fd08a801b",
+    "openphonetics_readme_sha256": "f205aae389de76d6bbd9817e39095a567dea2fb2c533faee64bfaf29a6838017",
+    "openphonetics_requirements_sha256": "b048e5a82e8266eb088ce84d5b2b2b1a2658f52ed1ff983fc295e1060c29bd62",
+    "fixture_lexicon_sha256": "3d955dca0865ab0cea45d3a43509cff64a9470c3ef03ea097028b7653eeb40e1",
+    "oov_pronunciation_approval": "TBD-E2E-001"
+  },
+  "files": [
+    {
+      "path": "openphonetics/models/en/chunker/config.json",
+      "sha256": "610798c18225256e7a9a57d89ee8c7c58f5bd53036bd6c1a056778d4fe76f22b",
+      "role": "stage1_model_config"
+    },
+    {
+      "path": "openphonetics/models/en/chunker/model.safetensors",
+      "sha256": "a37f390b918db6299c4c5cdfcae201d72e5d002bf3a61b2317fb35d217abf5c0",
+      "role": "stage1_model_weights"
+    },
+    {
+      "path": "openphonetics/models/en/chunker/preprocessor_config.json",
+      "sha256": "e881cb4d0aba9d543f1864fc339ad67169598c8d22b87e9f2690174ebb271129",
+      "role": "stage1_preprocessor"
+    },
+    {
+      "path": "openphonetics/models/en/chunker/special_tokens_map.json",
+      "sha256": "9046da57c270c8e74d0f38832b4adce269c9d914ef21d2a0925e7772152dd793",
+      "role": "stage1_special_tokens"
+    },
+    {
+      "path": "openphonetics/models/en/chunker/tokenizer_config.json",
+      "sha256": "b5de7deae553b3e44ad21df1c6f47b720fd9e5ee739e914b283b600c68a40aa0",
+      "role": "stage1_tokenizer_config"
+    },
+    {
+      "path": "openphonetics/models/en/chunker/vocab.json",
+      "sha256": "efb4b0d161b59a4742f721c3012fb222f7d810dc7187225d891323086ba8daa0",
+      "role": "stage1_vocabulary"
+    },
+    {
+      "path": "openphonetics/models/en/aligner/config.json",
+      "sha256": "f95d82cd417576876386dddcc03d500beef6f9e60ed2aae8e0a853c3168e7cc4",
+      "role": "stage2_model_config"
+    },
+    {
+      "path": "openphonetics/models/en/aligner/model.safetensors",
+      "sha256": "a801f2c89cdd456b2ecd94b7182183ae91af7082f0a1c0e3bf6765d1eceb6347",
+      "role": "stage2_model_weights"
+    },
+    {
+      "path": "openphonetics/models/en/aligner/preprocessor_config.json",
+      "sha256": "e881cb4d0aba9d543f1864fc339ad67169598c8d22b87e9f2690174ebb271129",
+      "role": "stage2_preprocessor"
+    },
+    {
+      "path": "openphonetics/models/en/aligner/special_tokens_map.json",
+      "sha256": "9046da57c270c8e74d0f38832b4adce269c9d914ef21d2a0925e7772152dd793",
+      "role": "stage2_special_tokens"
+    },
+    {
+      "path": "openphonetics/models/en/aligner/tokenizer_config.json",
+      "sha256": "0a9b22ce1ad69715cfe97c08627cb2f8836bfbdcebb52943e9a58b3f9e80ddd8",
+      "role": "stage2_tokenizer_config"
+    },
+    {
+      "path": "openphonetics/models/en/aligner/vocab.json",
+      "sha256": "83682f2cac897e3a99982b590803fcbe3c779ce27e9e837ecb4c5806886cacba",
+      "role": "stage2_vocabulary"
+    },
+    {
+      "path": "openphonetics/examples/english_synthetic.wav",
+      "sha256": "fac17cce285ae3e65c3026334a64c22306d478d39f22b3db7c90b480b51c5163",
+      "role": "audio"
+    },
+    {
+      "path": "openphonetics/examples/english_synthetic.txt",
+      "sha256": "70f28161f77726246586efc39be5b7b941b770240cf61c0f0a4b4b5387a2e98a",
+      "role": "transcript"
+    },
+    {
+      "path": "openphonetics/examples/english_synthetic.TextGrid",
+      "sha256": "78a69bf46cd3c5ef54cae8b879cf45720132373f4f030513e83212c557ce3e00",
+      "role": "legacy_output_candidate"
+    },
+    {
+      "path": "flexaligner-rebuild/tests/fixtures/e2e/english_synthetic.dict",
+      "sha256": "3d955dca0865ab0cea45d3a43509cff64a9470c3ef03ea097028b7653eeb40e1",
+      "role": "effective_fixture_lexicon"
+    }
+  ]
+}
