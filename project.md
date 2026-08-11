@@ -71,11 +71,12 @@
 | remote | 未配置 |
 | PyPI 项目 | 尚未创建或占位；最终名称/所有权 `[TBD-PKG-001]` |
 | 发布 | 未授权、未执行 |
-| 生产代码 | 包/API/CLI/占位接口及 NumPy Stage 1 核心已建立；完整管线尚未接入 |
-| 测试 | 348 项 fast tests 通过；分支覆盖率 94.75% |
+| 生产代码 | 包/API/CLI/占位接口及 NumPy Stage 1/Stage 2 核心已建立；完整管线尚未接入 |
+| 测试 | 509 项 fast tests 通过；分支覆盖率 92.85% |
 | reference | 仓内字节冻结并 hash guard；禁止进入生产 import、wheel 或 sdist |
 | E2E 资产 | 16 项候选资产 hash 与精确运行时预检通过；真实对齐 E2E 尚未运行 |
 | Stage 1 资源 | 精确 O(TN) 估算和显式 cell limit 已验证；安全默认值 `[TBD-ALG-005]` |
+| Stage 2 资源 | O(TB(1+d)) / O(TB) 复杂度已审计；`beam=400` 不是已验证安全上限 |
 
 ## 4. 核心算法契约摘要
 

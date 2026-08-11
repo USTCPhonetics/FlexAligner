@@ -13,7 +13,9 @@
 
 `Stage 3 — Stage 1 implementation` is complete at commit `ec7bd2d`.
 
-`Stage 4 — Stage 2 implementation` is in progress.
+`Stage 4 — Stage 2 implementation` is complete at commit `d65ab6a`.
+
+`Stage 5 — inference, pipeline, CLI and output` is in progress.
 
 ## Verified current state
 
@@ -60,13 +62,24 @@
 - The Stage 3 wheel was installed outside the source tree at
   `/tmp/flexaligner-stage3-smoke.TPMkh3` and passed `pip check`, package/core
   import, CLI, capabilities and resource-estimate smoke tests.
+- The clean NumPy Stage 2 core is implemented with no reference, Torch or
+  Transformers import. It passes 80 reference-parity tests and 81 independent
+  invariant/resource tests; the full suite passes 509 tests at 92.85% branch
+  coverage, and the Stage 2 module reaches 90.63% branch coverage.
+- A separate read-only cross-audit exercised all 64 boundary/internal SIL/SPH
+  flag combinations and 100 fixed-seed random small decodes against both the
+  frozen reference and an independent exact-DP oracle without finding a
+  production defect.
+- Stage 2 resource complexity and limitations are recorded in
+  `STAGE2_RESOURCE_REPORT.md`. The inherited `beam=400` is not claimed as an
+  empirically safe bound; `TBD-ALG-005` remains open.
 - No external service, GitHub repository or PyPI project has been changed.
 
 ## Active work
 
-- Main agent: Stage 4 production Stage 2 integration and gate audit.
-- Parallel streams: clean graph construction, exact-scored beam Viterbi and
-  pruning/redecode parity tests in disjoint files.
+- Main agent: Stage 5 architecture, integration order and acceptance audit.
+- Next parallel streams: strict input/TextGrid output, lazy local-only model
+  inference, and pipeline/API/CLI integration in disjoint files.
 
 ## Current capability state
 
@@ -87,20 +100,20 @@
 
 ## Next gate
 
-Stage 4 requires:
+Stage 5 requires:
 
-1. a clean multi-pronunciation phone DAG with current optional `sil`/`sph`
-   paths and costs;
-2. NumPy beam Viterbi matching stay/move, per-frame bias, enter costs,
-   boundary contrast and complete-end semantics;
-3. state segmentation, 65/50 ms internal pruning and fixed-sequence second
-   decode;
-4. production/reference/exact-DP differential tests for graph and path scores;
-5. repeated word indices remain distinct and the current equal-phone state
-   limitation remains named rather than silently changed.
+1. strict transcript, lexicon, WAV, model-directory and vocabulary validation;
+2. a lazy CPU-only Hugging Face adapter using local files only;
+3. an instrumented proof that the Chunker is released before the Aligner loads;
+4. clean Stage 1/Stage 2 orchestration with complete word-index coverage;
+5. merged words/phones tiers and atomically written, read-back-validated
+   TextGrid output;
+6. Python API and single-file CLI success/failure contracts with explicitly
+   uncalibrated metadata.
 
 ## Known blockers
 
-None for model-free Stage 4 work. PyPI ownership, remote history, real-model E2E
-execution and behavior-changing algorithm decisions remain open but do not
-block parity implementation.
+None for model-free Stage 5 implementation. The inference extra and frozen local
+assets are available for later integration evidence, but fast tests must remain
+model-free and network-disabled. PyPI ownership, remote history, real-model E2E
+execution and behavior-changing algorithm decisions remain open.

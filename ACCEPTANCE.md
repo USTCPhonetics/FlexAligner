@@ -55,13 +55,13 @@
 
 | ID | Acceptance condition | Status | Evidence / command | Reviewer note |
 |---|---|---|---|---|
-| S4-001 | Multi-pronunciation `sil`/`sph` graph paths match accepted reference graph semantics | NOT_RUN | graph tests | |
-| S4-002 | Beam Viterbi scoring, boundary contrast and transition costs match reference | NOT_RUN | path/score tests | |
-| S4-003 | Incomplete end paths fail explicitly | NOT_RUN | negative path tests | |
-| S4-004 | Short internal `sil`/`sph` pruning matches 65/50 ms thresholds | NOT_RUN | threshold tests | |
-| S4-005 | Fixed-state second decode matches reference | NOT_RUN | two-pass tests | |
-| S4-006 | Adjacent repeated words retain distinct word indices | NOT_RUN | repeated-word tests | |
-| S4-007 | Equal-phone state limitation is characterized and not silently changed | NOT_RUN | known-limitation test/decision | |
+| S4-001 | Multi-pronunciation `sil`/`sph` graph paths match accepted reference graph semantics | PASS | 80 parity + 81 independent Stage 2 tests; 64-config read-only cross-audit | Six internal paths, boundary SPH and multi-pronunciation paths verified |
+| S4-002 | Beam Viterbi scoring, boundary contrast and transition costs match reference | PASS | reference/exact-DP differential; fixed-seed random cross-audit; Stage 2 branch coverage 90.63% | Stable `>` ties, final move, per-frame bias and one-time enter costs locked |
+| S4-003 | Incomplete end paths fail explicitly | PASS | narrow-beam and illegal/incomplete-path negative tests | No partial alignment is returned as success |
+| S4-004 | Short internal `sil`/`sph` pruning matches 65/50 ms thresholds | PASS | dedicated lock/prune boundary tests | Viterbi uses `round` (65 ms → 6); prune uses `ceil` (65 ms → 7) |
+| S4-005 | Fixed-state second decode matches reference | PASS | reference parity, exact-DP invariant and captured-argument regression | Second pass explicitly clears minimum-lock and both enter costs |
+| S4-006 | Adjacent repeated words retain distinct word indices | PASS | repeated `go go` phone/word segmentation tests | Word identity is index-based, not label-only |
+| S4-007 | Equal-phone state limitation is characterized and not silently changed | PASS | named current-behavior test; D-020 | Same-phone states within one word remain collapsed pending TBD-ALG-003 |
 
 ## F. Stage 5 — pipeline, CLI and output
 

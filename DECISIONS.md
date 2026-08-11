@@ -24,6 +24,8 @@ choices. An implementation choice is not rewritten as user authorization.
 | D-017 | Bind offline model preflight to the committed candidate manifest and exact recorded runtime; missing or mismatched prerequisites fail closed | Stage 2 E2E-preflight audit | Active implementation choice; real alignment E2E remains pending |
 | D-018 | Implement Stage 1 as a NumPy-only internal core with exact dense-trellis accounting and an optional caller-supplied pre-allocation cell limit | Stage 3 parity and resource audit | Active implementation choice; safe default remains TBD-ALG-005 |
 | D-019 | Reject non-finite internal chunk boundaries explicitly before millisecond rounding with a stable `ValueError` | Stage 3 main-agent audit | Accepted safety correction for invalid input only; valid reference behavior unchanged |
+| D-020 | Implement Stage 2 as a NumPy-only graph/beam core while preserving complete-end, stable-tie, per-frame-bias, enter-cost and equal-phone current behavior | Stage 4 parity, exact-DP and main-agent cross-audit | Active implementation choice; equal-phone correction remains TBD-ALG-003 |
+| D-021 | Keep the two characterized duration conversions distinct: Viterbi silence locking uses `round`, while short-gap pruning uses `ceil` | Current reference behavior and Stage 4 differential evidence | Accepted parity behavior; 65 ms at 10 ms is respectively 6 locked frames and a 7-frame prune threshold |
 
 ## Pending algorithm decisions
 
