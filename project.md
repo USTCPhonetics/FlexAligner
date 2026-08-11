@@ -2,7 +2,7 @@
 
 > 文档状态：实施中
 > 建立日期：2026-08-11（Asia/Shanghai）
-> 当前阶段：Stage 1 — 包、公开契约、占位接口与 CI/CD 骨架
+> 当前阶段：Stage 2 — reference 特征化、差分工具与 fixture 基线
 
 ## 1. 当前目标
 

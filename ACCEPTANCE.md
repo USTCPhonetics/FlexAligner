@@ -25,7 +25,7 @@
 | S1-003 | CLI help, version and capability discovery are deterministic | PASS | `tests/test_cli.py`; 9 tests | Human and JSON output stable |
 | S1-004 | All requested future capabilities have importable contracts | PASS | public symbols plus complete 14-entry capability report | Future enums do not imply availability |
 | S1-005 | Placeholder calls raise typed non-availability errors and do not silently fall back | PASS | `tests/test_placeholders.py`, `test_capabilities.py`, CLI tests | Guards precede input/model/output work |
-| S1-006 | Format, lint, strict type, test/coverage, build and wheel-smoke jobs are defined | PASS | local Ruff/mypy/50-test/88.16%-coverage/build checks; `ci.yml` | Remote matrix remains `TBD-CI-001` |
+| S1-006 | Format, lint, strict type, test/coverage, build and wheel-smoke jobs are defined | PASS | commit `5702f0a`; local Ruff/mypy/50-test/88.16%-coverage/build checks; `ci.yml` | Remote matrix remains `TBD-CI-001` |
 | S1-007 | Release workflow is event/environment guarded; only publish job has OIDC write permission | PASS | `tests/test_workflow_security.py`; 5 tests; YAML parse | Static policy pass; no remote publish attempted |
 | S1-008 | Package metadata, README and license files are present and consistent | PASS | `twine check --strict`; `check-wheel-contents`; `audit_dist.py` | README/LICENSE upstream source hashes rechecked |
 
