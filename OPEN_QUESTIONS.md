@@ -19,6 +19,11 @@ placeholder or explicit limitation.
 | TBD-ALG-003 | Consecutive equal phone-state identity? | preserve current behavior for parity | Corrected phone identity claim |
 | TBD-ALG-004 | Standard repeated-label CTC constraint? | preserve current simplified recurrence for parity | Algorithm correction claim |
 | TBD-ALG-005 | Resource limits? | add conservative tested limits only after measurement | Production safety claim |
+| TBD-OUT-001 | What crash-consistency protocol should cover optional metadata plus TextGrid across two files? | stage and validate both; commit metadata first and TextGrid last; roll back process-visible failures | Multi-artifact crash/power-loss atomicity claim |
+| TBD-API-002 | How should final phone intervals retain fixed-state word/phone provenance? | expose `word_index=None`, `phone_index=None`; do not infer missing provenance | Phone-to-word provenance claim |
+| TBD-PROV-001 | What canonical model-directory fingerprint format belongs in public provenance? | leave `model_fingerprints` empty; E2E manifest retains asset hashes | Public reproducibility schema |
+| TBD-INF-001 | Which Hugging Face processor/model architecture combinations are a supported public matrix? | validate the current AutoProcessor/AutoModelForCTC contract strictly; do not claim a broad matrix | Broad model compatibility claim |
+| TBD-THREAD-001 | Should an alignment restore the process-global Torch thread count after execution? | set only the requested positive CPU thread count inside the inference lifecycle; document process-global scope | Thread-isolation claim |
 
 ## Non-questions fixed by current scope
 

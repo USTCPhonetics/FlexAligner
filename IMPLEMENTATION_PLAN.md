@@ -256,6 +256,32 @@ Parallel work is split into bounded streams:
 Agents do not edit the same file concurrently. Work is reviewed from the shared
 filesystem and accepted only after the main agent reruns the relevant gate.
 
+### 7.1 Stage 5 parallel execution allocation
+
+Stage 5 uses the following disjoint ownership after the main agent freezes the
+shared Protocols and creates `adapters/__init__.py`:
+
+| Stream | Exclusive production files | Exclusive tests |
+|---|---|---|
+| A — strict input | `adapters/wav_pcm16.py`, `adapters/lexicon_file.py` | `tests/unit/test_wav_pcm16.py`, `tests/unit/test_lexicon_file.py` |
+| B — local inference | `adapters/hf_local.py` | `tests/unit/test_hf_local.py` |
+| C — TextGrid/output | `textgrid.py` | `tests/unit/test_textgrid.py`, `tests/unit/test_output_transaction.py` |
+| Main — integration | `ports.py`, `pipeline.py`, public API/CLI/contracts/capabilities/errors and package exports | pipeline, lifecycle, API/CLI and placeholder regression tests |
+
+Merge and audit order is strict input, local inference, TextGrid/output,
+pipeline, API, CLI, then capability promotion. The inference factory exposes
+non-overlapping Chunker and Aligner context managers; the pipeline must exit the
+Chunker context before entering the Aligner context. Fast tests use fake
+sessions and remain model-free and network-disabled.
+
+All requested future options remain guarded before I/O. The single implemented
+path is promoted to `available` only after the complete pipeline gate passes.
+For optional metadata plus TextGrid, all artifacts are staged and validated,
+metadata is committed first and TextGrid last as the success marker, and
+in-process failures roll back artifacts created by that invocation. A normal
+filesystem cannot guarantee atomic commit across two files during a crash or
+power loss; this limitation is tracked as `TBD-OUT-001`.
+
 ## 8. Staged execution
 
 ### Stage 0 — repository, governance and executable plan
