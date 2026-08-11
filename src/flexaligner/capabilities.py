@@ -81,13 +81,11 @@ class CapabilityReport:
         }
 
 
-_CORE_NOT_IMPLEMENTED = "The Stage 1/Stage 2 production pipeline has not been implemented yet."
-
 _CAPABILITIES = (
     Capability(
         id=CapabilityId.PYTHON_API,
         status=CapabilityStatus.AVAILABLE,
-        summary="Import-safe Python contract skeleton.",
+        summary="Import-safe Python API for strict local English CPU alignment.",
     ),
     Capability(
         id=CapabilityId.CLI,
@@ -101,9 +99,8 @@ _CAPABILITIES = (
     ),
     Capability(
         id=CapabilityId.SINGLE_FILE_EN_CPU,
-        status=CapabilityStatus.PLACEHOLDER,
-        summary="English CPU single-file forced alignment.",
-        reason=_CORE_NOT_IMPLEMENTED,
+        status=CapabilityStatus.AVAILABLE,
+        summary="English CPU single-file alignment with strict local inputs and models.",
     ),
     Capability(
         id=CapabilityId.MANDARIN,

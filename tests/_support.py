@@ -12,10 +12,10 @@ AVAILABLE_IDS = {
     "api.python",
     "cli",
     "capabilities.discovery",
+    "alignment.single_file.en.cpu",
 }
 
 PLACEHOLDER_IDS = {
-    "alignment.single_file.en.cpu",
     "language.zh",
     "device.gpu",
     "alignment.batch",

@@ -92,7 +92,7 @@ def test_all_placeholder_cli_commands_share_one_exit_status(
     assert next(iter(statuses)) > 0
 
 
-def test_align_placeholder_precedes_all_path_validation(
+def test_align_reports_strict_input_failure_without_output(
     run_cli: Callable[..., CompletedProcess[str]],
 ) -> None:
     result = run_cli(
@@ -113,5 +113,4 @@ def test_align_placeholder_precedes_all_path_validation(
     assert result.returncode != 0
     assert result.stdout == ""
     payload = parse_json_stream(result.stderr)
-    assert payload["code"] == "feature_not_available"
-    assert payload["context"]["capability"] == "alignment.single_file.en.cpu"
+    assert payload["code"] == "input_validation_error"

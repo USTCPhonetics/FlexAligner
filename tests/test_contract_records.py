@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import fields, is_dataclass
+from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
 
@@ -62,3 +63,43 @@ def test_required_record_field_names(public_api: ModuleType) -> None:
         record_type = cast(Any, getattr(public_api, record_name))
         actual = {field.name for field in fields(record_type)}
         assert actual == field_names
+
+
+@pytest.mark.parametrize("value", [True, 1.5, 0, -1])
+def test_integer_resource_limits_are_strict(
+    public_api: ModuleType,
+    value: object,
+) -> None:
+    with pytest.raises(public_api.ConfigurationError):
+        public_api.ResourceLimits(max_trellis_cells=value)
+
+
+@pytest.mark.parametrize("value", [True, 0.0, -1.0, float("nan"), float("inf")])
+def test_audio_resource_limit_is_positive_finite_real(
+    public_api: ModuleType,
+    value: object,
+) -> None:
+    with pytest.raises(public_api.ConfigurationError):
+        public_api.ResourceLimits(max_audio_seconds=value)
+
+
+def test_path_records_reject_stringly_typed_paths(public_api: ModuleType) -> None:
+    with pytest.raises(public_api.ConfigurationError):
+        public_api.LocalModelBundle(chunker_dir="chunk", aligner_dir=Path("align"))
+    with pytest.raises(public_api.ConfigurationError):
+        public_api.TextGridOutput(path="result.TextGrid")
+    with pytest.raises(public_api.ConfigurationError):
+        public_api.AlignmentRequest(
+            audio_path="input.wav",
+            transcript="hello",
+            output=public_api.TextGridOutput(path=Path("result.TextGrid")),
+        )
+
+
+@pytest.mark.parametrize("value", [True, 1.5, 0, -1])
+def test_num_threads_is_a_positive_non_boolean_integer(
+    public_api: ModuleType,
+    value: object,
+) -> None:
+    with pytest.raises(public_api.ConfigurationError):
+        public_api.AlignmentOptions(num_threads=value)

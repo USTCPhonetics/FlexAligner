@@ -58,15 +58,12 @@ def _assert_feature_error(
     assert payload["context"]["status"] == "placeholder"
 
 
-def test_default_alignment_is_truthfully_placeholder_before_input_io(
+def test_default_alignment_requires_explicit_lexicon_before_input_io(
     public_api: ModuleType, lazy_engine_and_request: tuple[Any, Any]
 ) -> None:
     engine, request = lazy_engine_and_request
-    _assert_feature_error(
-        public_api,
-        "alignment.single_file.en.cpu",
-        lambda: engine.align(request),
-    )
+    with pytest.raises(public_api.ConfigurationError, match="lexicon_path"):
+        engine.align(request)
     assert not request.output.path.exists()
 
 

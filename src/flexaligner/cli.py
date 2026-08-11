@@ -9,7 +9,8 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from . import __version__
-from .api import FlexAligner
+from .adapters.lexicon_file import read_utf8_text
+from .api import FlexAligner, require_supported_options
 from .capabilities import CapabilityId, get_capabilities
 from .contracts import (
     AlignmentOptions,
@@ -88,15 +89,8 @@ def _run_align(args: argparse.Namespace) -> None:
         device=Device(args.device),
         num_threads=args.num_threads,
     )
-    engine = FlexAligner(
-        models=LocalModelBundle(
-            chunker_dir=args.chunker_model,
-            aligner_dir=args.aligner_model,
-        ),
-        lexicon_path=args.lexicon,
-        options=options,
-    )
-    transcript = args.text if args.text is not None else ""
+    require_supported_options(options)
+    transcript = args.text if args.text is not None else read_utf8_text(args.text_file)
     request = AlignmentRequest(
         audio_path=args.audio,
         transcript=transcript,
@@ -106,7 +100,27 @@ def _run_align(args: argparse.Namespace) -> None:
         ),
         utterance_id=args.utterance_id,
     )
-    engine.align(request)
+    with FlexAligner(
+        models=LocalModelBundle(
+            chunker_dir=args.chunker_model,
+            aligner_dir=args.aligner_model,
+        ),
+        lexicon_path=args.lexicon,
+        options=options,
+    ) as engine:
+        result = engine.align(request)
+    print(
+        json.dumps(
+            {
+                "schema_version": result.schema_version,
+                "utterance_id": result.utterance_id,
+                "output_path": str(result.output_path),
+                "output_sha256": result.output_sha256,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+    )
 
 
 def _dispatch(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:

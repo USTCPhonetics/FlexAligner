@@ -20,14 +20,41 @@ from .contracts import (
     PronunciationMode,
 )
 from .errors import ConfigurationError, EngineClosedError
+from .ports import AlignmentPipelinePort
+
+
+def require_supported_options(options: AlignmentOptions) -> None:
+    """Fail every future option before input, model, output, or network I/O."""
+
+    if not isinstance(options, AlignmentOptions):
+        raise ConfigurationError("options must be AlignmentOptions")
+    report = get_capabilities()
+    if options.language is Language.ZH:
+        report.require(CapabilityId.MANDARIN)
+    if options.device is not Device.CPU:
+        report.require(CapabilityId.GPU)
+    if options.audio_policy is AudioPolicy.MULTI_FORMAT:
+        report.require(CapabilityId.MULTI_FORMAT_AUDIO)
+    if options.audio_policy is AudioPolicy.AUTO_RESAMPLE:
+        report.require(CapabilityId.AUTO_RESAMPLE)
+    if options.pronunciation_mode is PronunciationMode.G2P:
+        report.require(CapabilityId.DEFAULT_G2P)
+    if options.model_resolution is ModelResolution.AUTO_DOWNLOAD:
+        report.require(CapabilityId.AUTO_MODEL_DOWNLOAD)
+    if options.confidence_calibration is CalibrationMode.CALIBRATED:
+        report.require(CapabilityId.CONFIDENCE_CALIBRATION)
+    if options.algorithm_profile != "en-reference-v1":
+        raise ConfigurationError(
+            "Only algorithm_profile='en-reference-v1' is implemented",
+            context={"algorithm_profile": options.algorithm_profile},
+        )
 
 
 class FlexAligner:
     """Import-safe, lazy facade for one English CPU alignment engine.
 
-    Stage 1 exposes contracts and truthful placeholder failures only.  It does
-    not inspect paths, load models, import inference dependencies, or consume
-    batch iterables.
+    Construction and capability discovery do not inspect paths, load models,
+    import inference dependencies, or consume batch iterables.
     """
 
     def __init__(
@@ -47,6 +74,7 @@ class FlexAligner:
         self._models = models
         self._lexicon_path = lexicon_path
         self._options = AlignmentOptions() if options is None else options
+        self._pipeline: AlignmentPipelinePort | None = None
         self._closed = False
 
     def capabilities(self) -> CapabilityReport:
@@ -60,16 +88,28 @@ class FlexAligner:
         *,
         options: AlignmentOptions | None = None,
     ) -> AlignmentResult:
-        """Align one request once the production core becomes available."""
+        """Align one strict local English/CPU request."""
 
         self._ensure_open()
         if not isinstance(request, AlignmentRequest):
             raise ConfigurationError("request must be an AlignmentRequest")
         if options is not None and not isinstance(options, AlignmentOptions):
             raise ConfigurationError("options must be AlignmentOptions or None")
-        self._require_supported_options(self._options if options is None else options)
+        selected_options = self._options if options is None else options
+        require_supported_options(selected_options)
         self.capabilities().require(CapabilityId.SINGLE_FILE_EN_CPU)
-        raise AssertionError("unreachable: placeholder capability unexpectedly available")
+        if self._lexicon_path is None:
+            raise ConfigurationError("lexicon_path is required for English alignment")
+        if self._pipeline is None:
+            from .pipeline import AlignmentPipeline
+
+            self._pipeline = AlignmentPipeline()
+        return self._pipeline.align(
+            request=request,
+            models=self._models,
+            lexicon_path=self._lexicon_path,
+            options=selected_options,
+        )
 
     def align_batch(self, requests: Iterable[AlignmentRequest]) -> tuple[AlignmentResult, ...]:
         """Declare the batch boundary without consuming ``requests``."""
@@ -79,8 +119,13 @@ class FlexAligner:
         raise AssertionError("unreachable: placeholder capability unexpectedly available")
 
     def close(self) -> None:
-        """Close the lazy facade; safe and idempotent before models exist."""
+        """Close the lazy facade and any constructed pipeline, idempotently."""
 
+        if self._closed:
+            return
+        if self._pipeline is not None:
+            self._pipeline.close()
+            self._pipeline = None
         self._closed = True
 
     def __enter__(self) -> FlexAligner:
@@ -100,20 +145,5 @@ class FlexAligner:
         if self._closed:
             raise EngineClosedError("FlexAligner engine is closed")
 
-    def _require_supported_options(self, options: AlignmentOptions) -> None:
-        report = self.capabilities()
 
-        if options.language is Language.ZH:
-            report.require(CapabilityId.MANDARIN)
-        if options.device is not Device.CPU:
-            report.require(CapabilityId.GPU)
-        if options.audio_policy is AudioPolicy.AUTO_DECODE:
-            report.require(CapabilityId.MULTI_FORMAT_AUDIO)
-        if options.audio_policy is AudioPolicy.AUTO_RESAMPLE:
-            report.require(CapabilityId.AUTO_RESAMPLE)
-        if options.pronunciation_mode is PronunciationMode.G2P:
-            report.require(CapabilityId.DEFAULT_G2P)
-        if options.model_resolution is ModelResolution.AUTO_DOWNLOAD:
-            report.require(CapabilityId.AUTO_MODEL_DOWNLOAD)
-        if options.confidence_calibration is CalibrationMode.CALIBRATED:
-            report.require(CapabilityId.CONFIDENCE_CALIBRATION)
+__all__ = ["FlexAligner", "require_supported_options"]

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from enum import Enum
+from numbers import Real
 from pathlib import Path
 
 from .errors import ConfigurationError
@@ -63,13 +65,29 @@ class ResourceLimits:
     max_trellis_cells: int | None = None
 
     def __post_init__(self) -> None:
+        audio_limit: object = self.max_audio_seconds
+        if audio_limit is not None:
+            if isinstance(audio_limit, bool) or not isinstance(audio_limit, Real):
+                raise ConfigurationError(
+                    "max_audio_seconds must be a real number or None",
+                    context={"field": "max_audio_seconds", "value": str(audio_limit)},
+                )
+            if not math.isfinite(float(audio_limit)) or float(audio_limit) <= 0.0:
+                raise ConfigurationError(
+                    "max_audio_seconds must be positive and finite when provided",
+                    context={"field": "max_audio_seconds", "value": float(audio_limit)},
+                )
         for name in (
-            "max_audio_seconds",
             "max_transcript_words",
             "max_phone_tokens",
             "max_trellis_cells",
         ):
             value = getattr(self, name)
+            if value is not None and (isinstance(value, bool) or not isinstance(value, int)):
+                raise ConfigurationError(
+                    f"{name} must be an integer or None",
+                    context={"field": name, "value": str(value)},
+                )
             if value is not None and value <= 0:
                 raise ConfigurationError(
                     f"{name} must be positive when provided",
@@ -83,11 +101,31 @@ class LocalModelBundle:
     aligner_dir: Path
     manifest_path: Path | None = None
 
+    def __post_init__(self) -> None:
+        for name in ("chunker_dir", "aligner_dir"):
+            value = getattr(self, name)
+            if not isinstance(value, Path):
+                raise ConfigurationError(
+                    f"{name} must be a pathlib.Path",
+                    context={"field": name, "value_type": type(value).__name__},
+                )
+        if self.manifest_path is not None and not isinstance(self.manifest_path, Path):
+            raise ConfigurationError(
+                "manifest_path must be a pathlib.Path or None",
+                context={"field": "manifest_path"},
+            )
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class TextGridOutput:
     path: Path
     chunk_metadata_path: Path | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.path, Path):
+            raise ConfigurationError("TextGrid output path must be a pathlib.Path")
+        if self.chunk_metadata_path is not None and not isinstance(self.chunk_metadata_path, Path):
+            raise ConfigurationError("chunk_metadata_path must be a pathlib.Path or None")
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -96,6 +134,18 @@ class AlignmentRequest:
     transcript: str
     output: TextGridOutput
     utterance_id: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.audio_path, Path):
+            raise ConfigurationError("audio_path must be a pathlib.Path")
+        if not isinstance(self.transcript, str):
+            raise ConfigurationError("transcript must be a string")
+        if not isinstance(self.output, TextGridOutput):
+            raise ConfigurationError("output must be a TextGridOutput")
+        if self.utterance_id is not None and (
+            not isinstance(self.utterance_id, str) or not self.utterance_id.strip()
+        ):
+            raise ConfigurationError("utterance_id must be a non-empty string or None")
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -129,8 +179,13 @@ class AlignmentOptions:
                     f"{name} must be a {enum_type.__name__}",
                     context={"field": name, "value": str(value)},
                 )
-        if not self.algorithm_profile.strip():
+        if not isinstance(self.algorithm_profile, str) or not self.algorithm_profile.strip():
             raise ConfigurationError("algorithm_profile must not be empty")
+        if isinstance(self.num_threads, bool) or not isinstance(self.num_threads, int):
+            raise ConfigurationError(
+                "num_threads must be an integer",
+                context={"field": "num_threads", "value": str(self.num_threads)},
+            )
         if self.num_threads <= 0:
             raise ConfigurationError(
                 "num_threads must be positive",
