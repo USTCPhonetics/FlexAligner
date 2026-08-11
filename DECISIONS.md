@@ -22,6 +22,8 @@ choices. An implementation choice is not rewritten as user authorization.
 | D-015 | Set the first branch-coverage ratchet to 85% after a reviewed 88% Stage 1 baseline; future changes may hold or raise it but not silently lower it | Main-agent local gate evidence, 50 Stage 1 tests on Python 3.10.8 | Active implementation choice |
 | D-016 | Vendor the authoritative script byte-for-byte as test evidence, while forbidding production imports and excluding it from wheel/sdist | Stage 2 portability and package-boundary audit | Active implementation choice |
 | D-017 | Bind offline model preflight to the committed candidate manifest and exact recorded runtime; missing or mismatched prerequisites fail closed | Stage 2 E2E-preflight audit | Active implementation choice; real alignment E2E remains pending |
+| D-018 | Implement Stage 1 as a NumPy-only internal core with exact dense-trellis accounting and an optional caller-supplied pre-allocation cell limit | Stage 3 parity and resource audit | Active implementation choice; safe default remains TBD-ALG-005 |
+| D-019 | Reject non-finite internal chunk boundaries explicitly before millisecond rounding with a stable `ValueError` | Stage 3 main-agent audit | Accepted safety correction for invalid input only; valid reference behavior unchanged |
 
 ## Pending algorithm decisions
 

@@ -2,7 +2,7 @@
 
 > 文档状态：实施中
 > 建立日期：2026-08-11（Asia/Shanghai）
-> 当前阶段：Stage 3 — Stage 1 干净实现与差分验收
+> 当前阶段：Stage 4 — Stage 2 图、Viterbi、剪枝与二次解码实现
 
 ## 1. 当前目标
 
@@ -71,10 +71,11 @@
 | remote | 未配置 |
 | PyPI 项目 | 尚未创建或占位；最终名称/所有权 `[TBD-PKG-001]` |
 | 发布 | 未授权、未执行 |
-| 生产代码 | 包/API/CLI/占位接口已建立；真实对齐核心尚未接入 |
-| 测试 | 149 项 fast tests 通过；其中 92 项为无模型 characterization/oracle |
+| 生产代码 | 包/API/CLI/占位接口及 NumPy Stage 1 核心已建立；完整管线尚未接入 |
+| 测试 | 348 项 fast tests 通过；分支覆盖率 94.75% |
 | reference | 仓内字节冻结并 hash guard；禁止进入生产 import、wheel 或 sdist |
 | E2E 资产 | 16 项候选资产 hash 与精确运行时预检通过；真实对齐 E2E 尚未运行 |
+| Stage 1 资源 | 精确 O(TN) 估算和显式 cell limit 已验证；安全默认值 `[TBD-ALG-005]` |
 
 ## 4. 核心算法契约摘要
 

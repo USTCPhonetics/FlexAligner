@@ -45,11 +45,11 @@
 
 | ID | Acceptance condition | Status | Evidence / command | Reviewer note |
 |---|---|---|---|---|
-| S3-001 | First pronunciation and Chunker stress stripping match reference | NOT_RUN | unit/differential tests | |
-| S3-002 | Trellis/backtrace, including early target completion, match reference | NOT_RUN | synthetic log-prob tests | |
-| S3-003 | Word emission confidence matches the uncalibrated reference definition | NOT_RUN | numeric tests | |
-| S3-004 | ±0.3 s anchors, strict `<0.2 s` merge and millisecond grid match reference | NOT_RUN | boundary tests | |
-| S3-005 | Every word index is covered exactly once in order or alignment fails | NOT_RUN | property/negative tests | |
+| S3-001 | First pronunciation and Chunker stress stripping match reference | PASS | three-way parity suite: 123 passed | First variant/order and failure context covered |
+| S3-002 | Trellis/backtrace, including early target completion, match reference | PASS | reference + NumPy oracle + fixed-seed exhaustive tests | Tie-stay and repeated-target current behavior locked |
+| S3-003 | Word emission confidence matches the uncalibrated reference definition | PASS | emission/avg-frame/phone-to-word numeric parity | Geometric-mean probability semantics preserved |
+| S3-004 | ±0.3 s anchors, strict `<0.2 s` merge and millisecond grid match reference | PASS | boundary/round/tail-clamp parity and negatives | NaN/Inf now fail explicitly before rounding under D-019 |
+| S3-005 | Every word index is covered exactly once in order or alignment fails | PASS | duplicate/missing/out-of-order/word-mismatch invariants | Repeated word labels remain distinct by index |
 
 ## E. Stage 4 — Stage 2 implementation
 
@@ -94,12 +94,12 @@
 
 | ID | Acceptance condition | Status | Evidence / command | Reviewer note |
 |---|---|---|---|---|
-| Q-001 | Formatter and linter pass with no ignored new violations | PASS | Ruff 0.16.2: 43 maintained files formatted; all checks passed | Immutable reference excluded and hash-guarded |
-| Q-002 | Strict static type check passes | PASS | mypy 2.3.0: no issues in 11 configured `src`/`scripts` files | Strict config |
+| Q-001 | Formatter and linter pass with no ignored new violations | PASS | Ruff 0.16.2: 50 maintained files formatted; all checks passed | Immutable reference excluded and hash-guarded |
+| Q-002 | Strict static type check passes | PASS | mypy 2.3.0: no issues in 13 configured `src`/`scripts` files | Strict config |
 | Q-003 | Fast tests pass on every supported Python version | NOT_RUN | CI matrix/local available versions | |
-| Q-004 | Coverage meets the recorded non-decreasing threshold | PASS | branch coverage 88.16%; D-015 threshold 85% | 149 tests, Python 3.10.8 |
-| Q-005 | Wheel and sdist build from clean source and pass metadata checks | PASS | fresh Hatchling build; Twine/check-wheel/audit all pass | wheel `f3b6e47f...b9449`; sdist `d87c8a08...7d801` |
-| Q-006 | Built wheel installs and runs outside repository source tree | PASS | `/tmp/flexaligner-wheel-smoke.Q5d5Vd`; `pip check`, import path, CLI | Final rebuilt wheel used |
+| Q-004 | Coverage meets the recorded non-decreasing threshold | PASS | branch coverage 94.75%; D-015 threshold 85% | 348 tests, Python 3.10.8 |
+| Q-005 | Wheel and sdist build from clean source and pass metadata checks | PASS | fresh Stage 3 Hatchling build; Twine/check-wheel/audit all pass | wheel `8bf98278...7868f`; sdist `6d83cb0c...be364` |
+| Q-006 | Built wheel installs and runs outside repository source tree | PASS | `/tmp/flexaligner-stage3-smoke.TPMkh3`; `pip check`, site-packages core import, CLI | Exact Stage 3 wheel used |
 | Q-007 | English real-model E2E passes with frozen assets, or is truthfully `BLOCKED` | NOT_RUN | E2E report and hashes | |
 | Q-008 | No test or package import performs an undeclared network request | PASS | `pytest --disable-socket`; import-safety subprocess; offline env | Dependency installation is a separate networked setup step |
 
