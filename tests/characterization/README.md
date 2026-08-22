@@ -1,20 +1,17 @@
-# Characterization and oracle policy
+# 特征化与 oracle 规则
 
-The immutable file in `reference/` is test evidence only. Production code must
-never import it, and neither wheel nor sdist may contain it.
+`reference/` 中的不可变文件只作为测试证据。生产代码不得导入它，wheel 和 sdist
+也不得包含它。
 
-Tests are kept in three distinct classes:
+测试严格分为三类：
 
-1. **A — reference parity:** characterizes behavior of the current authoritative
-   local script, including named quirks. Rebuild code must match until a separate
-   decision approves a correction.
-2. **B — independent correctness:** small exhaustive or hand-derived oracles
-   assert invariants without treating the reference implementation as proof.
-3. **C — approved correction:** a decision record names the old behavior, the
-   desired behavior, compatibility impact, and new tests before production
-   behavior diverges.
+1. **A — reference 等价：**特征化当前权威本地脚本的行为，包括具名的已知特性。
+   在单独决定批准修正前，重建代码必须与其一致。
+2. **B — 独立正确性：**使用小规模穷举或人工推导的 oracle 验证不变量，不把
+   reference 实现本身当作正确性证明。
+3. **C — 已批准修正：**生产行为偏离前，决定记录必须写明旧行为、目标行为、
+   兼容性影响和新增测试。
 
-There is no `--update-golden`, snapshot rewrite, or comparator-side acceptance
-mode. A mismatch must show the first differing field/index. Expected data may be
-changed only in the same reviewed change that updates `DECISIONS.md`, and a
-failing test must never be made green merely by regenerating output.
+项目没有 `--update-golden`、快照重写或比较器侧接受模式。发生不一致时必须显示
+第一个不同字段/索引。预期数据只能与更新 `DECISIONS.md` 的同一项审阅变更一起修改；
+不得仅通过重新生成输出让失败测试变绿。

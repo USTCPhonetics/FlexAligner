@@ -1,33 +1,30 @@
-# FlexAligner algorithm reference snapshot
+# FlexAligner 算法 reference 快照
 
-`align_single_cpu.py` is an immutable, byte-for-byte evidence snapshot of:
+`align_single_cpu.py` 是以下文件不可变的逐字节证据快照：
 
 ```text
 /Users/yiyi0369/projects/flexaligner/align_single_cpu.py
 ```
 
-Verified snapshot identity:
+已验证的快照身份：
 
-- SHA-256: `9ed4e21e615718ddfd10930359f55769fb27a0d284599cce45a3fc755e835de1`
-- Lines: `2548`
-- Bytes: `96230`
-- Copy mode: byte-for-byte; no formatting or source edits
+- SHA-256：`9ed4e21e615718ddfd10930359f55769fb27a0d284599cce45a3fc755e835de1`
+- 行数：`2548`
+- 字节数：`96230`
+- 复制方式：逐字节复制；没有格式化或源代码修改
 
-The current local source and this snapshot are the behavior oracle for parity
-migration. The remote repository snapshot
+当前本地源文件和本快照共同作为等价迁移的行为 oracle。远端仓库快照
 `USTCPhonetics/FlexAligner main@c5361efe4b5d8ad02574dae1bd7caa89ed3e4af0`
-is the README, identity, license-provenance and comparison source; its historical
-core implementation is not the new algorithm authority.
+只作为 README、身份、许可 provenance 和差异比较来源；其历史核心实现不是新算法权威。
 
-This file is evidence, not production code:
+本文件是证据，不是生产代码：
 
-- `src/flexaligner` must never import or execute it;
-- wheels and source distributions must exclude `reference/`;
-- a snapshot change requires a new verified hash and an explicit decision;
-- characterization tests may import it only through the isolated loader, which
-  stubs Torch and Transformers and restores `sys.modules` afterward.
+- `src/flexaligner` 不得导入或执行它；
+- wheel 和 sdist 必须排除 `reference/`；
+- 修改快照需要新的已验证 hash 和明确决定；
+- 特征化测试只能通过隔离 loader 导入它；loader 会为 Torch 和 Transformers
+  提供 stub，并在结束后恢复 `sys.modules`。
 
-An older session described continuous TextGrid gap validation as already fixed.
-The current authoritative snapshot does not reject leading, internal or trailing
-gaps when intervals otherwise remain ordered and in bounds. Characterization
-records that conflict as a known limitation; it does not silently repair it.
+旧会话曾把 TextGrid 连续 gap 验证描述成已经修复。当前权威快照不会在 interval
+仍保持顺序且位于边界内时拒绝开头、内部或尾部 gap。特征化测试把这个冲突记录为
+已知限制，不做静默修复。

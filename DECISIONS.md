@@ -1,86 +1,79 @@
-# DECISIONS
+# 已接受决定
 
-This file separates explicit user decisions from reversible implementation
-choices. An implementation choice is not rewritten as user authorization.
+本文档用于区分用户明确接受的决定与可逆的实施选择。实施选择不得被改写成
+用户授权。
 
-| ID | Decision | Source | Status |
+| ID | 决定 | 来源 | 状态 |
 |---|---|---|---|
-| D-001 | Rebuild from a clean code baseline rather than repair the remote core in place | Current user message | Accepted |
-| D-002 | Keep the remote README/product identity broadly, but re-audit every capability and command against the new implementation | Current and preceding user message | Accepted; identity, authorship and license fields are fixed by D-032, while capability and command text remains bound to the rebuilt implementation |
-| D-003 | Use the current local `align_single_cpu.py` as the core algorithm authority | Current project instruction and local file | Accepted |
-| D-004 | Mandarin is a placeholder in this milestone | Current user message | Accepted |
-| D-005 | GPU, batch, Web, automatic model download, multi-format audio, automatic resampling, Chinese segmentation, default G2P and confidence calibration receive interfaces only | Current user message | Accepted |
-| D-006 | Build toward a publishable pip/PyPI package with strict CI/CD tests | Current user message | Accepted |
-| D-007 | Parallelize bounded work with sub-agents; main agent audits, merges, schedules and signs acceptance | Current user message | Accepted |
-| D-008 | Use the stated fact-authority and conflict-handling discipline | User-provided governance text | Accepted |
-| D-009 | Create the reversible local repository at `/Users/yiyi0369/projects/flexaligner-rebuild` | Main-agent path choice implementing “new local repository” | Active implementation choice |
-| D-010 | First implemented product path is English, CPU, single file, strict local models/lexicon/WAV | Mandarin-placeholder requirement plus current reference/assets | Active implementation choice; reversible before public API freeze |
-| D-011 | Placeholder calls fail with typed `FeatureNotAvailableError`; they do not silently fall back | Main-agent safety/API design | Active implementation choice |
-| D-012 | Characterize and reach reference parity before behavior-changing corrections | Main-agent migration guard derived from “local logic is authoritative” | Active implementation choice |
-| D-013 | Do not publish to PyPI or mutate a remote repository without separate explicit authorization | Current scope and external-write safety | Active guard |
-| D-014 | Use a `src/` package layout and one canonical version source | Main-agent packaging design; aligned with current PyPA guidance | Active implementation choice |
-| D-015 | Set the first branch-coverage ratchet to 85% after a reviewed 88% Stage 1 baseline; future changes may hold or raise it but not silently lower it | Main-agent local gate evidence, 50 Stage 1 tests on Python 3.10.8 | Active implementation choice |
-| D-016 | Vendor the authoritative script byte-for-byte as test evidence, while forbidding production imports and excluding it from wheel/sdist | Stage 2 portability and package-boundary audit | Active implementation choice |
-| D-017 | Bind offline model preflight to the committed candidate manifest and exact recorded runtime; missing or mismatched prerequisites fail closed | Stage 2 E2E-preflight audit | Active guard retained; the candidate E2E and the later D-033 approved exact-wheel rerun both pass locally |
-| D-018 | Implement Stage 1 as a NumPy-only internal core with exact dense-trellis accounting and an optional caller-supplied pre-allocation cell limit | Stage 3 parity and resource audit | Active implementation choice; safe default remains TBD-ALG-005 |
-| D-019 | Reject non-finite internal chunk boundaries explicitly before millisecond rounding with a stable `ValueError` | Stage 3 main-agent audit | Accepted safety correction for invalid input only; valid reference behavior unchanged |
-| D-020 | Implement Stage 2 as a NumPy-only graph/beam core while preserving complete-end, stable-tie, per-frame-bias, enter-cost and equal-phone current behavior | Stage 4 parity, exact-DP and main-agent cross-audit | Active implementation choice; equal-phone correction remains TBD-ALG-003 |
-| D-021 | Keep the two characterized duration conversions distinct: Viterbi silence locking uses `round`, while short-gap pruning uses `ceil` | Current reference behavior and Stage 4 differential evidence | Accepted parity behavior; 65 ms at 10 ms is respectively 6 locked frames and a 7-frame prune threshold |
-| D-022 | Fail closed when a local vocabulary has duplicate JSON members, the Chunker tokenizer mapping differs from `vocab.json`, or a posterior is not finite normalized log probability | Stage 5 adapter/pipeline cross-audit | Accepted invalid-model safety correction; valid reference inputs are unchanged |
-| D-023 | Publish output with a same-directory atomic no-clobber hard link, then revalidate identity, exact bytes and semantics; never overwrite a concurrent artifact | Stage 5 output transaction cross-audit | Active implementation choice; cross-file crash consistency remains TBD-OUT-001 |
-| D-024 | Reject transcript tokens `sil` and `null` before model loading because the current reference tier format uses them as reserved labels | Stage 5 word-identity audit | Accepted explicit limitation; a non-conflicting identity scheme remains TBD-TEXT-001 |
-| D-025 | Keep Chunker and Aligner model sessions non-overlapping, CPU-only and local-only; release the Chunker before loading the Aligner | Stage 5 lifecycle audit and current user scope | Active implementation choice |
-| D-026 | Treat the frozen English manifest as engineering evidence while `status=candidate`; a release E2E must fail closed unless the manifest is explicitly `approved` | Stage 6 E2E and release audit | Historical candidate phase closed by D-033; the fail-closed approval guard remains active and the approved exact-wheel rerun passes locally |
-| D-027 | Pin Hatchling exactly and build with `--no-isolation` after the pinned package group is installed | Stage 6 reproducibility audit | Active CI/release choice; current backend is 1.32.0 |
-| D-028 | Use the current reference/new double-run output as the E2E oracle; retain the pre-existing OpenPhonetics TextGrid only as a hashed legacy candidate | D-003 authority rule plus Stage 6 byte comparison | Accepted conflict resolution; no legacy-output expectations were merged |
-| D-029 | Position the first public release as `PUBLIC_ALPHA` with PEP 440 version `0.1.0a1` | Current user review message | Accepted; `pyproject.toml` remains at the development version `0.1.0.dev0` until the approved metadata change is implemented and reverified |
-| D-030 | Integrate the clean rebuild into GitHub using `REPLACE_MAIN_HISTORY`: directly replace the existing `USTCPhonetics/FlexAligner` main history rather than merge or graft unrelated histories | Current user review message | Accepted strategy; it is not authorization to configure a remote, push, force-update a branch, change the default branch, create a tag or remove recoverability |
-| D-031 | Use `flexaligner` as the PyPI distribution name and `ustcphonetics` as its owner/organization | Current user review message | Accepted selection; actual PyPI availability, control and Trusted Publisher configuration remain external verification steps |
-| D-032 | Use the original remote repository snapshot for license, copyright, authorship, affiliation and citation identity: MIT; `Copyright (c) 2026 WANG Yiming`; Yiming Wang and Jiahong Yuan, USTC | Current user review message; fixed upstream README and linked LICENSE at `c5361efe4b5d8ad02574dae1bd7caa89ed3e4af0` | Accepted; the README supplies the MIT identity/authors and its linked LICENSE supplies the exact copyright line; unsupported legacy capability claims are not revived |
-| D-033 | Approve `openphonetics OW1 P AH0 N F AH0 N EH1 T IH0 K S` only as the frozen release-E2E test-fixture pronunciation | Current user review message | Accepted and locally reverified with the approved exact wheel; this is not a canonical pronunciation, default G2P, accuracy gold standard or permission to distribute model assets |
-| D-034 | Accept the v0.1 public-preview support boundary bundle recorded below (`ACCEPT_PREVIEW_BUNDLE`) | Current user review message | Accepted; it defers disclosed research questions for the alpha but does not convert implementation, CI, remote E2E or publishing gates into passes |
+| D-001 | 从干净代码基线重建，而不是在远端旧核心上原地修补 | 用户当前消息 | 已接受 |
+| D-002 | 大体保留远端 README 和产品身份，但所有能力与命令都必须依据新实现重新审计 | 用户当前及此前消息 | 已接受；身份、作者和许可由 D-032 固定，能力与命令文本以重建实现为准 |
+| D-003 | 以当前本地 `align_single_cpu.py` 作为核心算法权威 | 当前项目指令及本地文件 | 已接受 |
+| D-004 | 普通话在本里程碑中只保留占位 | 用户当前消息 | 已接受 |
+| D-005 | GPU、批处理、Web、自动模型下载、多格式音频、自动重采样、中文分词、默认 G2P 和置信度校准只建立接口 | 用户当前消息 | 已接受 |
+| D-006 | 以可发布的 pip/PyPI 包为目标，并建立严格 CI/CD 测试 | 用户当前消息 | 已接受 |
+| D-007 | 对边界明确的工作使用多个子 agent 并行处理，由主 agent 审计、合并、调度和最终验收 | 用户当前消息 | 已接受 |
+| D-008 | 使用用户给出的事实权威顺序和冲突处理纪律 | 用户提供的治理文本 | 已接受 |
+| D-009 | 在 `/Users/yiyi0369/projects/flexaligner-rebuild` 建立可逆的本地新仓库 | 主 agent 对“新建本地仓库”的路径选择 | 有效实施选择 |
+| D-010 | 第一条真实产品链路为英语、CPU、单文件、严格本地模型/词典/WAV | 普通话占位要求和当前 reference/资产 | 有效实施选择；公共 API 冻结前仍可调整 |
+| D-011 | 占位能力调用抛出类型化 `FeatureNotAvailableError`，不得静默回退 | 主 agent 的安全/API 设计 | 有效实施选择 |
+| D-012 | 在改变行为前先完成特征化并达到 reference 等价 | 主 agent 根据“以本地逻辑为准”建立的迁移保护 | 有效实施选择 |
+| D-013 | 未经单独明确授权，不发布到 PyPI，也不修改远端仓库 | 当前范围和外部写入安全要求 | 有效保护规则 |
+| D-014 | 使用 `src/` 包布局和单一权威版本来源 | 主 agent 的打包设计；与当前 PyPA 指南一致 | 有效实施选择 |
+| D-015 | 在 Stage 1 经审阅的 88% 基线后，将首个分支覆盖率门槛设为 85%；后续只能保持或提高，不得静默降低 | 主 agent 本地门禁证据；Python 3.10.8 上 50 项 Stage 1 测试 | 有效实施选择 |
+| D-016 | 将权威脚本逐字节保存为测试证据，同时禁止生产代码导入，并从 wheel/sdist 排除 | Stage 2 可移植性与包边界审计 | 有效实施选择 |
+| D-017 | 离线模型预检必须绑定已提交的候选 manifest 和精确运行时；缺少或不匹配时关闭式失败 | Stage 2 E2E 预检审计 | 保护规则继续有效；候选阶段 E2E 以及 D-033 后的 approved exact-wheel 复跑均在本地通过 |
+| D-018 | Stage 1 使用仅依赖 NumPy 的内部核心，精确核算稠密 trellis，并允许调用方提供预分配 cell 上限 | Stage 3 等价与资源审计 | 有效实施选择；安全默认值仍为 TBD-ALG-005 |
+| D-019 | 在毫秒取整前明确拒绝非有限 chunk 边界，并统一抛出稳定的 `ValueError` | Stage 3 主 agent 审计 | 已接受的无效输入安全修正；有效 reference 行为不变 |
+| D-020 | Stage 2 使用仅依赖 NumPy 的图/beam 核心，同时保留完整终态、稳定平局、逐帧 bias、进入代价和相同 phone 的当前行为 | Stage 4 等价、精确 DP 与主 agent 交叉审计 | 有效实施选择；相同 phone 修正仍为 TBD-ALG-003 |
+| D-021 | 保留两种已特征化的时长换算：Viterbi 静音锁定使用 `round`，短 gap 剪枝使用 `ceil` | 当前 reference 行为与 Stage 4 差分证据 | 已接受的等价行为；10 ms 帧移下 65 ms 分别对应 6 个锁定帧和 7 帧剪枝阈值 |
+| D-022 | 本地词表出现重复 JSON member、Chunker tokenizer 映射与 `vocab.json` 不同，或 posterior 不是有限且归一化的对数概率时，必须关闭式失败 | Stage 5 adapter/pipeline 交叉审计 | 已接受的无效模型安全修正；有效 reference 输入不变 |
+| D-023 | 使用同目录原子 no-clobber 硬链接发布输出，随后重新验证文件身份、精确字节和语义；不得覆盖并发产物 | Stage 5 输出事务交叉审计 | 有效实施选择；跨文件崩溃一致性仍为 TBD-OUT-001 |
+| D-024 | 在模型加载前拒绝 transcript 中的 `sil` 和 `null`，因为当前 reference tier 格式将它们作为保留标签 | Stage 5 词身份审计 | 已接受的明确限制；无冲突身份方案仍为 TBD-TEXT-001 |
+| D-025 | Chunker 与 Aligner 模型 session 不得重叠，必须只使用 CPU 和本地文件；先释放 Chunker，再加载 Aligner | Stage 5 生命周期审计和当前用户范围 | 有效实施选择 |
+| D-026 | 当英语冻结 manifest 为 `status=candidate` 时，只把它视为工程证据；release E2E 必须在 manifest 明确为 `approved` 后才能通过 | Stage 6 E2E 与发布审计 | 历史候选阶段由 D-033 关闭；approval 关闭式保护仍有效，approved exact-wheel 已在本地通过 |
+| D-027 | 精确固定 Hatchling，并在安装固定 package group 后使用 `--no-isolation` 构建 | Stage 6 可复现性审计 | 有效 CI/发布选择；当前 backend 为 1.32.0 |
+| D-028 | 使用当前 reference/新实现双跑输出作为 E2E oracle；既有 OpenPhonetics TextGrid 只作为带 hash 的 legacy candidate 保留 | D-003 权威规则与 Stage 6 字节比较 | 已接受的冲突处理；没有把旧输出预期静默合并进来 |
+| D-029 | 将首个公开版本定位为 `PUBLIC_ALPHA`，PEP 440 版本为 `0.1.0a1` | 用户审阅消息 | 已接受；在批准的元数据修改完成并复验前，`pyproject.toml` 仍保持开发版本 `0.1.0.dev0` |
+| D-030 | 使用 `REPLACE_MAIN_HISTORY` 接入 GitHub：直接替代现有 `USTCPhonetics/FlexAligner` 的 main 历史，不合并或嫁接无关历史 | 用户审阅消息 | 已接受的策略；不构成配置 remote、push、强制更新分支、修改默认分支、创建 tag 或取消可恢复性的授权 |
+| D-031 | PyPI distribution 使用 `flexaligner`，owner/organization 使用 `ustcphonetics` | 用户审阅消息 | 已接受；PyPI 实际可用性、控制权和 Trusted Publisher 配置仍须外部验证 |
+| D-032 | 许可、版权、作者、单位和引用身份采用原远端固定快照：MIT；`Copyright (c) 2026 WANG Yiming`；Yiming Wang 与 Jiahong Yuan，USTC | 用户审阅消息；固定上游 README 和同提交 LICENSE，提交为 `c5361efe4b5d8ad02574dae1bd7caa89ed3e4af0` | 已接受；README 提供 MIT 标识和作者，同提交 LICENSE 提供精确版权行；不复活旧仓库中未经支持的能力声明 |
+| D-033 | 只批准 `openphonetics OW1 P AH0 N F AH0 N EH1 T IH0 K S` 作为冻结的 release-E2E 测试夹具发音 | 用户审阅消息 | 已接受并通过 approved exact wheel 本地复验；它不是规范发音、默认 G2P、准确率金标准或模型分发许可 |
+| D-034 | 接受下述 v0.1 公开预览支持边界（`ACCEPT_PREVIEW_BUNDLE`） | 用户审阅消息 | 已接受；允许 alpha 披露并延期研究问题，但不把实施、CI、远端 E2E 或发布门禁自动改成通过 |
+| D-035 | 对外发布项目的根 `README.md` 保持现有中英双语接口；给项目维护者使用的治理、计划、验收、资源和测试说明文档一律使用中文 | 用户当前消息 | 已接受；翻译前英文版由提交 `31becaf` 和 `docs/archive/2026-08-22-english-docs.md` 索引保存 |
 
-## Accepted v0.1 public-preview boundary (D-034)
+## 已接受的 v0.1 公开预览边界（D-034）
 
-The approved `0.1.0a1` boundary is:
+批准的 `0.1.0a1` 边界如下：
 
-1. The only implemented alignment path is strict English, CPU, single-file,
-   16 kHz mono PCM16 WAV, local models and a local full-coverage lexicon.
-   Mandarin and the other nine future capabilities remain explicit placeholders.
-2. The wheel carries no model and performs no automatic download. Users supply
-   compatible, locally available assets.
-3. Python 3.10--3.14 remains the remote fast-CI target. The only frozen real-model
-   runtime evidence currently comes from Python 3.10.8, NumPy 2.2.6, Torch 2.3.1
-   and Transformers 4.41.2; broader support is not implied.
-4. Before public alpha, the actual `[inference]` resolver/runtime contract must be
-   narrowed to an evidenced window and checked through a public-index install
-   path, or the public extra must be removed. A broad Hugging Face matrix is
-   deferred.
-5. No broad legacy Python/CLI compatibility layer is included. A concrete adapter
-   requires an identified real caller.
-6. Reference-parity behavior remains disclosed: the frozen fixture's roughly
-   18 ms tail gap, fixed 10 ms Stage 2 stride, same-word consecutive equal-phone
-   collapse and simplified repeated-label CTC recurrence are not silently fixed.
-7. Confidence remains raw and uncalibrated. Missing final phone provenance remains
-   `None` rather than being inferred.
-8. Lexical words `sil` and `null` remain typed pre-model input errors.
-9. No approved default resource limit is claimed, and the preview is not described
-   as safe for arbitrary-length untrusted input.
-10. Torch CPU thread-count changes are process-global and must be documented before
-    public release; host-process isolation is not claimed.
+1. 唯一实现的对齐链路是严格英语、CPU、单文件、16 kHz 单声道 PCM16 WAV、
+   本地模型和本地全覆盖词典。普通话及其他九项未来能力保持显式占位。
+2. wheel 不携带模型，也不自动下载。用户必须提供兼容的本地资产。
+3. Python 3.10--3.14 仍是远端 fast CI 目标。真实模型证据只来自冻结组合：
+   Python 3.10.8、NumPy 2.2.6、Torch 2.3.1、Transformers 4.41.2；
+   不据此暗示更广泛支持。
+4. 公开 alpha 前，必须把实际 `[inference]` 解析/运行时契约收窄到有证据的范围，
+   并通过公共索引安装路径验证；否则应移除公开 extra。广泛 Hugging Face 矩阵延期。
+5. 不提供宽泛的旧 Python/CLI 兼容层。只有确认真实调用方后才添加具体 adapter。
+6. 保留并披露 reference 等价行为：冻结夹具约 18 ms 尾部 gap、固定 10 ms Stage 2
+   stride、同一词内连续相同 phone 折叠，以及简化的重复标签 CTC recurrence；
+   不在本次静默修复。
+7. 置信度保持 raw 且未经校准。缺失的最终 phone provenance 保持 `None`，不得推断。
+8. 词项 `sil` 和 `null` 继续在模型加载前产生类型化输入错误。
+9. 不声称存在已批准的默认资源上限，也不把预览版描述成可安全处理任意长度的
+   不可信输入。
+10. Torch CPU 线程数修改是进程全局行为，公开发布前必须文档化；不声称宿主进程隔离。
 
-## Pending algorithm decisions
+## 待决定的算法问题
 
-The following are not accepted behavior changes yet:
+下列问题尚未获准改变行为：
 
-| ID | Question |
+| ID | 问题 |
 |---|---|
-| TBD-ALG-001 | Whether and how the MVP fills every TextGrid internal/tail gap while preserving non-`NULL` boundaries |
-| TBD-ALG-002 | Whether Stage 2 should only validate the current 10 ms stride or dynamically derive it |
-| TBD-ALG-003 | Whether to distinguish consecutive equal phone graph states inside one word |
-| TBD-ALG-004 | Whether to add the standard repeated-target CTC blank constraint in Stage 1 |
-| TBD-ALG-005 | Final duration, token, trellis-cell and beam-work limits |
+| TBD-ALG-001 | MVP 是否以及如何填补 TextGrid 的内部/尾部 gap，同时保持非 `NULL` 边界 |
+| TBD-ALG-002 | Stage 2 是只验证当前 10 ms stride，还是动态推导 stride |
+| TBD-ALG-003 | 是否区分同一词内连续相同 phone 的图状态 |
+| TBD-ALG-004 | Stage 1 是否加入标准的重复目标 CTC blank 约束 |
+| TBD-ALG-005 | 最终时长、token、trellis cell 和 beam work 上限 |
 
-Any resolution requires dedicated tests and an explicit new decision row.
-For `0.1.0a1`, D-034 explicitly accepts these as disclosed, deferred questions;
-it does not accept any behavior-changing answer to them.
+任何解决方案都需要专门测试和新的明确决定记录。D-034 对 `0.1.0a1` 的接受，
+只表示允许披露并延期这些问题，不表示接受任何改变行为的答案。

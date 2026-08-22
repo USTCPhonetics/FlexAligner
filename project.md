@@ -37,6 +37,14 @@
 - 不将 EXPLORE 或 TEACH 会话中的内容视为已接受决策；
 - 不根据模糊历史自行补全项目状态。
 
+### 文档语言纪律（D-035）
+
+- 准备对外发布的根目录 `README.md` 保持现有中英双语接口；
+- 给项目维护者使用的治理、计划、验收、资源、reference 和测试说明文档一律使用中文；
+- 命令、API 名称、路径、错误码、状态值和必须精确匹配的英文标签保持原样；
+- 中文化前英文版本由 Git 提交 `31becaf` 和
+  `docs/archive/2026-08-22-english-docs.md` 提供逐字节恢复索引。
+
 ## 3. 权威输入快照
 
 ### 3.1 本地算法参考
@@ -144,3 +152,4 @@
 | `REAL_MODEL_E2E_REPORT.md` | 冻结资产、确切 wheel、reference 差分及发布阻断证据 |
 | `FINAL_ACCEPTANCE_REPORT.md` | 工程验收结论、发行候选和最小发布前计划 |
 | `REVIEW_DECISION_REPORT.md` | 用户批阅选项、D-029..D-034 结果和外部授权边界 |
+| `docs/archive/2026-08-22-english-docs.md` | 中文化前英文内部文档的提交、SHA-256 与 Git blob 恢复索引 |

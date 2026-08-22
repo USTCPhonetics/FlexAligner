@@ -1,153 +1,147 @@
-# FlexAligner clean-room rebuild implementation plan
+# FlexAligner 干净代码重建实施计划
 
-> Status: EXECUTION COMPLETE — engineering baseline accepted; public release blocked
-> Established: 2026-08-11 (Asia/Shanghai)
-> Local repository: `/Users/yiyi0369/projects/flexaligner-rebuild`
-> Algorithm reference: `/Users/yiyi0369/projects/flexaligner/align_single_cpu.py`
-> Reference SHA-256: `9ed4e21e615718ddfd10930359f55769fb27a0d284599cce45a3fc755e835de1`
+> 状态：执行完成——工程基线已接受；公共发布仍被阻断
+>
+> 建立日期：2026-08-11（Asia/Shanghai）
+>
+> 本地仓库：`/Users/yiyi0369/projects/flexaligner-rebuild`
+>
+> 算法 reference：`/Users/yiyi0369/projects/flexaligner/align_single_cpu.py`
+>
+> Reference SHA-256：`9ed4e21e615718ddfd10930359f55769fb27a0d284599cce45a3fc755e835de1`
 
-## 1. Objective
+## 1. 目标
 
-Build a new, clean Python codebase that can be distributed as a PyPI package and
-whose first implemented product path is:
+建立新的干净 Python 代码库，可作为 PyPI 包分发，第一条真实产品链路为：
 
 ```text
-English transcript + local lexicon + local CTC models + 16 kHz mono PCM16 WAV
-    -> CPU-only two-stage forced alignment
-    -> validated, atomically no-clobber-published TextGrid
+英语 transcript + 本地词典 + 本地 CTC 模型 + 16 kHz 单声道 PCM16 WAV
+    -> 仅 CPU 的两阶段强制对齐
+    -> 经验证、原子 no-clobber 发布的 TextGrid
 ```
 
-The implementation must preserve the accepted algorithm semantics of the current
-`align_single_cpu.py` reference before any behavior-changing correction is made.
-The reference is an oracle and evidence source; production code must not import it.
+在任何改变行为的修正前，实现必须保留当前 `align_single_cpu.py` reference 已接受的
+算法语义。Reference 是 oracle 和证据来源，生产代码不得导入它。
 
-The repository must also expose deliberate, documented extension boundaries for
-future work without pretending that those capabilities are implemented.
+仓库还必须为未来工作暴露有意设计并有文档的扩展边界，但不得把尚未实现的能力伪装
+成可用。
 
-## 2. Definition of done
+## 2. 完成定义
 
-The goal is complete only when all of the following are true:
+只有同时满足以下条件，目标才算完成：
 
-1. The local repository has a reproducible `src/`-layout Python package, an
-   installable wheel and sdist, one canonical version source, and a working CLI.
-2. The CPU/single-file/English path implements Stage 1, Stage 2, pipeline and
-   TextGrid output using clean modules and explicit contracts.
-3. Fast CI gates pass without external model downloads: formatting, linting,
-   strict typing, unit/characterization tests, coverage, package build, metadata
-   validation, and isolated wheel-install smoke tests.
-4. A separately gated real-model E2E test either passes against a frozen local
-   asset manifest or is recorded as `BLOCKED` with exact missing evidence. It may
-   never be silently skipped while still being reported as passed.
-5. Mandarin, GPU, batch, Web, automatic model download, multi-format audio,
-   automatic resampling, Chinese segmentation, default G2P and confidence
-   calibration have importable contracts and explicit capability states, but
-   calls fail with a typed `FeatureNotAvailableError` until implemented.
-6. Every row in `ACCEPTANCE.md` contains status, command/evidence and reviewer
-   notes. Required rows are `PASS`; intentional placeholders are `PLACEHOLDER`,
-   not `PASS` or “implemented”.
-7. `STATE.md`, `DECISIONS.md` and `OPEN_QUESTIONS.md` describe the final verified
-   state without reviving assumptions from old conversations.
+1. 本地仓库包含可复现的 `src/` 布局 Python 包、可安装 wheel/sdist、单一权威版本
+   来源和可工作的 CLI。
+2. CPU/单文件/英语链路使用干净模块和明确契约实现 Stage 1、Stage 2、pipeline 与
+   TextGrid 输出。
+3. Fast CI 不下载外部模型即可通过：格式化、lint、strict typing、unit/characterization
+   tests、覆盖率、包构建、metadata 验证和隔离 wheel 安装 smoke。
+4. 单独门禁的真实模型 E2E 要么针对冻结本地资产 manifest 通过，要么以精确缺失证据
+   记录为 `BLOCKED`；不得静默 skip 后仍报告通过。
+5. 普通话、GPU、批处理、Web、自动模型下载、多格式音频、自动重采样、中文分词、
+   默认 G2P 和置信度校准具有可导入契约和明确 capability 状态；实施前调用必须抛出
+   类型化 `FeatureNotAvailableError`。
+6. `ACCEPTANCE.md` 每一行都包含状态、命令/证据和审阅备注。必要项为 `PASS`；
+   有意保留的占位项为 `PLACEHOLDER`，不能写成 `PASS` 或“已实现”。
+7. `STATE.md`、`DECISIONS.md`、`OPEN_QUESTIONS.md` 准确描述最终验证状态，
+   不从旧会话复活假设。
 
-## 3. Project fact discipline
+## 3. 项目事实纪律
 
-Project facts use this authority order:
+项目事实按以下权威顺序使用：
 
-1. Explicit information in the current user message.
-2. Current uploaded/local code, configuration, data and experiment output.
-3. `STATE.md`.
-4. `DECISIONS.md`.
-5. `OPEN_QUESTIONS.md`.
-6. Old conversation content.
+1. 用户当前消息明确提供的信息；
+2. 当前上传/本地代码、配置、数据和实验输出；
+3. `STATE.md`；
+4. `DECISIONS.md`；
+5. `OPEN_QUESTIONS.md`；
+6. 旧会话内容。
 
-If old conversation content conflicts with files:
+旧会话与文件冲突时：
 
-- current files and `STATE.md` win;
-- the conflict is recorded explicitly;
-- the two versions are not silently merged;
-- rejected assumptions are not revived from conversation history.
+- 以当前文件和 `STATE.md` 为准；
+- 明确记录冲突；
+- 不静默合并两个版本；
+- 不从会话历史复活已否定假设。
 
-Unless the user explicitly requests otherwise, EXPLORE or TEACH material is not
-an accepted decision, and vague history is not used to fill project state.
+除非用户明确要求，否则 EXPLORE/TEACH 材料不视为已接受决定，也不使用模糊历史补全
+项目状态。
 
-## 4. Accepted scope
+文档语言遵循 D-035：根目录对外 `README.md` 保持中英双语；内部治理、计划、验收、
+资源、reference 和测试说明使用中文。命令、API、路径、错误码和状态值保持原样。
 
-### 4.1 Implement in the first package
+## 4. 已接受范围
 
-- clean repository and package identity;
-- Python 3.10+ `[TBD: final supported upper-version matrix after CI]`;
-- CPU-only execution;
-- one audio file and one transcript per invocation;
-- English, whitespace-tokenized transcript;
-- strict local lexicon coverage;
-- strict local Chunker and Aligner model paths;
-- strict 16 kHz, mono, uncompressed PCM16 WAV input;
-- Stage 1 CTC macro localization/chunking;
-- Stage 2 pronunciation graph plus two-pass Viterbi alignment;
-- strict input, vocabulary, path-completion and word-order failures;
-- words/phones TextGrid tiers;
-- temporary write, read-back validation and atomic no-clobber publication;
-- optional uncalibrated Stage 1 confidence metadata whose semantics are named
-  explicitly and never presented as calibrated probability;
-- Python API and `flexaligner` / `python -m flexaligner` CLI;
-- package build, install, CI and guarded release workflows.
+### 4.1 首个包中真实实现
 
-### 4.2 Stable placeholders only
+- 干净仓库和包身份；
+- Python 3.10+（最终支持上限由远端 CI 矩阵确认）；
+- 仅 CPU 执行；
+- 每次调用处理一个音频和一个 transcript；
+- 英语、空白分词 transcript；
+- 严格本地词典全覆盖；
+- 严格本地 Chunker/Aligner 模型路径；
+- 严格 16 kHz、单声道、未压缩 PCM16 WAV 输入；
+- Stage 1 CTC 宏观定位/切块；
+- Stage 2 发音图与两遍 Viterbi 对齐；
+- 严格输入、词表、path 完整终态和词序失败；
+- words/phones TextGrid tier；
+- 临时写入、回读验证和原子 no-clobber 发布；
+- 可选的未经校准 Stage 1 confidence metadata，明确命名语义且绝不表述成校准概率；
+- Python API 和 `flexaligner` / `python -m flexaligner` CLI；
+- 包构建、安装、CI 和受保护 release workflow。
 
-The following must have explicit contracts and capability discovery but no
-production implementation in this milestone:
+### 4.2 只提供稳定占位
 
-| Capability | Placeholder contract | Required behavior now |
+下列能力在本里程碑中必须有明确契约和 capability discovery，但没有生产实现：
+
+| 能力 | 占位契约 | 当前必要行为 |
 |---|---|---|
-| Mandarin | `Language.ZH` plus capability guard | report placeholder; typed failure |
-| GPU | `Device.CUDA/MPS` plus capability guard | report placeholder; CPU remains explicit |
-| Batch | `align_batch()` plus capability guard | report placeholder; never consume the iterable |
-| Web | `integration.web` capability plus `serve` CLI | report placeholder; no framework import or port bind |
-| Automatic model download | `ModelResolution.AUTO_DOWNLOAD` plus `models fetch` CLI | local paths only; fail before network access |
-| Multi-format audio | `AudioPolicy.MULTI_FORMAT` | strict WAV/PCM16 decoder only; other formats fail |
-| Automatic resampling | `AudioPolicy.AUTO_RESAMPLE` | strict validator only; no implicit conversion |
-| Chinese segmentation | `text.zh_segmentation` capability with Mandarin guard | English whitespace normalization only |
-| Default G2P | `PronunciationMode.G2P` | lexicon only; OOV remains an error |
-| Confidence calibration | `CalibrationMode.CALIBRATED` plus raw-score schema | uncalibrated marker only; calibrated request fails |
+| 普通话 | `Language.ZH` 加 capability guard | 报告 placeholder；类型化失败 |
+| GPU | `Device.CUDA/MPS` 加 capability guard | 报告 placeholder；明确只支持 CPU |
+| 批处理 | `align_batch()` 加 capability guard | 报告 placeholder；不得消费 iterable |
+| Web | `integration.web` capability 加 `serve` CLI | 报告 placeholder；不导入 framework 或绑定端口 |
+| 自动模型下载 | `ModelResolution.AUTO_DOWNLOAD` 加 `models fetch` CLI | 只接受本地路径；网络访问前失败 |
+| 多格式音频 | `AudioPolicy.MULTI_FORMAT` | 只提供严格 WAV/PCM16 decoder；其他格式失败 |
+| 自动重采样 | `AudioPolicy.AUTO_RESAMPLE` | 只验证；不隐式转换 |
+| 中文分词 | 带普通话 guard 的 `text.zh_segmentation` capability | 只做英语空白归一化 |
+| 默认 G2P | `PronunciationMode.G2P` | 只用词典；OOV 保持错误 |
+| 置信度校准 | `CalibrationMode.CALIBRATED` 加 raw-score schema | 只提供未经校准标记；校准请求失败 |
 
-Placeholder methods must not use `pass`, return empty success values, silently
-fall back, download assets, change input data or claim availability.
+占位方法不得使用 `pass`、返回空成功值、静默回退、下载资产、修改输入或声称可用。
 
-### 4.3 Explicitly out of scope
+### 4.3 明确不在范围内
 
-- model training or fine-tuning;
-- remote hosting or deployment;
-- changing the GitHub default branch or publishing a package to PyPI;
-- backward compatibility with every API in the remote legacy implementation;
-- accuracy or reliability claims not supported by frozen fixtures;
-- Mandarin E2E validation in this milestone;
-- automatic recovery from OOV, missing phones or incomplete Viterbi paths.
+- 模型训练或 fine-tuning；
+- 远端托管或部署；
+- 修改 GitHub 默认分支或发布到 PyPI；
+- 与远端旧实现所有 API 的全面向后兼容；
+- 冻结 fixture 未支持的准确率或可靠性声明；
+- 本里程碑的普通话 E2E；
+- 自动恢复 OOV、缺失 phone 或不完整 Viterbi path。
 
-## 5. Algorithm migration rule
+## 5. 算法迁移规则
 
-Migration and correction are separate tracks:
+迁移与修正是两条分离的工作轨：
 
-1. **Characterize reference behavior.** Write deterministic tests for accepted
-   semantics and explicitly mark known defects/limitations.
-2. **Migrate for parity.** New modules must match the reference on frozen arrays
-   and frozen real-model artifacts within approved tolerances.
-3. **Audit parity.** Any mismatch stops the stage; changing a golden file is not
-   a repair.
-4. **Correct only by decision.** A behavior-changing correction needs a new
-   `DECISIONS.md` entry, a before/after comparison and dedicated tests.
+1. **特征化 reference 行为。**为已接受语义写确定性测试，并明确标记已知缺陷/限制。
+2. **按等价迁移。**新模块在冻结数组和冻结真实模型 artifact 上必须在批准容差内匹配
+   reference。
+3. **审计等价。**任何不一致都停止该阶段；修改 golden 不是修复。
+4. **只通过决定修正。**改变行为的修正需要新的 `DECISIONS.md` 条目、前后比较和
+   专用测试。
 
-Known issues that remain separate decisions:
+需要单独决定的已知问题：
 
-- `[TBD-ALG-001]` continuous interval coverage and frame-grid tail gaps;
-- `[TBD-ALG-002]` validation/dynamic handling of Stage 2 frame stride;
-- `[TBD-ALG-003]` identity of consecutive equal phone states in one word;
-- `[TBD-ALG-004]` repeated-label blank constraint in Stage 1 CTC;
-- `[TBD-ALG-005]` approved limits for duration, words, phones, trellis cells and
-  beam work.
+- `[TBD-ALG-001]` interval 连续覆盖和帧网格尾部 gap；
+- `[TBD-ALG-002]` Stage 2 帧 stride 的验证/动态处理；
+- `[TBD-ALG-003]` 同一词内连续相同 phone 状态的身份；
+- `[TBD-ALG-004]` Stage 1 CTC 重复标签 blank 约束；
+- `[TBD-ALG-005]` 时长、词、phone、trellis cell 和 beam work 上限。
 
-These items must be tested and visible. They may not be silently “fixed” during
-module extraction.
+这些问题必须有测试且明确可见，不得在模块抽取时静默“修复”。
 
-## 6. Target repository shape
+## 6. 目标仓库结构
 
 ```text
 .github/workflows/
@@ -161,8 +155,9 @@ src/flexaligner/
   contracts.py
   errors.py
   ports.py
-  stage1.py
-  stage2.py
+  core/
+    stage1.py
+    stage2.py
   textgrid.py
   pipeline.py
   cli.py
@@ -187,8 +182,7 @@ DECISIONS.md
 OPEN_QUESTIONS.md
 ```
 
-The exact module count may be reduced during audit, but dependency direction is
-fixed:
+审计时可以减少模块数量，但依赖方向固定：
 
 ```text
 contracts / errors / capabilities
@@ -200,349 +194,251 @@ adapters -> ports <- pipeline -> stage1 / stage2 / textgrid
                          cli
 ```
 
-`stage1.py` and `stage2.py` operate on explicit arrays and domain records. They
-must not load models, parse CLI arguments or write files. Only
-`adapters/hf_local.py` may import `transformers`; package import and capability
-discovery must not import Torch, open a model or access the network.
+`stage1.py` 和 `stage2.py` 只处理明确数组和 domain record，不加载模型、不解析 CLI
+参数、不写文件。只有 `adapters/hf_local.py` 可以导入 `transformers`；包导入和
+capability discovery 不得导入 Torch、打开模型或访问网络。
 
-### 6.1 Intended stable public surface
+### 6.1 预期稳定公共接口
 
-The first public surface is intentionally small:
+首个公共接口有意保持很小：
 
-- one lazy `FlexAligner` engine with `align()`, `capabilities()`, `close()` and a
-  context-manager contract;
-- immutable, keyword-only `AlignmentRequest`, `AlignmentOptions`,
-  `LocalModelBundle`, `TextGridOutput` and `AlignmentResult` records;
-- a versioned `CapabilityReport`;
-- a typed `FlexAlignerError` hierarchy with stable machine-readable string codes.
+- 一个惰性 `FlexAligner` engine，提供 `align()`、`capabilities()`、`close()` 和
+  context manager 契约；
+- 不可变、仅 keyword 的 `AlignmentRequest`、`AlignmentOptions`、
+  `LocalModelBundle`、`TextGridOutput`、`AlignmentResult` record；
+- 带版本的 `CapabilityReport`；
+- 类型化 `FlexAlignerError` 层级和稳定机器可读字符串错误码。
 
-Algorithm functions and adapter Protocols remain internal in v1. Enumerations may
-name future options such as `ZH`, `CUDA`, `AUTO_DOWNLOAD` or `G2P`, but selecting
-one must call the capability guard and fail before consuming input, creating
-files, loading models or accessing a network.
+算法函数和 adapter Protocol 在 v1 保持内部。Enum 可以命名 `ZH`、`CUDA`、
+`AUTO_DOWNLOAD`、`G2P` 等未来选项，但选择后必须调用 capability guard，并在消费输入、
+创建文件、加载模型或联网前失败。
 
-The raw confidence result is stored separately with
-`kind=chunker_emission_geometric_mean` and `calibrated=false`. A future
-calibrator may add calibrated scores; it must not overwrite or reinterpret the
-raw score.
+Raw confidence 单独存储，`kind=chunker_emission_geometric_mean`、
+`calibrated=false`。未来 calibrator 可以增加 calibrated score，但不得覆盖或重新解释
+raw score。
 
-### 6.2 Placeholder failure ordering
+### 6.2 占位失败顺序
 
-- Mandarin/GPU requests fail before input/model inspection and never downgrade
-  to English/CPU.
-- `align_batch()` fails before consuming its iterable.
-- `serve` fails before importing a Web framework or binding a port.
-- model fetch fails before a network request.
-- unsupported audio/resampling requests fail before invoking ffmpeg or changing
-  samples.
-- G2P fails before changing an OOV transcript; lexicon-only OOV remains a
-  distinct input error.
-- calibrated-confidence requests fail instead of relabeling raw scores.
+- 普通话/GPU 请求在检查输入/模型前失败，且不得降级为英语/CPU；
+- `align_batch()` 在消费 iterable 前失败；
+- `serve` 在导入 Web framework 或绑定端口前失败；
+- model fetch 在发起网络请求前失败；
+- 不支持的音频/重采样请求在调用 ffmpeg 或修改 sample 前失败；
+- G2P 在修改 OOV transcript 前失败；词典模式 OOV 保持独立输入错误；
+- 校准 confidence 请求必须失败，不得重标记 raw score。
 
-## 7. Work allocation and merge discipline
+## 7. 工作分配与合并纪律
 
-The main agent owns scope, repository state, edits touching shared contracts,
-integration, acceptance evidence and final sign-off.
+主 agent 负责范围、仓库状态、共享契约修改、集成、验收证据和最终签字。
 
-Parallel work is split into bounded streams:
+并行工作拆分为边界明确的工作流：
 
-| Stream | Initial responsibility | Merge rule |
+| 工作流 | 初始职责 | 合并规则 |
 |---|---|---|
-| A — packaging/CI | package metadata, dependency split, CI and release gates | main agent verifies official guidance and runs all gates |
-| B — architecture/API | domain contracts and future-capability placeholders | main agent audits imports, behavior and API stability |
-| C — tests/oracle | characterization matrix, fixtures, differential harness | main agent verifies every expectation against current files |
-| Main — governance/core | plan, decisions, state, integration and algorithm migration | only main marks acceptance rows |
+| A — 打包/CI | 包 metadata、依赖拆分、CI 与 release gate | 主 agent 核验官方指南并运行全部门禁 |
+| B — 架构/API | domain 契约与未来能力占位 | 主 agent 审计导入、行为和 API 稳定性 |
+| C — 测试/oracle | 特征化矩阵、fixture、差分框架 | 主 agent 对照当前文件验证所有预期 |
+| 主 agent — 治理/core | 计划、决定、状态、集成和算法迁移 | 只有主 agent 可以标记验收行 |
 
-Agents do not edit the same file concurrently. Work is reviewed from the shared
-filesystem and accepted only after the main agent reruns the relevant gate.
+Agent 不得并发编辑同一文件。共享文件系统中的工作只有在主 agent 重跑对应门禁后才
+可接受。
 
-### 7.1 Stage 5 parallel execution allocation
+### 7.1 Stage 5 并行执行分工
 
-Stage 5 uses the following disjoint ownership after the main agent freezes the
-shared Protocols and creates `adapters/__init__.py`:
+主 agent 冻结共享 Protocol 并创建 `adapters/__init__.py` 后，Stage 5 使用以下独占
+范围：
 
-| Stream | Exclusive production files | Exclusive tests |
+| 工作流 | 独占生产文件 | 独占测试 |
 |---|---|---|
-| A — strict input | `adapters/wav_pcm16.py`, `adapters/lexicon_file.py` | `tests/unit/test_wav_pcm16.py`, `tests/unit/test_lexicon_file.py` |
-| B — local inference | `adapters/hf_local.py` | `tests/unit/test_hf_local.py` |
-| C — TextGrid/output | `textgrid.py` | `tests/unit/test_textgrid.py`, `tests/unit/test_output_transaction.py` |
-| Main — integration | `ports.py`, `pipeline.py`, public API/CLI/contracts/capabilities/errors and package exports | pipeline, lifecycle, API/CLI and placeholder regression tests |
+| A — 严格输入 | `adapters/wav_pcm16.py`、`adapters/lexicon_file.py` | `tests/unit/test_wav_pcm16.py`、`tests/unit/test_lexicon_file.py` |
+| B — 本地推理 | `adapters/hf_local.py` | `tests/unit/test_hf_local.py` |
+| C — TextGrid/输出 | `textgrid.py` | `tests/unit/test_textgrid.py`、`tests/unit/test_output_transaction.py` |
+| 主 agent — 集成 | `ports.py`、`pipeline.py`、公共 API/CLI/contracts/capabilities/errors 和包导出 | pipeline、生命周期、API/CLI 与占位回归测试 |
 
-Merge and audit order is strict input, local inference, TextGrid/output,
-pipeline, API, CLI, then capability promotion. The inference factory exposes
-non-overlapping Chunker and Aligner context managers; the pipeline must exit the
-Chunker context before entering the Aligner context. Fast tests use fake
-sessions and remain model-free and network-disabled.
+合并和审计顺序固定为：严格输入、本地推理、TextGrid/输出、pipeline、API、CLI，最后
+提升 capability。推理 factory 暴露不重叠的 Chunker/Aligner context manager；pipeline
+必须先退出 Chunker context，再进入 Aligner context。Fast tests 使用 fake session，
+保持无模型、禁网。
 
-All requested future options remain guarded before I/O. The single implemented
-path is promoted to `available` only after the complete pipeline gate passes.
-For optional metadata plus TextGrid, all artifacts are staged and validated,
-metadata is committed first and TextGrid last as the success marker, and
-in-process failures roll back artifacts created by that invocation. A normal
-filesystem cannot guarantee atomic commit across two files during a crash or
-power loss; this limitation is tracked as `TBD-OUT-001`.
+所有未来选项在 I/O 前 guard。只有完整 pipeline 门禁通过后，单一实现链路才提升为
+`available`。对可选 metadata 和 TextGrid，所有 artifact 先暂存/验证；metadata 先提交，
+TextGrid 最后作为成功标志；进程内失败回滚本次调用创建的 artifact。普通文件系统无法
+保证两个文件在崩溃/断电下原子提交，该限制记录为 `TBD-OUT-001`。
 
-## 8. Staged execution
+## 8. 分阶段执行
 
-### Stage 0 — repository, governance and executable plan
+### Stage 0 — 仓库、治理和可执行计划
 
-Deliverables:
+交付物：
 
-- new local Git repository;
-- this plan;
-- initial `project.md`, `STATE.md`, `DECISIONS.md`, `OPEN_QUESTIONS.md`;
-- `ACCEPTANCE.md` with stable IDs and `NOT_RUN` statuses;
-- reference/remote provenance recorded without copying legacy core code.
+- 新本地 Git 仓库；
+- 本计划；
+- 初始 `project.md`、`STATE.md`、`DECISIONS.md`、`OPEN_QUESTIONS.md`；
+- 带稳定 ID 和 `NOT_RUN` 状态的 `ACCEPTANCE.md`；
+- 在不复制旧核心代码的情况下记录 reference/远端 provenance。
 
-Gate:
+门禁：范围完整、未知项有 `[TBD]`/未决记录、reference SHA 匹配，且没有把生产实现
+描述成已经完成。
 
-- all accepted scope appears in governance documents;
-- all unknowns are `[TBD]` or open questions;
-- the reference SHA matches the current file;
-- no production implementation has been presented as complete.
+### Stage 1 — 包与接口骨架
 
-### Stage 1 — package and interface skeleton
+交付物：`pyproject.toml`、`src/` 布局和权威版本；公共 domain record、类型化错误和
+capability registry；可导入占位接口和明确失败；CLI help/version/capabilities；初始
+README 能力表；严格 CI 和受保护 release workflow。
 
-Deliverables:
+门禁：editable/wheel 安装可用；占位有测试；包导入没有模型/网络副作用；任何 PR 或
+普通 branch push 都不能发布；只有 release job 获得 `id-token: write`。
 
-- `pyproject.toml`, `src/` layout and canonical version;
-- public domain records, typed errors and capability registry;
-- importable placeholder interfaces with explicit failures;
-- CLI help/version/capabilities commands;
-- initial README capability table;
-- strict CI and guarded release workflow.
+### Stage 2 — Reference 特征化与测试框架
 
-Gate:
+交付物：reference hash guard；纯数组 Stage 1/2 特征化案例；输入/失败/TextGrid/原子
+写测试；差分 record 与 golden 更新规则；带 hash/provenance 的冻结 E2E asset manifest。
 
-- clean editable and wheel installs work;
-- placeholders are covered by tests;
-- package import has no model/network side effect;
-- no workflow can publish on a pull request or ordinary branch push;
-- only the release job receives `id-token: write`.
+门禁：fast tests 无模型/无网络；每项迁移行为在实现前有特征化测试；已知限制具名，
+不被归一化掉；缺资产时 E2E 不能报告通过。
 
-### Stage 2 — reference characterization and test harness
+### Stage 3 — Stage 1 实现
 
-Deliverables:
+交付物：首条发音选择与重音数字移除；可提前结束的 CTC trellis/backtrace；word
+emission confidence；anchor、严格合并边界和毫秒 chunk 取整；完整有序 word-index
+覆盖检查。
 
-- reference hash guard;
-- pure-array Stage 1 and Stage 2 characterization cases;
-- input/failure/TextGrid/atomic-write tests;
-- differential comparison records and golden-update policy;
-- frozen E2E asset manifest with hashes and provenance.
+门禁：合成数组等价精确或处于明确记录容差内；严格失败案例通过；复杂度/资源行为有
+测量，`TBD-ALG-005` 被解决或保持明确 release 限制。
 
-Gate:
+### Stage 4 — Stage 2 实现
 
-- fast tests need no model and no network;
-- every migrated reference behavior has a pre-existing characterization test;
-- known limitations are named rather than normalized away;
-- E2E cannot report pass when an asset is absent.
+交付物：多发音 phone DAG；可选 `sil`/`sph` gap path；保留 stay/move、frame bias、
+进入代价和边界对比语义的 beam Viterbi；完整终态强制；内部短状态剪枝和固定序列
+第二次解码；state 到 phone/word 分段。
 
-### Stage 3 — Stage 1 implementation
+门禁：图/path/剪枝/第二遍特征化测试通过；不完整 path 明确失败；相邻重复词保持
+不同实例；不静默改变 `TBD-ALG-003`。
 
-Deliverables:
+### Stage 5 — 推理、Pipeline、CLI 与输出
 
-- first-pronunciation selection and stress stripping;
-- CTC trellis/backtrace with early finish;
-- word emission confidence;
-- anchors, strict merge boundary and millisecond chunk rounding;
-- complete ordered word-index coverage checks.
+交付物：严格 WAV/text/词典/模型验证；惰性本地 Hugging Face 推理 adapter；顺序
+Chunker/Aligner 加载和释放；local-to-global 合并和已验证 TextGrid；Python API 和
+单文件 CLI；结构化且未经校准的 metadata。
 
-Gate:
+门禁：失败不留正式输出；输出写到同目录临时文件、回读验证后不覆盖原子发布；
+归一化的非特殊词序与输入完全一致；不联网；核心保持仅 CPU。
 
-- synthetic array parity is exact or within an explicitly recorded numeric
-  tolerance;
-- strict failure cases pass;
-- complexity/resource behavior is measured and `[TBD-ALG-005]` is resolved or
-  remains an explicit release limitation.
+### Stage 6 — 包、真实模型 E2E 与发布演练
 
-### Stage 4 — Stage 2 implementation
+交付物：完整 fast 质量套件；构建并检查 metadata 的 wheel/sdist；在隔离环境安装
+wheel 并在源码树外 smoke；冻结英语真实模型 E2E；带 owner/environment `[TBD]` 的
+受保护 Trusted Publishing workflow；最终 README 能力/限制表。
 
-Deliverables:
+门禁：所有必要 fast gate 本地通过；E2E 记录精确 Python/依赖/模型/词典/输入 hash；
+publish workflow 只构建一次并发布同一上传 artifact；未经用户授权和账户配置不实际
+上传 PyPI。
 
-- multi-pronunciation phone DAG;
-- optional `sil`/`sph` gap paths;
-- beam Viterbi with current stay/move, frame bias, enter cost and boundary
-  contrast semantics;
-- complete-end-state enforcement;
-- short internal-state pruning and fixed-sequence second decode;
-- state-to-phone/word segmentation.
+### Stage 7 — 主 agent 最终审计
 
-Gate:
+交付物：完整 `ACCEPTANCE.md`；最终 `STATE.md`、决定和未决问题；diff/stat 与仓库
+状态审阅；面向用户的发布准备报告。
 
-- graph, path, pruning and second-pass characterization tests pass;
-- incomplete paths fail explicitly;
-- adjacent repeated word instances remain distinct;
-- `[TBD-ALG-003]` is not silently changed.
+门禁：必要验收行不得为 `NOT_RUN`、`FAIL` 或虚假 `PASS`；占位与实现能力可区分；
+剩余 `[TBD]` 要么是发布阻断，要么是已记录非阻断限制；准确报告工作树状态。
 
-### Stage 5 — inference, pipeline, CLI and output
+## 9. CI/CD 规则
 
-Deliverables:
+“严格 CI/CD”表示以下独立且可检查的门禁：
 
-- strict WAV/text/lexicon/model validation;
-- lazy local Hugging Face inference adapter;
-- sequential Chunker/Aligner loading and release;
-- local-to-global merge and validated TextGrid;
-- Python API and single-file CLI;
-- structured, uncalibrated metadata.
+1. 格式检查；
+2. lint 和导入卫生；
+3. strict static type check；
+4. 带分支覆盖率门槛的 fast unit/characterization tests；
+5. 从干净源码构建包；
+6. sdist/wheel metadata 检查；
+7. 在新环境安装构建 wheel 并执行导入/CLI smoke；
+8. 可选/手动真实模型 E2E，必须显式预检资产；
+9. 只从已批准 GitHub Release/tag 和受保护 `pypi` environment 使用 OIDC Trusted
+   Publishing 发布；
+10. release job 消费此前构建 artifact，不 checkout 源码，也不执行任意构建步骤。
 
-Gate:
+初始工具为 `ruff`、`mypy`、`pytest`、`coverage`、`build`、`twine`。精确版本和
+覆盖率门槛在首个绿色基线前记录为 `TBD-CI-001`；之后只能提高门槛，或通过正式决定
+修改。
 
-- failures leave no official output;
-- output is written to a temporary sibling, read back, validated and atomically
-  published without overwriting an existing path;
-- normalized non-special word sequence equals the input exactly;
-- no network request occurs;
-- core execution remains CPU-only.
+第三方 GitHub Action 在任何远端使用前固定到不可变 commit SHA；可在注释中标明
+人类可读 major tag。
 
-### Stage 6 — package, real-model E2E and release rehearsal
+### 9.1 测试与证据层
 
-Deliverables:
-
-- complete fast quality suite;
-- wheel and sdist built and metadata checked;
-- wheel installed in an isolated environment and smoke-tested outside source;
-- frozen English real-model E2E evidence;
-- guarded Trusted Publishing workflow with owner/environment fields `[TBD]`;
-- final README capability/limitation table.
-
-Gate:
-
-- every required fast gate passes locally;
-- E2E evidence identifies exact Python/dependency/model/dictionary/input hashes;
-- publish workflow builds once, then publishes the exact uploaded artifact;
-- no actual PyPI upload occurs without explicit user authorization and account
-  configuration.
-
-### Stage 7 — main-agent final audit
-
-Deliverables:
-
-- completed `ACCEPTANCE.md`;
-- final `STATE.md`, decisions and open questions;
-- diff/stat and repository-status review;
-- user-facing release-readiness report.
-
-Gate:
-
-- no required acceptance row is `NOT_RUN`, `FAIL` or falsely marked `PASS`;
-- placeholders remain distinguishable from implemented features;
-- all remaining `[TBD]` items are either release blockers or documented
-  non-blocking limitations;
-- the working tree state is reported exactly.
-
-## 9. CI/CD policy
-
-“Strict CI/CD” means separate, inspectable gates:
-
-1. formatting check;
-2. lint and import hygiene;
-3. strict static type checking;
-4. fast unit and characterization tests with branch coverage threshold;
-5. package build from clean source;
-6. sdist/wheel metadata check;
-7. install the built wheel in a fresh environment and run import/CLI smoke;
-8. optional/manual real-model E2E with explicit asset preflight;
-9. release only from an approved GitHub Release/tag and protected `pypi`
-   environment using OIDC Trusted Publishing;
-10. release job consumes previously built artifacts and has no source checkout or
-    arbitrary package build step.
-
-Initial tool choices are `ruff`, `mypy`, `pytest`, `coverage`, `build` and
-`twine`; exact versions and the coverage threshold are `[TBD-CI-001]` until the
-first green baseline is measured. The threshold may only ratchet upward or change
-through a recorded decision.
-
-Third-party GitHub Actions will be pinned to immutable commit SHAs before any
-remote use. Human-readable major tags may be noted in comments.
-
-### 9.1 Test and evidence layers
-
-| Layer | Required evidence | Normal trigger | Gate |
+| 层 | 必要证据 | 常规触发 | 门禁 |
 |---|---|---|---|
-| C0 reference guard | reference hash/provenance; production import and wheel exclusion | every change | blocking |
-| C1 no-model core | pure-array, contracts, failure, TextGrid and placeholder tests | every change | blocking |
-| C2 package smoke | build, metadata, clean wheel install, import and CLI | supported Python matrix | blocking |
-| C3 posterior parity | fixed synthetic posterior Stage 1/2 differential report | every change/main | blocking |
-| C4 real-model E2E | offline English reference/new double run with full hashes | trusted runner/release | release blocking; never a passing skip |
-| C5 resources | limits, timing, peak RSS and model-lifetime evidence | nightly/release candidate | release policy `[TBD]` |
+| C0 reference guard | reference hash/provenance；生产导入和 wheel 排除 | 每次变更 | 阻断 |
+| C1 无模型核心 | 纯数组、契约、失败、TextGrid 和占位测试 | 每次变更 | 阻断 |
+| C2 包 smoke | 构建、metadata、干净 wheel 安装、导入和 CLI | 支持的 Python 矩阵 | 阻断 |
+| C3 posterior 等价 | 固定合成 posterior Stage 1/2 差分报告 | 每次变更/main | 阻断 |
+| C4 真实模型 E2E | 离线英语 reference/新实现双跑与完整 hash | 可信 runner/release | 发布阻断；不得成为通过的 skip |
+| C5 资源 | 上限、耗时、峰值 RSS 和模型生命周期证据 | nightly/release candidate | 发布策略 `[TBD]` |
 
-Tests use three distinct oracle tracks:
+测试采用三条分离 oracle 轨道：
 
-- **A — current behavior parity:** exact observable reference behavior, including
-  named quirks;
-- **B — independent invariants:** mathematical small-case oracle, word/order,
-  finite values, output and failure guarantees;
-- **C — approved corrections:** only changes tied to a recorded decision ID.
+- **A — 当前行为等价：**精确可观察 reference 行为，包括具名已知特性；
+- **B — 独立不变量：**数学小案例 oracle、词/顺序、有限值、输出和失败保证；
+- **C — 已批准修正：**只有绑定决定 ID 的改变。
 
-Track C must prove both the intended change and non-regression of every unrelated
-Track A behavior.
+轨道 C 必须同时证明目标改变和所有无关轨道 A 行为不回归。
 
-### 9.2 Golden and differential policy
+### 9.2 Golden 与差分规则
 
-- CI has no `--update-golden` path.
-- A generator writes only to `candidate/`, never over an accepted baseline.
-- Every fixture, posterior, effective lexicon, model directory and environment
-  used as an oracle is content-addressed.
-- Updating a baseline requires a decision ID, field-level old/new semantic diff,
-  provenance changes and README/API impact.
-- Differences cannot be resolved by wider tolerance, deleted assertions, `skip`
-  or `xfail`.
-- A parity report records the first differing field and both values.
-- Large external models are not committed to Git; their complete manifest and
-  hashes are evidence.
-- The reference and new implementation always write to different temporary
-  directories.
-- Fast CI performs no model download and no network access.
+- CI 没有 `--update-golden` 路径；
+- generator 只写 `candidate/`，绝不覆盖已接受基线；
+- 作为 oracle 的 fixture、posterior、有效词典、模型目录和环境必须 content-addressed；
+- 更新基线需要决定 ID、字段级旧/新语义 diff、provenance 修改和 README/API 影响；
+- 不得通过放宽容差、删除断言、`skip` 或 `xfail` 解决差异；
+- 等价报告记录首个不同字段及双方值；
+- 大型外部模型不提交 Git；完整 manifest 和 hash 作为证据；
+- reference 与新实现始终写入不同临时目录；
+- Fast CI 不下载模型、不联网。
 
-## 10. Evidence and status vocabulary
+## 10. 证据与状态词表
 
-Each acceptance row uses exactly one status:
+每项验收只使用一种状态：
 
-- `NOT_RUN`: no current evidence;
-- `IN_PROGRESS`: implementation or verification is underway;
-- `PASS`: the stated command/check was run successfully and evidence is recorded;
-- `FAIL`: the check ran and failed;
-- `BLOCKED`: the check cannot run because a named prerequisite is unavailable;
-- `PLACEHOLDER`: interface exists, and non-availability behavior is verified;
-- `N/A`: excluded by an accepted scope decision.
+- `NOT_RUN`：没有当前证据；
+- `IN_PROGRESS`：正在实施或验证；
+- `PASS`：已成功运行声明的命令/检查并记录证据；
+- `FAIL`：检查已运行且失败；
+- `BLOCKED`：因具名前置条件不可用而不能运行；
+- `PLACEHOLDER`：接口存在，且不可用行为已验证；
+- `N/A`：由已接受范围决定排除。
 
-No row may change from `FAIL` to `PASS` merely by weakening its assertion or
-regenerating expected output.
+不得只通过削弱断言或重新生成预期输出，把 `FAIL` 改为 `PASS`。
 
-## 11. Reviewed decisions and remaining unknowns
+## 11. 已审阅决定与剩余未知项
 
-The 2026-08-11 user review resolved the initial package/history/identity choices:
+2026-08-11 用户审阅解决了初始包/历史/身份选择：
 
-- D-029: first public version `0.1.0a1` (`PUBLIC_ALPHA`);
-- D-030: directly replace the existing `USTCPhonetics/FlexAligner` main history;
-- D-031: distribution `flexaligner`, intended owner `ustcphonetics`;
-- D-032: use the fixed upstream README and linked LICENSE identity;
-- D-033: approve the stated pronunciation only as a release-E2E fixture;
-- D-034: accept the disclosed v0.1 preview boundary and no broad legacy aliases.
+- D-029：首个公开版本 `0.1.0a1`（`PUBLIC_ALPHA`）；
+- D-030：直接替代现有 `USTCPhonetics/FlexAligner` main 历史；
+- D-031：distribution `flexaligner`，预期 owner `ustcphonetics`；
+- D-032：使用固定上游 README 和同提交 LICENSE 身份；
+- D-033：指定发音只批准为 release-E2E fixture；
+- D-034：接受已披露 v0.1 预览边界，不提供宽泛旧别名；
+- D-035：根公共 README 保持中英双语，内部项目文档使用中文。
 
-The remaining questions are execution or post-alpha research items:
+剩余问题是执行项或 alpha 后研究项：
 
-- `[TBD-CI-001]` actual remote Python/OS matrix evidence;
-- `[TBD-REMOTE-001]` separately authorized, recoverable direct history replacement;
-- `[TBD-E2E-002]` a remote-portable split between external assets and the
-  repository-local fixture lexicon;
-- `[TBD-REL-001]` exact protected environment, approvers and Trusted Publisher;
-- `[TBD-ALG-001..005]` behavior corrections listed in section 5.
+- `[TBD-CI-001]` 实际远端 Python/操作系统矩阵证据；
+- `[TBD-REMOTE-001]` 单独授权、可恢复的直接历史替代；
+- `[TBD-E2E-002]` 外部资产与 repo-local fixture 词典的远端可移植拆分；
+- `[TBD-REL-001]` 精确 protected environment、审批人和 Trusted Publisher；
+- 第 5 节列出的 `[TBD-ALG-001..005]` 行为修正。
 
-Resolved choices do not grant external-operation permission and do not turn an
-unrun gate into a pass.
+已解决选择不授予外部操作权限，也不把未运行门禁变成通过。
 
-## 12. Immediate execution order
+## 12. 立即执行顺序
 
-1. Apply and reverify the D-033 approved manifest without weakening the
-   candidate fail-closed guard.
-2. Implement `0.1.0a1` metadata and the D-034 frozen inference contract, then
-   rebuild and test the exact artifacts.
-3. Remove the manifest's local-directory-name dependency before remote E2E.
-4. Obtain separate authorization and create a verified recovery snapshot before
-   directly replacing remote `main`.
-5. Configure the protected `pypi` environment, Trusted Publisher, self-hosted
-   E2E runner, asset root and offline wheelhouse.
-6. Run the declared Python/OS matrix, dependency audit and protected model E2E.
-7. Only after every release blocker is cleared, request separate tag and PyPI
-   publication authorizations required by D-013.
+1. 在不削弱 candidate 关闭式保护的情况下应用并复验 D-033 approved manifest；
+2. 实施 `0.1.0a1` metadata 和 D-034 冻结推理契约，重建并测试 exact artifact；
+3. 在远端 E2E 前去除 manifest 对本地目录名的依赖；
+4. 直接替代远端 `main` 前取得单独授权并创建已验证恢复快照；
+5. 配置受保护 `pypi` environment、Trusted Publisher、自托管 E2E runner、asset root
+   和离线 wheelhouse；
+6. 运行声明的 Python/操作系统矩阵、依赖审计和 protected 模型 E2E；
+7. 所有发布阻断项清除后，再分别请求 D-013 要求的 tag 和 PyPI 发布授权。

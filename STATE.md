@@ -1,185 +1,148 @@
-# STATE
+# 当前状态
 
-> Last updated: 2026-08-11 (Asia/Shanghai)
+> 最后更新：2026-08-22（Asia/Shanghai）
 
-## Current stage
+## 当前阶段
 
-`Stage 0 — repository, governance and executable plan` is complete.
+- Stage 0（仓库、治理和可执行计划）：完成。
+- Stage 1（包与接口骨架）：完成，提交 `5702f0a`。
+- Stage 2（reference 特征化与测试框架）：完成，提交 `e582dd4`。
+- Stage 3（Stage 1 实现）：完成，提交 `ec7bd2d`。
+- Stage 4（Stage 2 实现）：完成，提交 `d65ab6a`。
+- Stage 5（推理、pipeline、CLI 与输出）：完成，提交 `6c1d4eb`。
+- Stage 6（包、真实模型 E2E 与发布演练）：完成，提交 `e694645`；当时 approved
+  fixture 发布门禁如实保持阻断。
+- Stage 7（主 agent 最终审计）：完成。工程基线已接受；在记录的阻断项解决前，
+  公共发布为 `NO-GO`。
+- Stage 8（已审阅发布决定与实施复验）：进行中。用户已接受 public alpha 产品决定，
+  本地 approved-fixture exact-wheel 复跑通过；alpha 元数据/推理约束、manifest
+  可移植性和远端发布门禁尚未完成。
 
-`Stage 1 — package and interface skeleton` is complete at commit `5702f0a`.
+## 已验证的当前事实
 
-`Stage 2 — reference characterization and test harness` is complete at commit
-`e582dd4`.
-
-`Stage 3 — Stage 1 implementation` is complete at commit `ec7bd2d`.
-
-`Stage 4 — Stage 2 implementation` is complete at commit `d65ab6a`.
-
-`Stage 5 — inference, pipeline, CLI and output` is complete at commit `6c1d4eb`.
-
-`Stage 6 — package, real-model E2E and release rehearsal` is complete at commit
-`e694645`, with the approved-fixture release gate truthfully blocked.
-
-`Stage 7 — main-agent final audit` is complete. The engineering baseline is
-accepted; public release is `NO-GO` until the recorded blockers are resolved.
-
-`Stage 8 — reviewed release decisions and implementation verification` is in
-progress. The user has accepted the public-alpha product choices and the local
-approved-fixture exact-wheel rerun passes; alpha metadata/inference constraints,
-manifest portability and remote release gates are not yet complete.
-
-## Verified current state
-
-- `/Users/yiyi0369/projects/flexaligner-rebuild` is a newly initialized local
-  Git repository on branch `main`.
-- No Git remote is configured.
-- `IMPLEMENTATION_PLAN.md` has been created before production implementation.
-- The governance-only root commit is `833306e`.
-- The authoritative algorithm reference is frozen byte-for-byte under
-  `reference/` from `/Users/yiyi0369/projects/flexaligner/align_single_cpu.py`,
-  with expected
-  SHA-256 `9ed4e21e615718ddfd10930359f55769fb27a0d284599cce45a3fc755e835de1`.
-- The `src/` package, public contracts, requested placeholders, README/LICENSE,
-  strict local quality gates and guarded workflows are implemented.
-- Stage 1 package-skeleton evidence: 50 tests passed with sockets disabled; branch coverage
-  88.16% against the 85% ratchet; Ruff and strict mypy passed.
-- The Stage 1 package-skeleton distribution audit passed for wheel
-  `f3b6e47f305532329ba1f9c9b7dd6281c165b0bd92ad4cc9b684e33a56db9449`
-  and sdist
-  `3867f2c6db38b9b5fcd9d8d3a4fae8d9a27a3202b9f2354ab22324561dca5353`.
-- That Stage 1 wheel was installed outside the source tree and passed `pip check`,
-  version, import-path, CLI and capability smoke tests.
-- Stage 2 has 92 model-free characterization/oracle tests: 30 Stage 1, 26
-  Stage 2, 19 input/failure, 6 TextGrid/output, 7 reference guards and 4
-  differential-harness tests.
-- At the Stage 2 gate, the fast suite passed 149 tests with sockets disabled;
-  Ruff, strict mypy, actionlint, reference byte comparison and
-  `git diff --check` also passed.
-- At the Stage 2 gate, the then-candidate committed E2E manifest recorded 16
-  assets and exact Python/NumPy/Torch/Transformers versions. All hashes and exact
-  runtime versions passed in the frozen local OpenPhonetics environment. That
-  gate supplied only asset preflight evidence; D-033 approval and the later real
-  alignment evidence are recorded below.
-- Current rebuilt distributions exclude `reference/` and tests. Fresh build
-  audit after Stage 3 passed for wheel
-  `8bf982789427ff8dc904278f6a5b563fb8cfd25fb79d11b8111b91f6f067868f`
-  and sdist `6d83cb0cc49c3d2ee75b2bd0d7c21f3b1ffe85bdcd6ccaea0efc10c0498be364`.
-- The clean NumPy Stage 1 core is implemented with no reference, Torch or
-  Transformers import. It passes 123 three-way parity tests and 76 independent
-  invariant/resource tests; the full suite passes 348 tests at 94.75% branch
-  coverage.
-- Dense trellis resource accounting and a caller-supplied pre-allocation cell
-  limit are implemented. No package-wide safe default is claimed; that remains
-  `TBD-ALG-005` and is documented in `STAGE1_RESOURCE_REPORT.md`.
-- The Stage 3 wheel was installed outside the source tree at
-  `/tmp/flexaligner-stage3-smoke.TPMkh3` and passed `pip check`, package/core
-  import, CLI, capabilities and resource-estimate smoke tests.
-- The clean NumPy Stage 2 core is implemented with no reference, Torch or
-  Transformers import. It passes 80 reference-parity tests and 81 independent
-  invariant/resource tests; the full suite passes 509 tests at 92.85% branch
-  coverage, and the Stage 2 module reaches 90.63% branch coverage.
-- A separate read-only cross-audit exercised all 64 boundary/internal SIL/SPH
-  flag combinations and 100 fixed-seed random small decodes against both the
-  frozen reference and an independent exact-DP oracle without finding a
-  production defect.
-- Stage 2 resource complexity and limitations are recorded in
-  `STAGE2_RESOURCE_REPORT.md`. The inherited `beam=400` is not claimed as an
-  empirically safe bound; `TBD-ALG-005` remains open.
-- The strict English CPU single-file pipeline is implemented with strict
-  transcript/lexicon/WAV/model/vocabulary checks, lazy local-only inference and
-  sequential non-overlapping Chunker/Aligner sessions.
-- TextGrid and optional metadata are staged and read-back validated. Publication
-  uses an atomic no-clobber hard link, postcommit inode/byte/semantic validation
-  and ownership-aware rollback; cross-file crash consistency remains
-  `TBD-OUT-001`.
-- Stage 5 main-agent verification passes 673 socket-denied tests at 92.31%
-  branch coverage; Ruff checks/formats 71 files and strict mypy checks 20 source
-  files without errors.
-- Transcript words `sil` and `null` fail before model loading because current
-  tier labels reserve those identities; a future identity scheme is
-  `TBD-TEXT-001`.
-- The Stage 8 refreshed wheel and sdist pass Twine strict,
-  check-wheel-contents and the repository inventory audit. Their SHA-256 values
-  are respectively
+- `/Users/yiyi0369/projects/flexaligner-rebuild` 是新建本地 Git 仓库，分支为 `main`。
+- 没有配置 Git remote。
+- `IMPLEMENTATION_PLAN.md` 在生产实现前已经建立。
+- 仅治理文件的根提交为 `833306e`。
+- 权威算法 reference 已从
+  `/Users/yiyi0369/projects/flexaligner/align_single_cpu.py` 逐字节冻结到
+  `reference/`，预期 SHA-256 为
+  `9ed4e21e615718ddfd10930359f55769fb27a0d284599cce45a3fc755e835de1`。
+- `src/` 包、公共契约、用户要求的占位能力、README/LICENSE、严格本地质量门禁和
+  受保护 workflow 均已实现。
+- Stage 1 包骨架证据：50 项禁网测试通过；分支覆盖率 88.16%，高于 85% 门槛；
+  Ruff 与 strict mypy 通过。
+- Stage 1 包骨架分发审计通过：wheel
+  `f3b6e47f305532329ba1f9c9b7dd6281c165b0bd92ad4cc9b684e33a56db9449`，
+  sdist `3867f2c6db38b9b5fcd9d8d3a4fae8d9a27a3202b9f2354ab22324561dca5353`。
+- 该 Stage 1 wheel 在源码树外安装并通过 `pip check`、版本、导入路径、CLI 和
+  capability smoke。
+- Stage 2 共有 92 项无模型特征化/oracle 测试：Stage 1 为 30 项、Stage 2 为
+  26 项、输入/失败为 19 项、TextGrid/输出为 6 项、reference guard 为 7 项、
+  差分框架为 4 项。
+- Stage 2 门禁时，149 项 fast tests 在禁 socket 条件下通过；Ruff、strict mypy、
+  actionlint、reference 字节比较和 `git diff --check` 均通过。
+- Stage 2 门禁时，当时仍为 candidate 的 E2E manifest 记录了 16 项资产和精确的
+  Python/NumPy/Torch/Transformers 版本；冻结的 OpenPhonetics 本地环境通过全部
+  hash 和运行时版本检查。该阶段只有资产预检证据；D-033 批准和后续真实对齐证据
+  见下文。
+- 当前重建分发包排除 `reference/` 和 tests。Stage 3 后重新构建审计通过：wheel
+  `8bf982789427ff8dc904278f6a5b563fb8cfd25fb79d11b8111b91f6f067868f`，
+  sdist `6d83cb0cc49c3d2ee75b2bd0d7c21f3b1ffe85bdcd6ccaea0efc10c0498be364`。
+- 干净的 NumPy Stage 1 核心已实现，不导入 reference、Torch 或 Transformers。
+  通过 123 项三方等价测试和 76 项独立不变量/资源测试；当时完整测试为 348 项，
+  分支覆盖率 94.75%。
+- 已实现稠密 trellis 精确资源核算和调用方提供的预分配 cell 上限。没有声称包级
+  安全默认值；该问题仍为 `TBD-ALG-005`，详见 `STAGE1_RESOURCE_REPORT.md`。
+- Stage 3 wheel 在源码树外 `/tmp/flexaligner-stage3-smoke.TPMkh3` 安装，并通过
+  `pip check`、包/core 导入、CLI、capability 和资源估算 smoke。
+- 干净的 NumPy Stage 2 核心已实现，不导入 reference、Torch 或 Transformers。
+  通过 80 项 reference 等价测试和 81 项独立不变量/资源测试；当时完整测试为
+  509 项、分支覆盖率 92.85%，Stage 2 模块分支覆盖率 90.63%。
+- 独立只读交叉审计检查了全部 64 种边界/内部 SIL/SPH flag 组合，以及 100 个固定
+  种子随机小图，并同时与冻结 reference 和独立精确 DP oracle 比较；未发现生产缺陷。
+- Stage 2 资源复杂度和限制记录于 `STAGE2_RESOURCE_REPORT.md`。继承的 `beam=400`
+  不被视为经过实证的安全上限；`TBD-ALG-005` 仍未解决。
+- 严格英语 CPU 单文件 pipeline 已实现，包含严格 transcript/词典/WAV/模型/词表
+  检查、惰性本地推理，以及不重叠的顺序 Chunker/Aligner session。
+- TextGrid 和可选 metadata 会先暂存并回读验证。发布使用原子 no-clobber 硬链接、
+  提交后 inode/字节/语义验证和按所有权回滚；跨文件崩溃一致性仍为
+  `TBD-OUT-001`。
+- Stage 5 主 agent 验证通过 673 项禁 socket 测试，分支覆盖率 92.31%；Ruff 检查/
+  格式化 71 个文件，strict mypy 检查 20 个源文件且无错误。
+- Transcript 中的 `sil` 和 `null` 会在模型加载前失败，因为当前 tier 标签保留这些
+  身份；未来身份方案为 `TBD-TEXT-001`。
+- Stage 8 更新后的 wheel 和 sdist 通过 Twine strict、check-wheel-contents 和仓库
+  inventory 审计，SHA-256 分别为
   `a33dcc22f8023e4b4a7905bf7ab78bd827e4576a3fae368f24850b89f0ac9558`
-  and `268e34970404c8c2c361a09358fc581db1185e23079eb9377f25dd4dc205569e`.
-- That exact wheel imports from the external target directory
-  `/tmp/flexaligner-stage8-final-wheel-site.uy5PIZ`, passes version/import/package
-  smoke and the D-033 approved English E2E with sockets disabled. The new and
-  reference TextGrid bytes are identical at SHA-256
-  `ddbe0fecbbd7fc32442bd7b81ccb6257e391ab81970d398eb236de46a50e415f`.
-- Fast tests pass on local Python 3.10.8 and partially matched Python 3.12.12
-  environments (676 passed, one real-model marker deselected). The full declared
-  Python/OS matrix has not run and is `TBD-CI-001`.
-- The user approved the frozen `openphonetics` pronunciation only as a
-  release-E2E fixture. The repository-local manifest is `approved`, records
-  D-033 and `release-e2e-fixture-only`, and passes 16/16 exact-runtime preflight.
-  The rebuilt exact wheel passes the socket-denied E2E (`1 passed, 676
-  deselected`), so local Q007 is PASS. Protected remote E2E remains NOT_RUN.
-- The first public release is selected as the `PUBLIC_ALPHA` version
-  `0.1.0a1`. `pyproject.toml` still records `0.1.0.dev0`; version/classifier and
-  exact-artifact verification remain Stage 8 implementation work.
-- The selected distribution is `flexaligner`, with PyPI owner/organization
-  `ustcphonetics`. Availability, control and publisher binding have not been
-  externally verified.
-- The selected GitHub strategy is `REPLACE_MAIN_HISTORY` for the existing
-  `USTCPhonetics/FlexAligner` project. No merge/graft strategy is accepted, but
-  no remote replacement operation is authorized or configured.
-- MIT license, copyright, authorship, affiliation and citation identity are
-  approved from the fixed original remote README and linked LICENSE snapshot at
-  `c5361efe4b5d8ad02574dae1bd7caa89ed3e4af0`.
-- The v0.1 public-preview support boundary is accepted as D-034. Its disclosed
-  limitations remain limitations rather than silently accepted corrections.
-- No external service, GitHub repository or PyPI project has been changed.
+  和 `268e34970404c8c2c361a09358fc581db1185e23079eb9377f25dd4dc205569e`。
+- 该 exact wheel 从源码树外
+  `/tmp/flexaligner-stage8-final-wheel-site.uy5PIZ` 导入，通过版本/导入/包 smoke
+  和禁 socket 的 D-033 approved 英语 E2E。新实现与 reference 的 TextGrid 字节
+  完全一致，SHA-256 为
+  `ddbe0fecbbd7fc32442bd7b81ccb6257e391ab81970d398eb236de46a50e415f`。
+- Fast tests 在本地 Python 3.10.8 和部分匹配的 Python 3.12.12 环境中通过
+  （676 passed，1 个真实模型 marker deselected）。完整 Python/操作系统矩阵尚未
+  运行，记录为 `TBD-CI-001`。
+- 用户只批准冻结的 `openphonetics` 发音作为 release-E2E fixture。仓库内 manifest
+  为 `approved`，记录 D-033 和 `release-e2e-fixture-only`，通过 16/16 精确运行时
+  预检。重建 exact wheel 通过禁 socket E2E（`1 passed, 676 deselected`），因此
+  本地 Q-007 为 PASS；protected remote E2E 仍为 NOT_RUN。
+- 首个公开版本选择为 `PUBLIC_ALPHA` / `0.1.0a1`。`pyproject.toml` 仍为
+  `0.1.0.dev0`；版本/classifier 和 exact artifact 复验仍属于 Stage 8 工作。
+- distribution 选择为 `flexaligner`，PyPI owner/organization 为
+  `ustcphonetics`。实际可用性、控制权和 publisher 绑定尚未外部验证。
+- GitHub 策略选择为对现有 `USTCPhonetics/FlexAligner` 使用
+  `REPLACE_MAIN_HISTORY`。没有接受 merge/graft，但也没有授权或配置远端替代操作。
+- MIT 许可、版权、作者、单位和引用身份已按固定原远端 README 和同提交 LICENSE
+  快照 `c5361efe4b5d8ad02574dae1bd7caa89ed3e4af0` 批准。
+- v0.1 public preview 支持边界由 D-034 接受；披露的限制仍是限制，不是静默修正。
+- D-035 固定文档语言：根目录对外 `README.md` 保持中英双语；内部项目文档使用中文。
+  中文化前英文文档由提交 `31becaf` 和
+  `docs/archive/2026-08-22-english-docs.md` 保存。
+- 未修改任何外部服务、GitHub 仓库或 PyPI 项目。
 
-## Active work
+## 当前工作
 
-- Stage 8 has applied and locally reverified the D-033 release fixture. It still
-  must implement `0.1.0a1` metadata and the D-034 narrow inference contract.
-- The approved fixture still has a repository-local path portability issue
-  tracked as `TBD-E2E-002`; no protected remote E2E pass is claimed yet.
-- Remote history replacement, CI execution, runner/environment configuration,
-  tag creation and publishing remain unconfigured and unauthorized external
-  operations.
+- Stage 8 已应用并在本地复验 D-033 release fixture；仍需实施 `0.1.0a1` 元数据和
+  D-034 要求的窄推理契约。
+- approved fixture 仍存在仓库本地路径可移植性问题，记录为 `TBD-E2E-002`；
+  尚未声称 protected remote E2E 通过。
+- 远端历史替代、CI 执行、runner/environment 配置、tag 创建和发布仍未配置，
+  也未取得外部操作授权。
 
-## Current capability state
+## 当前能力状态
 
-| Capability | State |
+| 能力 | 状态 |
 |---|---|
-| Python API / CLI / capability discovery | available and Stage 5 tested |
-| English CPU single-file alignment | available; D-033 approved-fixture exact-wheel E2E passes locally; protected remote E2E remains NOT_RUN |
-| Mandarin | placeholder; typed failure verified |
-| GPU | placeholder; typed failure verified |
-| Batch | placeholder; typed failure and non-consumption verified |
-| Web | placeholder; typed failure verified |
-| Automatic model download | placeholder; pre-network failure verified |
-| Multi-format audio | placeholder; typed failure verified |
-| Automatic resampling | placeholder; typed failure verified |
-| Chinese segmentation | placeholder; typed failure verified |
-| Default G2P | placeholder; typed failure verified |
-| Confidence calibration | placeholder; typed failure verified |
+| Python API / CLI / capability discovery | 可用，已通过 Stage 5 测试 |
+| 英语 CPU 单文件对齐 | 可用；D-033 approved-fixture exact-wheel E2E 在本地通过；protected remote E2E 仍为 NOT_RUN |
+| 普通话 | 占位；类型化失败已验证 |
+| GPU | 占位；类型化失败已验证 |
+| 批处理 | 占位；类型化失败和不消费输入 iterable 已验证 |
+| Web | 占位；类型化失败已验证 |
+| 自动模型下载 | 占位；联网前失败已验证 |
+| 多格式音频 | 占位；类型化失败已验证 |
+| 自动重采样 | 占位；类型化失败已验证 |
+| 中文分词 | 占位；类型化失败已验证 |
+| 默认 G2P | 占位；类型化失败已验证 |
+| 置信度校准 | 占位；类型化失败已验证 |
 
-## Next gate
+## 下一道门禁
 
-The next gate is public-alpha release readiness:
+下一道门禁是 public alpha 发布准备：
 
-1. implement `0.1.0a1` metadata and the rest of the accepted preview contract,
-   then rebuild and reverify the exact alpha artifacts;
-2. remove the repo-local fixture path dependency tracked by `TBD-E2E-002`;
-3. obtain separate external authorization and a verified recovery snapshot
-   before directly replacing remote `main` (`TBD-REMOTE-001`);
-4. run the complete remote Python/OS matrix, dependency audit and offline E2E;
-5. configure and verify Trusted Publishing, the protected environment and the
-   offline E2E runner;
-6. request separate authorization before any remote push, default-branch change,
-   tag creation or PyPI publication.
+1. 实施 `0.1.0a1` 元数据和其余已接受预览契约，然后重建并复验 exact alpha artifact；
+2. 去除 `TBD-E2E-002` 记录的 repo-local fixture 路径依赖；
+3. 直接替代远端 `main` 前，取得单独外部授权和已验证恢复快照
+   （`TBD-REMOTE-001`）；
+4. 运行完整远端 Python/操作系统矩阵、依赖审计和离线 E2E；
+5. 配置并验证 Trusted Publishing、受保护 environment 和离线 E2E runner；
+6. 在任何远端 push、默认分支修改、tag 创建或 PyPI 发布前分别请求授权。
 
-## Known blockers
+## 已知阻断项
 
-The Stage 7 engineering baseline remains accepted, but public release remains
-`NO-GO`. It is blocked by unfinished Stage 8 alpha metadata/inference work,
-`TBD-CI-001`, `TBD-REMOTE-001`, `TBD-E2E-002`, `TBD-REL-001`, the absence of a
-configured remote/tag and the absence of external-operation authorization.
-Behavior-changing algorithm, output, provenance, compatibility and resource
-questions remain disclosed preview limitations rather than silently accepted
-fixes.
+Stage 7 工程基线保持接受，但公共发布仍为 `NO-GO`。阻断项包括：尚未完成的 Stage 8
+alpha 元数据/推理工作、`TBD-CI-001`、`TBD-REMOTE-001`、`TBD-E2E-002`、
+`TBD-REL-001`、没有配置 remote/tag，以及没有外部操作授权。行为修正、输出、
+provenance、兼容性和资源问题继续作为已披露的预览限制，不得静默标记为已修复。
