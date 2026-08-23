@@ -89,6 +89,7 @@
 | S5-010 | D-040 默认保险丝经 Python API/CLI 统一应用且不可被无意绕过 | PASS | `AlignmentOptions()` 默认 900 s/200M/200M；显式窄 beam work 产生 `resource_limit_exceeded` 且无正式输出；fast 696 passed | 保险丝不是延迟、吞吐或 900 s 成功 SLA |
 | S5-011 | 使用 `english_natural.wav` / `.txt` 实测复核 D-039/D-040 | PASS | `ALPHA_RESOURCE_VALIDATION.md`：5.015 s、12 words、11,546 cells、281,411 work、42.215 s、2.09 GiB；输出与给定 TextGrid 字节一致 | 证明短自然语音真实 E2E 和保险丝计数；不证明 900 s 性能；同时暴露 D-036 的 22 ms gap |
 | S5-012 | 使用 `s0101a.wav` / `.txt` 复核长音频性能 | FAIL | `ALPHA_RESOURCE_VALIDATION.md`：623.115875 s；1,370.879 s 后仍在 Chunker，峰值 RSS 5.48 GiB，人工安全中止 | 未进入 trellis/Stage 2；需要 Chunker 分块或可取消 wall-time 策略后按同一 hash 复测 |
+| S5-013 | 使用 `example1.wav` / `.txt` 实测多 chunk 对齐 | PASS | 49.0413125 s、10 words、83,368 cells、219,135 work、3 chunks、22.953 s、2.84 GiB | 词序守恒、无 overlap；两层三个 gap 再次证明 D-036 待实施 |
 
 ## G. 用户要求的占位接口
 

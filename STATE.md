@@ -113,6 +113,9 @@
   11,546 trellis cells、281,411 beam work、42.215 s、峰值 RSS 约 2.09 GiB；输出与
   给定 TextGrid 逐字节相同，SHA-256 为 `c8d8ef7b...a121f`。该 TextGrid 两层仍有
   `[4.751, 4.773]` 的 22 ms gap，作为 D-036 尚未实施的 before 证据。
+- `example1.wav`（49.0413125 s、10 words）真实 E2E 也通过：83,368 trellis cells、
+  219,135 beam work、3 chunks、22.953 s、峰值 RSS 约 2.84 GiB，词序守恒且无 overlap。
+  phones/words 两层均复现三个约 19--21 ms gap，进一步确认 D-036 待实施。
 - D-035 固定文档语言：根目录对外 `README.md` 保持中英双语；内部项目文档使用中文。
   中文化前英文文档由提交 `31becaf` 和
   `docs/archive/2026-08-22-english-docs.md` 保存。

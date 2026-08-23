@@ -115,7 +115,31 @@ release E2E，不能替代 Q-007 历史证据。
 运行产物位于 `/tmp/flexaligner-english-natural.EzUMfD`；`metrics.json` SHA-256 为
 `8a60259712f4b65519e662804693a0b141f2229ee41e0f506160a2013c79e008`。
 
-## 7. 验收结论与下一步
+## 7. `example1` 真实 E2E
+
+用户指定 `/Users/yiyi0369/projects/xiantutorial/modules/03_flexaligner/data/test/` 中的
+`example1.wav` / `example1.txt` 继续验证：
+
+| 项目 | 已验证值 |
+|---|---|
+| WAV SHA-256 | `22145f74ade6ec1c60241b583b86b4287938ce288d1cba0de4dc3d29f4f8cb27` |
+| TXT SHA-256 | `761cae0292326b4b3962608341177b3720bdb515c53a2a1695cb56c4220bde83` |
+| 格式/规模 | 16 kHz、单声道、PCM16；49.0413125 s；10 words、33 phones |
+| 词典/重复目标 | `word.dict` 全覆盖；相邻重复目标 0 |
+| Wall time / 峰值 RSS | 22.953 s / 约 2.84 GiB |
+| Stage 1 | 2,451 frames、83,368 cells（约 0.0417% of 200M） |
+| Stage 2 | 3 chunks、累计 219,135 work（约 0.1096% of 200M） |
+| 输出 TextGrid SHA-256 | `6a2ebc2997241d9b79f3622c9e9da82cbc97316817b9ba2ffa421798660005c4` |
+
+归一化 lexical word 顺序与输入完全一致，无 overlap。输出 phones/words 两层仍分别存在
+相同的三个未覆盖区间：`[32.715, 32.734]`（19 ms）、`[45.739, 45.760]`（21 ms）和
+`[49.020, 49.041]`（约 21 ms 尾 gap）。这进一步证明 D-036 是稳定可复现的问题，
+而不是 `english_natural` 单个 fixture 的偶发现象。
+
+运行产物位于 `/tmp/flexaligner-example1.6IDZYg`；`metrics.json` SHA-256 为
+`3b6557b466a887f0519fb7cf879e4e13bb52eb7450e6228ce1e0620270a80ece`。
+
+## 8. 验收结论与下一步
 
 | 项目 | 状态 | 结论 |
 |---|---|---|
@@ -123,7 +147,8 @@ release E2E，不能替代 Q-007 历史证据。
 | 200M trellis cell 保险丝 | `PASS`（代码级） | 指定输入静态精确值 105,089,188；真实分配尚未发生 |
 | 200M transition 保险丝 | `PASS`（代码级） | 精确累计和关闭式失败测试通过 |
 | `english_natural` 完整 E2E | `PASS` | 11,546 cells、281,411 work；输出与给定 TextGrid 字节一致 |
-| D-036 连续覆盖 | `FAIL/待实施` | 两层均存在同一 22 ms 内部 gap |
+| `example1` 完整 E2E | `PASS` | 83,368 cells、219,135 work；3 chunks、词序守恒 |
+| D-036 连续覆盖 | `FAIL/待实施` | `english_natural` 有 22 ms gap；`example1` 两层均有三个约 19--21 ms gap |
 | `s0101a` 长音频完整 E2E | `FAIL` | 22.85 min 内未完成 Chunker，不能取得实际 cells/work/输出 |
 
 在公开 alpha 前至少需要选择并验证一种方案：对 Chunker 做有重叠的流式/分块前向，
