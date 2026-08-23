@@ -88,7 +88,7 @@ jobs:
       - name: Install test tools and base package
         run: |
           python -m pip install --upgrade pip==26.1.2
-          python -m pip install --group test -e .
+          python -m pip install --only-binary=numpy --group test -e .
       - name: Run network-denied fast suite with branch coverage
         run: >-
           python -m pytest
@@ -168,7 +168,7 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip==26.1.2
-          python -m pip install --force-reinstall dist/*.whl
+          python -m pip install --only-binary=:all: --force-reinstall dist/*.whl
       - name: Smoke-test outside the source tree
         shell: bash
         run: |
@@ -197,7 +197,7 @@ jobs:
       - name: Install the exact source distribution
         run: |
           python -m pip install --upgrade pip==26.1.2
-          python -m pip install --force-reinstall dist/*.tar.gz
+          python -m pip install --only-binary=numpy --force-reinstall dist/*.tar.gz
       - name: Smoke-test outside the source tree
         run: |
           cd "$RUNNER_TEMP"

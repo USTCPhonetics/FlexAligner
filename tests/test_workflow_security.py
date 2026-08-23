@@ -46,6 +46,8 @@ def test_fast_ci_has_read_only_permissions_and_no_privileged_trigger() -> None:
     assert "--disable-socket" in source
     assert '-m "not model_e2e"' in source
     assert "python -m build --no-isolation --sdist --wheel" in source
+    assert "python -m pip install --only-binary=numpy --group test -e ." in source
+    assert "python -m pip install --only-binary=:all: --force-reinstall dist/*.whl" in source
 
 
 def test_release_is_tag_only_and_oidc_is_confined_to_publish_job() -> None:

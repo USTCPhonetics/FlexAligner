@@ -1,6 +1,15 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
+
+# 操作系统和编辑器本地文件
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+
+# Python 测试、质量检查和构建产物
 .coverage
 coverage.json
 coverage.xml
@@ -11,5 +20,32 @@ coverage.xml
 build/
 dist/
 htmlcov/
+
+# 本地运行输入、模型、输出和临时中间数据
+/artifacts/
+/data/
+/models/
+/outputs/
+/runs/
+/scratch/
+/temp/
+/tmp/
+*.log
 *.TextGrid.tmp
 *.incomplete
+
+# 仅供本地维护者/agent 使用的治理、计划和验收文档
+/ACCEPTANCE.md
+/AGENTS.md
+/ALPHA_RESOURCE_VALIDATION.md
+/DECISIONS.md
+/FINAL_ACCEPTANCE_REPORT.md
+/IMPLEMENTATION_PLAN.md
+/OPEN_QUESTIONS.md
+/REAL_MODEL_E2E_REPORT.md
+/REVIEW_DECISION_REPORT.md
+/STAGE1_RESOURCE_REPORT.md
+/STAGE2_RESOURCE_REPORT.md
+/STATE.md
+/project.md
+/docs/archive/
