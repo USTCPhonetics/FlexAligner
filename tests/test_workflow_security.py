@@ -88,7 +88,20 @@ def test_model_e2e_is_offline_and_fails_closed_without_manifest() -> None:
     assert "--require-approved" in source
     assert "MODEL_E2E_BLOCKED" in source
     assert "-m model_e2e" in source
-    for downloader in ("curl ", "wget ", "huggingface-cli", "hf download"):
+    assert source.count("curl ") == 1
+    assert "https://codeload.github.com/${{ github.repository }}/tar.gz/${{ github.sha }}" in source
+    assert "--proto '=https'" in source
+    assert 'if [[ ! "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]' in source
+    assert 'if [ "$GITHUB_REPOSITORY" != "USTCPhonetics/FlexAligner" ]' in source
+    assert "--no-same-owner" in source
+    assert "--no-same-permissions" in source
+    assert "source archive contains a link or special member" in source
+    assert "FLEXALIGNER_E2E_PYTHON" in source
+    assert "per-run virtual environment already exists" in source
+    assert "actions/checkout@" not in source
+    assert "actions/setup-python@" not in source
+    assert source.count('"$FLEXALIGNER_VENV_ROOT/bin/python"') >= 8
+    for downloader in ("wget ", "huggingface-cli", "hf download"):
         assert downloader not in source
 
 

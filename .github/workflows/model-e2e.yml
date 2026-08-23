@@ -22,6 +22,7 @@ concurrency:
 env:
   HF_HUB_DISABLE_TELEMETRY: "1"
   FLEXALIGNER_E2E_ASSET_ROOT: ${{ vars.FLEXALIGNER_E2E_ASSET_ROOT }}
+  FLEXALIGNER_E2E_PYTHON: ${{ vars.FLEXALIGNER_E2E_PYTHON }}
   FLEXALIGNER_E2E_WHEELHOUSE: ${{ vars.FLEXALIGNER_E2E_WHEELHOUSE }}
   HF_HUB_OFFLINE: "1"
   OMP_NUM_THREADS: "1"
@@ -40,16 +41,99 @@ jobs:
       - flexaligner-e2e
     timeout-minutes: 60
     steps:
-      - name: Check out source and tests
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          # The approved release-E2E manifest freezes the currently validated
-          # model runtime. Declared Python compatibility is exercised separately.
-          python-version: "3.10.8"
+      - name: Retrieve the exact source archive from GitHub codeload
+        shell: bash
+        env:
+          FLEXALIGNER_SOURCE_URL: https://codeload.github.com/${{ github.repository }}/tar.gz/${{ github.sha }}
+        run: |
+          umask 077
+          download_root="$RUNNER_TEMP/flexaligner-download-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          source_root="$RUNNER_TEMP/flexaligner-source-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          venv_root="$RUNNER_TEMP/flexaligner-venv-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if [ "$GITHUB_REPOSITORY" != "USTCPhonetics/FlexAligner" ]; then
+            echo "MODEL_E2E_BLOCKED: unexpected repository: $GITHUB_REPOSITORY" >&2
+            exit 1
+          fi
+          if [[ ! "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "MODEL_E2E_BLOCKED: github.sha is not a full commit SHA" >&2
+            exit 1
+          fi
+          if [ -e "$download_root" ] || [ -e "$source_root" ] || [ -e "$venv_root" ]; then
+            echo "MODEL_E2E_BLOCKED: per-run download or source root already exists" >&2
+            exit 1
+          fi
+          install -d -m 700 "$download_root" "$source_root"
+          source_archive="$download_root/source.tar.gz"
+          curl \
+            --fail \
+            --proto '=https' \
+            --retry 3 \
+            --show-error \
+            --silent \
+            --tlsv1.2 \
+            --output "$source_archive" \
+            "$FLEXALIGNER_SOURCE_URL"
+          sha256sum "$source_archive"
+          expected_prefix="${GITHUB_REPOSITORY#*/}-${GITHUB_SHA}/"
+          member_count=0
+          while IFS= read -r member; do
+            ((member_count += 1))
+            case "/$member" in
+              */../*|*/./*)
+                echo "MODEL_E2E_BLOCKED: unsafe source archive member: $member" >&2
+                exit 1
+                ;;
+            esac
+            case "$member" in
+              "$expected_prefix"*) ;;
+              *)
+                echo "MODEL_E2E_BLOCKED: unexpected source archive member: $member" >&2
+                exit 1
+                ;;
+            esac
+          done < <(tar -tzf "$source_archive")
+          while IFS= read -r listing; do
+            case "${listing:0:1}" in
+              -|d) ;;
+              *)
+                echo "MODEL_E2E_BLOCKED: source archive contains a link or special member" >&2
+                exit 1
+                ;;
+            esac
+          done < <(tar -tvzf "$source_archive")
+          if [ "$member_count" -eq 0 ]; then
+            echo "MODEL_E2E_BLOCKED: source archive is empty" >&2
+            exit 1
+          fi
+          tar -xzf "$source_archive" \
+            --no-same-owner \
+            --no-same-permissions \
+            --strip-components=1 \
+            --directory "$source_root"
+          printf 'FLEXALIGNER_SOURCE_ROOT=%s\n' "$source_root" >> "$GITHUB_ENV"
+          printf 'FLEXALIGNER_VENV_ROOT=%s\n' "$venv_root" >> "$GITHUB_ENV"
+      - name: Require the pre-provisioned exact Python runtime
+        shell: bash
+        run: |
+          umask 077
+          if [ -z "$FLEXALIGNER_E2E_PYTHON" ]; then
+            echo "MODEL_E2E_BLOCKED: repository variable FLEXALIGNER_E2E_PYTHON is unset" >&2
+            exit 1
+          fi
+          if [ ! -x "$FLEXALIGNER_E2E_PYTHON" ]; then
+            echo "MODEL_E2E_BLOCKED: Python executable is absent: $FLEXALIGNER_E2E_PYTHON" >&2
+            exit 1
+          fi
+          actual_python="$($FLEXALIGNER_E2E_PYTHON -c 'import platform; print(platform.python_version())')"
+          if [ "$actual_python" != "3.10.8" ]; then
+            echo "MODEL_E2E_BLOCKED: expected Python 3.10.8, got $actual_python" >&2
+            exit 1
+          fi
+          if [ -e "$FLEXALIGNER_VENV_ROOT" ]; then
+            echo "MODEL_E2E_BLOCKED: per-run virtual environment already exists" >&2
+            exit 1
+          fi
+          "$FLEXALIGNER_E2E_PYTHON" -m venv "$FLEXALIGNER_VENV_ROOT"
       - name: Require the pre-provisioned offline dependency wheelhouse
         shell: bash
         run: |
@@ -64,11 +148,12 @@ jobs:
       - name: Install E2E tooling only from the frozen wheelhouse
         shell: bash
         run: |
-          python -m pip install \
+          cd "$FLEXALIGNER_SOURCE_ROOT"
+          "$FLEXALIGNER_VENV_ROOT/bin/python" -m pip install \
             --no-index \
             --find-links "$FLEXALIGNER_E2E_WHEELHOUSE" \
             pip==26.1.2
-          python -m pip install \
+          "$FLEXALIGNER_VENV_ROOT/bin/python" -m pip install \
             --no-index \
             --find-links "$FLEXALIGNER_E2E_WHEELHOUSE" \
             --group test \
@@ -78,14 +163,17 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ inputs.distribution_artifact }}
-          path: dist
+          path: ${{ runner.temp }}/flexaligner-source-${{ github.run_id }}-${{ github.run_attempt }}/dist
       - name: Build a distribution for scheduled or manual validation
         if: ${{ inputs.distribution_artifact == '' }}
-        run: python -m build --no-isolation --wheel
+        run: |
+          cd "$FLEXALIGNER_SOURCE_ROOT"
+          "$FLEXALIGNER_VENV_ROOT/bin/python" -m build --no-isolation --wheel
       - name: Locate exactly one wheel
         shell: bash
         run: |
-          python - <<'PY'
+          cd "$FLEXALIGNER_SOURCE_ROOT"
+          "$FLEXALIGNER_VENV_ROOT/bin/python" - <<'PY'
           import os
           from pathlib import Path
 
@@ -98,16 +186,18 @@ jobs:
       - name: Install the exact wheel with inference dependencies offline
         shell: bash
         run: |
-          python -m pip install \
+          cd "$FLEXALIGNER_SOURCE_ROOT"
+          "$FLEXALIGNER_VENV_ROOT/bin/python" -m pip install \
             --no-index \
             --find-links "$FLEXALIGNER_E2E_WHEELHOUSE" \
             --force-reinstall \
             "${FLEXALIGNER_E2E_WHEEL}[inference]"
-          python -m pip check
+          "$FLEXALIGNER_VENV_ROOT/bin/python" -m pip check
       - name: Require and verify all frozen local model assets
         shell: bash
         run: |
-          python scripts/verify_model_assets.py \
+          cd "$FLEXALIGNER_SOURCE_ROOT"
+          "$FLEXALIGNER_VENV_ROOT/bin/python" scripts/verify_model_assets.py \
             tests/fixtures/e2e/asset_manifest.json \
             --check-runtime \
             --require-approved
@@ -115,14 +205,15 @@ jobs:
         shell: bash
         run: |
           cd "$RUNNER_TEMP"
-          python -c "import flexaligner; print(flexaligner.__version__)"
-          flexaligner capabilities --json
+          "$FLEXALIGNER_VENV_ROOT/bin/python" \
+            -c "import flexaligner; print(flexaligner.__version__)"
+          "$FLEXALIGNER_VENV_ROOT/bin/flexaligner" capabilities --json
       - name: Run the non-skippable frozen-model suite without sockets
         shell: bash
         run: |
           cd "$RUNNER_TEMP"
-          python -m pytest \
-            "$GITHUB_WORKSPACE/tests" \
-            -c "$GITHUB_WORKSPACE/pyproject.toml" \
+          "$FLEXALIGNER_VENV_ROOT/bin/python" -m pytest \
+            "$FLEXALIGNER_SOURCE_ROOT/tests" \
+            -c "$FLEXALIGNER_SOURCE_ROOT/pyproject.toml" \
             -m model_e2e \
             --disable-socket
