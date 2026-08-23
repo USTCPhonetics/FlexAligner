@@ -7,106 +7,113 @@
 [![Laboratory](https://img.shields.io/badge/Laboratory-USTC_Phonetics-red.svg)](http://phonetics.ustc.edu.cn/)
 [![Python](https://img.shields.io/badge/Python-3.10--3.14-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Model](https://img.shields.io/badge/Model-Wav2Vec2.0-orange.svg)](https://huggingface.co/USTCPhonetics)
 
-**A two-stage forced-alignment project for real-world speech**  
-**面向真实语音数据的两阶段强制对齐项目**
+**A Neural-Based Forced Alignment Framework for "Wild" Real-World Data**
+<br>
+**面向真实非受控数据的深度学习强鲁棒性对齐工具**
+
+[**English**](#-introduction) | [**简体中文**](#-简介)
 
 </div>
 
-> **Rebuild status (2026-08-11):** this repository is a clean implementation
-> baseline. The strict English CPU single-file path has passed its model-free
-> gates and an exact-wheel engineering E2E against the frozen local reference.
-> The fixture-only `openphonetics` pronunciation is approved for release-E2E
-> use by D-033; protected remote-matrix, inference-resolution and publication
-> gates are still blocked. It is not published on PyPI. The capability table
-> below is the authoritative public status; a placeholder is an importable
-> contract that fails explicitly, not a supported feature.
+---
 
-## Introduction / 简介
+## 📖 Introduction
 
-FlexAligner keeps the original product goal of aligning imperfect real-world
-recordings and transcripts while rebuilding the implementation around explicit,
-testable contracts. The target algorithm has two stages:
+**FlexAligner** is a robust speech-text alignment framework built upon
+**wav2vec 2.0**. It is designed for real-world linguistic data, where audio
+signals and textual transcriptions may contain noise, hesitations, untranscribed
+events, or local mismatches.
 
-1. **Macro segmentation / 宏观切分:** a CTC model locates transcript anchors
-   and forms ordered chunks.
-2. **Local alignment / 局部对齐:** a constrained phone graph and two-pass
-   Viterbi procedure estimate phone and word boundaries inside each chunk.
+FlexAligner decomposes forced alignment into two stages:
 
-The implemented product path is deliberately narrow: English, CPU, one 16 kHz
-mono PCM16 WAV, an explicit transcript, a local pronunciation lexicon, and two
-local model directories. Inputs that do not satisfy the contract fail instead
-of silently dropping words. A successful run publishes a read-back-validated
-Praat TextGrid with an atomic no-clobber filesystem operation.
+1. **Macro-Segmentation (CTC Chunking):** Uses a CTC acoustic model to locate
+   reliable transcript anchors and divide long-form audio into ordered chunks.
+2. **Micro-Alignment (Local Alignment):** Uses a constrained pronunciation
+   graph and two-pass Viterbi decoding to estimate word and phone boundaries
+   within each chunk.
 
-FlexAligner 保留原项目“CTC 宏观定位 + 局部精细对齐”的产品目标，
-但新代码库不继承旧核心的宽松回退行为。当前已实现的第一条链路仅面向
-英语、CPU、单文件、本地模型和本地词典；其他能力不会被静默伪装成已支持。
+### 🌟 Key Features
 
-## Capability matrix
+* **🛡️ Tolerance to Mismatch:** Uncovered portions of the audio timeline are
+  represented explicitly as `NULL` intervals instead of being silently forced
+  into neighboring words or phones.
+* **🎯 Word and Phone Boundaries:** Produces Praat TextGrid files with continuous
+  `words` and `phones` tiers while preserving the input word order.
+* **🔒 Local and Reproducible:** Models and pronunciation dictionaries are
+  supplied as explicit local paths; alignment does not automatically download
+  models or silently generate OOV pronunciations.
+* **📦 Python Package and CLI:** Provides a typed Python API and a command-line
+  interface for single-file alignment.
 
-The package exposes machine-readable capability discovery through
-`flexaligner capabilities --json`. Status values are `available`,
-`placeholder`, and `unavailable`.
+The first public preview focuses on **English, CPU, and single-file alignment**.
+Mandarin, GPU, batch processing, Web services, automatic model download,
+multi-format decoding, resampling, default G2P, and confidence calibration are
+reserved interfaces and are not yet production features.
 
-| Capability ID | Public status | Current meaning |
-|---|---|---|
-| `api.python` | `available` | Import-safe Python API for the strict local English path and guarded placeholders. |
-| `cli` | `available` | Single-file alignment, version, discovery, and explicit placeholder commands are present. |
-| `capabilities.discovery` | `available` | Human-readable and JSON capability reports are present. |
-| `alignment.single_file.en.cpu` | `available` | Strict local English CPU alignment; fixture-only release evidence is approved, while protected remote gates remain unrun. |
-| `language.zh` | `placeholder` | Mandarin is outside this milestone's real implementation. |
-| `device.gpu` | `placeholder` | CPU is the only planned MVP execution device. |
-| `alignment.batch` | `placeholder` | No batch execution or manifest recovery. |
-| `integration.web` | `placeholder` | No Web/API service implementation. |
-| `models.auto_download` | `placeholder` | Models must remain explicit and local; no automatic download. |
-| `audio.multi_format` | `placeholder` | MVP accepts strict WAV only. |
-| `audio.auto_resample` | `placeholder` | MVP does not convert or resample audio. |
-| `text.zh_segmentation` | `placeholder` | No Chinese segmentation implementation. |
-| `pronunciation.g2p.default` | `placeholder` | OOV words fail; no default G2P fallback. |
-| `confidence.calibration` | `placeholder` | Any emitted reference score is explicitly uncalibrated. |
+---
 
-`available` means a real implementation has passed its current implementation
-gate; it does not mean the package has passed the approved-asset or public
-release gate. Acceptance evidence is tracked separately in `ACCEPTANCE.md`.
+## 🌏 简介
 
-## Installation for development
+**FlexAligner** 是一个基于 **wav2vec 2.0** 的语音—文本对齐框架，面向真实语言材料中
+常见的噪音、停顿、未转写声音事件以及音频与文本局部不一致等问题。
 
-There is currently no authorized PyPI release. Install only from a reviewed
-local checkout:
+FlexAligner 将强制对齐分为两个阶段：
 
-```bash
-python -m pip install --upgrade "pip>=25.1"
-python -m pip install -e .
+1. **宏观切分（CTC Chunking）：** 使用 CTC 声学模型寻找可靠的文本锚点，并将长音频
+   划分为顺序一致的局部片段。
+2. **微观对齐（Local Alignment）：** 在每个片段内构建受约束的发音图，通过两遍
+   Viterbi 解码估计词和音素边界。
+
+### 🌟 核心优势
+
+* **🛡️ 容错设计：** 对未被词或音素覆盖的时段使用明确的 `NULL` 区间表示，避免将其
+  静默挤压到相邻标签中。
+* **🎯 词与音素边界：** 输出 Praat TextGrid，`words` 和 `phones` 两层连续覆盖完整
+  音频时间轴，同时保持输入词序。
+* **🔒 本地与可复现：** 模型和发音词典均由用户显式指定；运行时不会自动下载模型，
+  也不会对 OOV 词静默生成发音。
+* **📦 Python 包与 CLI：** 提供带类型定义的 Python API 和单文件命令行接口。
+
+首个公开预览版聚焦于**英语、CPU、单文件对齐**。普通话、GPU、批处理、Web 服务、
+自动模型下载、多格式解码、自动重采样、默认 G2P 和置信度校准目前仅保留接口，尚未
+作为正式能力开放。
+
+---
+
+## 🏗️ Architecture
+
+```mermaid
+graph TD
+    Input[Input: PCM16 WAV + Transcript] --> Lexicon[Local Pronunciation Lexicon];
+    Lexicon --> B[Stage 1: CTC Chunking];
+    B --> C{Reliable Ordered Chunks};
+    C --> D[Stage 2: Pronunciation Graph];
+    D --> E[Two-pass Viterbi Decoding];
+    E --> F[Words + Phones + NULL TextGrid];
 ```
 
-Install the heavy local Hugging Face inference adapter only when working on the
-real alignment path:
+## 🚀 Installation
+
+FlexAligner currently targets Python 3.10–3.14. Install the preview from a
+reviewed source checkout:
 
 ```bash
+git clone https://github.com/USTCPhonetics/FlexAligner.git
+cd FlexAligner
+
 python -m pip install -e ".[inference]"
 ```
 
-Developer groups use the standardized dependency-group interface:
+The package does not include acoustic models. Prepare compatible local Chunker
+and Aligner model directories and a pronunciation dictionary before alignment.
 
-```bash
-python -m pip install --group ci
-```
+## 💻 Usage
 
-Package import and capability discovery must not download models or access the
-network.
+### 1. Command Line Interface (CLI)
 
-## Current CLI contract
-
-The discovery surface is:
-
-```bash
-flexaligner --version
-flexaligner capabilities
-flexaligner capabilities --json
-```
-
-The implemented strict single-file command is:
+Align one English 16 kHz mono PCM16 WAV file:
 
 ```bash
 flexaligner align \
@@ -116,107 +123,90 @@ flexaligner align \
   --chunker-model /local/models/en/chunker \
   --aligner-model /local/models/en/aligner \
   --output recording.TextGrid \
-  --chunk-metadata recording.alignment.json
+  --chunk-metadata recording.alignment.json \
+  --num-threads 1
 ```
 
-`--text "..."` may replace `--text-file`; they are mutually exclusive.
-`batch`, `serve`, and `models fetch` are also explicit placeholders.
+Literal transcript text may be passed with `--text` instead of `--text-file`.
+Use the capability command to inspect the installed preview:
 
-Machine-readable failures use a stable envelope:
-
-```json
-{
-  "code": "feature_not_available",
-  "message": "Capability 'alignment.batch' is placeholder: Batch execution is outside the first implementation milestone.",
-  "context": {
-    "capability": "alignment.batch",
-    "reason": "Batch execution is outside the first implementation milestone.",
-    "status": "placeholder"
-  }
-}
+```bash
+flexaligner capabilities
+flexaligner capabilities --json
 ```
 
-## Public Python surface
-
-The public package exposes these imports:
+### 2. Python API
 
 ```python
+from pathlib import Path
+
 from flexaligner import (
-    AlignmentOptions,
     AlignmentRequest,
-    AlignmentResult,
-    Capability,
-    CapabilityId,
-    CapabilityReport,
-    CapabilityStatus,
-    FeatureNotAvailableError,
     FlexAligner,
-    FlexAlignerError,
     LocalModelBundle,
     TextGridOutput,
-    __version__,
-    get_capabilities,
 )
+
+models = LocalModelBundle(
+    chunker_dir=Path("/local/models/en/chunker"),
+    aligner_dir=Path("/local/models/en/aligner"),
+)
+
+with FlexAligner(
+    models=models,
+    lexicon_path=Path("english.dict"),
+) as aligner:
+    result = aligner.align(
+        AlignmentRequest(
+            audio_path=Path("recording.wav"),
+            transcript=Path("transcript.txt").read_text(encoding="utf-8"),
+            output=TextGridOutput(path=Path("recording.TextGrid")),
+            utterance_id="recording",
+        )
+    )
+
+print(result.output_sha256)
 ```
 
-`FlexAligner.align()` executes the strict English CPU path lazily. Future
-options are rejected before input, model, output, or network I/O.
+### Input Requirements / 输入要求
 
-## Current limitations
+* Audio must be uncompressed 16 kHz mono PCM16 WAV.
+* The transcript must be UTF-8 text and fully covered by the pronunciation
+  dictionary.
+* Model and dictionary files must be available locally.
+* Output paths use no-clobber semantics: an existing output file is not
+  overwritten.
 
-- WAV input must be uncompressed 16 kHz mono PCM16; no decode or resample fallback exists.
-- Models and lexicon must be explicit local paths; OOV words fail.
-- Transcript words `sil` and `null` are currently reserved tier labels and fail
-  before model loading (`TBD-TEXT-001`).
-- Reference gap behavior (including the frozen fixture's tail gap), the fixed
-  10 ms Stage 2 stride, and the absence of approved default resource limits
-  remain explicit algorithm and resource questions.
-- The frozen Hugging Face bundles emit weight-normalization migration warnings;
-  broader architecture compatibility remains `TBD-INF-001`.
-- Optional metadata and TextGrid are validated together in-process, but a crash
-  cannot be made atomic across two separate files (`TBD-OUT-001`).
+* 音频必须是未压缩的 16 kHz、单声道、PCM16 WAV。
+* 文本必须为 UTF-8，且发音词典需要覆盖全部输入词。
+* 模型与词典必须提前保存在本地。
+* 输出采用不覆盖已有文件的策略；若目标文件已存在，程序不会将其覆盖。
 
-## Validation and release policy
+## 🗓️ Roadmap
 
-- Fast test execution is model-free and socket-denied; dependency installation
-  and the vulnerability query remain separate networked CI steps.
-- Model E2E is offline, uses content-addressed external assets, and may never
-  turn missing assets into a passing skip.
-- Wheels and sdists exclude model weights, recordings, TextGrid results, and
-  local caches.
-- A production release must be tag-only, build once, test that exact artifact,
-  pass the frozen English model E2E, and then receive protected-environment
-  approval.
-- PyPI Trusted Publishing is not configured and publishing is not authorized.
+- [x] **Core Alignment Engine:** Two-stage CTC chunking and local alignment.
+- [x] **English CPU Single-File Alignment:** CLI, Python API, and validated
+  TextGrid output.
+- [x] **Continuous TextGrid Coverage:** `words` and `phones` tiers use `NULL`
+  intervals to cover the complete timeline.
+- [ ] **Mandarin Alignment:** Model, segmentation, and release validation.
+- [ ] **GPU and Batch Processing:** Accelerated and high-throughput workflows.
+- [ ] **Audio Frontend:** Multi-format decoding and automatic resampling.
+- [ ] **Model Distribution:** Documented model acquisition and compatibility
+  validation.
+- [ ] **PyPI Release:** Publish the approved public preview as `flexaligner`.
 
-The self-hosted runner provisioning, asset-root repository variable, and offline
-dependency wheelhouse are deployment `[TBD]` values. The manifest path is
-committed; the workflow fails closed when infrastructure or assets are absent
-and never downloads a missing model.
+## 👨‍💻 Authors & Affiliation
 
-## Scope and roadmap
+```text
+Yiming Wang (王一鸣) - University of Science and Technology of China (USTC)
 
-- [x] Governance, clean repository, package/API design, and explicit capability states.
-- [x] Characterize the frozen local algorithm reference with model-free tests.
-- [x] Implement Stage 1 CTC chunking with differential parity.
-- [x] Implement Stage 2 graph/Viterbi/redecode with differential parity.
-- [x] Implement strict local CPU inference and validated TextGrid output.
-- [x] Pass a socket-denied exact-wheel engineering E2E against the candidate frozen assets.
-- [x] Approve the fixture-only pronunciation for release-E2E use.
-- [x] Decide the public-alpha identity: `flexaligner`, owner `ustcphonetics`, first public version `0.1.0a1`.
-- [x] Confirm the fixed upstream identity, authorship and MIT license text.
-- [ ] Implement alpha metadata/inference constraints and pass the protected remote E2E gate.
-- [ ] Publish to PyPI only after separate authorization.
+Jiahong Yuan (袁家宏) - University of Science and Technology of China (USTC)
+```
 
-## Authors and affiliation
+## 📜 Citation
 
-- Yiming Wang (王一鸣), University of Science and Technology of China (USTC)
-- Jiahong Yuan (袁家宏), University of Science and Technology of China (USTC)
-
-## Citation
-
-The following citation is retained from the fixed upstream README as project
-metadata; publication details should be rechecked before formal use:
+If you use FlexAligner in your research, please cite:
 
 ```bibtex
 @misc{flexaligner2026,
@@ -230,19 +220,9 @@ metadata; publication details should be rechecked before formal use:
 }
 ```
 
-## Provenance and license
+## 📄 License
 
-Product identity, authorship, the two-stage description, and citation were
-adapted from the upstream README at
-[`USTCPhonetics/FlexAligner@c5361efe`](https://github.com/USTCPhonetics/FlexAligner/tree/c5361efe4b5d8ad02574dae1bd7caa89ed3e4af0).
-The fixed README snapshot has SHA-256
-`665dd93bc04a802a9233b4f868e58ed43606bcb5e5eaf934a460bad01d1c280c`.
+FlexAligner is released under the [MIT License](LICENSE). Please refer to the
+repository's `LICENSE` file for the authoritative license and copyright notice.
 
-`LICENSE` preserves the text of that fixed commit's MIT license snapshot; the
-upstream source file's SHA-256 is
-`b1f12d62c29df3906f7a05b2a18e4faed00876170b75d0c50e2cf50317e00ee7`.
-D-032 confirms this fixed upstream identity: the README supplies the authors,
-affiliation, brand and citation, while the linked LICENSE supplies the MIT text
-and `Copyright (c) 2026 WANG Yiming`. The local BibTeX keeps a plain URL instead
-of the upstream README's malformed Markdown-inside-BibTeX form; this is a
-non-semantic formatting correction.
+<div align="center"><sub>Built by USTCPhonetics.</sub></div>
