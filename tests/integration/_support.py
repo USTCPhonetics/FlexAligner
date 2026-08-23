@@ -53,6 +53,10 @@ def make_integration_fixture(tmp_path: Path, *, metadata: bool = True) -> Integr
         json.dumps({"<pad>": 0, "AH": 1, "B": 2}),
         encoding="utf-8",
     )
+    (aligner_dir / "vocab.json").write_text(
+        json.dumps({"AH": 0, "B": 1, "sil": 2, "sph": 3}),
+        encoding="utf-8",
+    )
     output_path = tmp_path / "result.TextGrid"
     metadata_path = tmp_path / "result.chunker.json" if metadata else None
     request = AlignmentRequest(

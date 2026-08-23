@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -18,9 +19,25 @@ from .contracts import (
     Device,
     Language,
     LocalModelBundle,
+    PronunciationMode,
     TextGridOutput,
 )
-from .errors import FlexAlignerError
+from .errors import (
+    ConfigurationError,
+    FlexAlignerError,
+    ModelCacheMissError,
+    ModelValidationError,
+)
+from .model_download import (
+    DEFAULT_MODEL_RELEASE,
+    DEFAULT_MODEL_REPO,
+    DEFAULT_MODEL_REVISION,
+    MIRROR_ENDPOINT,
+    OFFICIAL_ENDPOINT,
+    default_model_cache_dir,
+    download_english_models,
+    find_cached_english_models,
+)
 
 PLACEHOLDER_EXIT_STATUS = 3
 
@@ -39,19 +56,36 @@ def build_parser() -> argparse.ArgumentParser:
     capability_parser.add_argument("--json", action="store_true", dest="as_json")
 
     align_parser = subparsers.add_parser(
-        "align", help="Align one English 16 kHz mono PCM16 WAV with local models."
+        "align", help="Align one English 16 kHz mono PCM16 WAV with local or cached models."
     )
     align_parser.add_argument("--audio", type=Path, required=True)
     transcript_group = align_parser.add_mutually_exclusive_group(required=True)
     transcript_group.add_argument("--text")
     transcript_group.add_argument("--text-file", type=Path)
     align_parser.add_argument("--lexicon", type=Path, required=True)
-    align_parser.add_argument("--chunker-model", type=Path, required=True)
-    align_parser.add_argument("--aligner-model", type=Path, required=True)
+    align_parser.add_argument("--chunker-model", type=Path)
+    align_parser.add_argument("--aligner-model", type=Path)
+    align_parser.add_argument("--model-cache-dir", type=Path)
+    align_parser.add_argument(
+        "--model-source",
+        choices=("mirror", "official"),
+        help="Download from hf-mirror.com or huggingface.co after explicit confirmation.",
+    )
+    align_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Authorize a required model download without an interactive prompt.",
+    )
     align_parser.add_argument("--output", type=Path, required=True)
     align_parser.add_argument("--chunk-metadata", type=Path)
     align_parser.add_argument("--utterance-id")
     align_parser.add_argument("--num-threads", type=int, default=1)
+    align_parser.add_argument(
+        "--pronunciation-mode",
+        choices=[item.value for item in PronunciationMode],
+        default=PronunciationMode.G2P.value,
+        help="Use local English G2P for OOVs (default) or require strict lexicon coverage.",
+    )
     align_parser.add_argument(
         "--language",
         choices=[item.value for item in Language],
@@ -66,9 +100,22 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("batch", help="Declared batch placeholder.")
     subparsers.add_parser("serve", help="Declared Web-service placeholder.")
 
-    models_parser = subparsers.add_parser("models", help="Model-management placeholders.")
+    models_parser = subparsers.add_parser("models", help="Model cache management.")
     model_subparsers = models_parser.add_subparsers(dest="models_command")
-    model_subparsers.add_parser("fetch", help="Declared automatic-download placeholder.")
+    fetch_parser = model_subparsers.add_parser(
+        "fetch", help="Fetch and validate the pinned public English model bundle."
+    )
+    fetch_parser.add_argument("--model-cache-dir", type=Path)
+    fetch_parser.add_argument(
+        "--model-source",
+        choices=("mirror", "official"),
+        help="Download source; default is the China-accessible mirror.",
+    )
+    fetch_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Authorize download without an interactive prompt.",
+    )
     return parser
 
 
@@ -88,8 +135,10 @@ def _run_align(args: argparse.Namespace) -> None:
         language=Language(args.language),
         device=Device(args.device),
         num_threads=args.num_threads,
+        pronunciation_mode=PronunciationMode(args.pronunciation_mode),
     )
     require_supported_options(options)
+    models = _resolve_cli_models(args)
     transcript = args.text if args.text is not None else read_utf8_text(args.text_file)
     request = AlignmentRequest(
         audio_path=args.audio,
@@ -101,14 +150,21 @@ def _run_align(args: argparse.Namespace) -> None:
         utterance_id=args.utterance_id,
     )
     with FlexAligner(
-        models=LocalModelBundle(
-            chunker_dir=args.chunker_model,
-            aligner_dir=args.aligner_model,
-        ),
+        models=models,
         lexicon_path=args.lexicon,
         options=options,
     ) as engine:
         result = engine.align(request)
+    for notice in result.pronunciation_notices:
+        print(
+            "WARNING "
+            + json.dumps(
+                notice.to_dict(),
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+            file=sys.stderr,
+        )
     print(
         json.dumps(
             {
@@ -120,6 +176,134 @@ def _run_align(args: argparse.Namespace) -> None:
             ensure_ascii=False,
             sort_keys=True,
         )
+    )
+
+
+def _resolve_cli_models(args: argparse.Namespace) -> LocalModelBundle:
+    chunker = args.chunker_model
+    aligner = args.aligner_model
+    if (chunker is None) != (aligner is None):
+        raise ConfigurationError(
+            "--chunker-model and --aligner-model must be provided together",
+            context={
+                "aligner_model_provided": aligner is not None,
+                "chunker_model_provided": chunker is not None,
+            },
+        )
+    if chunker is not None and aligner is not None:
+        return LocalModelBundle(chunker_dir=chunker, aligner_dir=aligner)
+    return _resolve_or_download_models(
+        cache_dir=args.model_cache_dir,
+        source=args.model_source,
+        assume_yes=args.yes,
+    )
+
+
+def _run_models_fetch(args: argparse.Namespace) -> None:
+    models = _resolve_or_download_models(
+        cache_dir=args.model_cache_dir,
+        source=args.model_source,
+        assume_yes=args.yes,
+    )
+    print(
+        json.dumps(
+            {
+                "aligner_model": str(models.aligner_dir),
+                "bundle_release": DEFAULT_MODEL_RELEASE,
+                "chunker_model": str(models.chunker_dir),
+                "manifest": str(models.manifest_path),
+                "repo_id": DEFAULT_MODEL_REPO,
+                "revision": DEFAULT_MODEL_REVISION,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+    )
+
+
+def _resolve_or_download_models(
+    *, cache_dir: Path | None, source: str | None, assume_yes: bool
+) -> LocalModelBundle:
+    selected_cache = default_model_cache_dir() if cache_dir is None else cache_dir.expanduser()
+    try:
+        cached = find_cached_english_models(cache_dir=selected_cache)
+    except ModelValidationError:
+        if not assume_yes:
+            raise
+        selected_source = _default_model_source() if source is None else source
+        return download_english_models(
+            cache_dir=selected_cache,
+            source=selected_source,
+            force_download=True,
+        )
+    if cached is not None:
+        return cached
+
+    selected_source = _default_model_source() if source is None else source
+    if assume_yes:
+        return download_english_models(cache_dir=selected_cache, source=selected_source)
+    if not sys.stdin.isatty():
+        raise _cache_miss(selected_cache)
+    if not _prompt_yes_no(
+        f"Default English models were not found. Download about 2.4 GiB from "
+        f"{DEFAULT_MODEL_REPO}@{DEFAULT_MODEL_RELEASE}? [y/N] "
+    ):
+        raise _cache_miss(selected_cache)
+
+    if cache_dir is None:
+        entered_cache = _prompt_line(f"Cache directory [{selected_cache}]: ")
+        if entered_cache:
+            selected_cache = Path(entered_cache).expanduser()
+            cached = find_cached_english_models(cache_dir=selected_cache)
+            if cached is not None:
+                return cached
+    if source is None:
+        entered_source = _prompt_line(
+            "Download source [mirror/official] (default: mirror, https://hf-mirror.com): "
+        ).lower()
+        if entered_source in ("", "mirror", "m"):
+            selected_source = "mirror"
+        elif entered_source in ("official", "o"):
+            selected_source = "official"
+        else:
+            raise ConfigurationError(
+                "Model source must be 'mirror' or 'official'",
+                context={"source": entered_source},
+            )
+    endpoint = MIRROR_ENDPOINT if selected_source == "mirror" else OFFICIAL_ENDPOINT
+    print(
+        f"Downloading {DEFAULT_MODEL_REPO}@{DEFAULT_MODEL_RELEASE} "
+        f"({DEFAULT_MODEL_REVISION}) from {endpoint} into {selected_cache}",
+        file=sys.stderr,
+    )
+    return download_english_models(cache_dir=selected_cache, source=selected_source)
+
+
+def _default_model_source() -> str:
+    endpoint = os.environ.get("HF_ENDPOINT", "").rstrip("/")
+    if endpoint == OFFICIAL_ENDPOINT:
+        return "official"
+    return "mirror"
+
+
+def _prompt_yes_no(prompt: str) -> bool:
+    return _prompt_line(prompt).lower() in ("y", "yes")
+
+
+def _prompt_line(prompt: str) -> str:
+    print(prompt, end="", file=sys.stderr, flush=True)
+    return sys.stdin.readline().strip()
+
+
+def _cache_miss(cache_dir: Path) -> ModelCacheMissError:
+    return ModelCacheMissError(
+        "Default English models are not cached and no download was authorized",
+        context={
+            "cache_dir": str(cache_dir),
+            "repo_id": DEFAULT_MODEL_REPO,
+            "revision": DEFAULT_MODEL_REVISION,
+            "suggested_command": "flexaligner models fetch --yes",
+        },
     )
 
 
@@ -142,6 +326,7 @@ def _dispatch(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None
         return
     if args.command == "models" and args.models_command == "fetch":
         report.require(CapabilityId.AUTO_MODEL_DOWNLOAD)
+        _run_models_fetch(args)
         return
     parser.error("a models subcommand is required")
 

@@ -35,6 +35,8 @@ from .contracts import (
     Language,
     LocalModelBundle,
     PhoneInterval,
+    PronunciationMode,
+    PronunciationNotice,
     RunProvenance,
     Score,
     ScoreKind,
@@ -77,6 +79,7 @@ from .errors import (
     UnreachableAlignmentError,
 )
 from .ports import CtcPosterior, LocalInferenceFactoryPort
+from .pronunciation import oov_words, resolve_effective_lexicon
 from .textgrid import (
     Interval,
     IntervalTier,
@@ -129,6 +132,22 @@ class AlignmentPipeline:
         _reject_reserved_words(words)
         _check_transcript_limit(words, options)
         lexicon = load_lexicon(lexicon_path)
+        pronunciation_notices: tuple[PronunciationNotice, ...] = ()
+        if options.pronunciation_mode is PronunciationMode.G2P and oov_words(words, lexicon):
+            chunker_dir = validate_local_model_dir(models.chunker_dir, "chunker model")
+            aligner_dir = validate_local_model_dir(models.aligner_dir, "aligner model")
+            chunk_vocabulary = load_dense_token_vocab(chunker_dir / CHUNK_VOCAB_FILENAME)
+            aligner_vocabulary = load_dense_token_vocab(aligner_dir / CHUNK_VOCAB_FILENAME)
+            from .adapters.g2p_en_local import LocalEnglishG2P
+
+            lexicon, pronunciation_notices = resolve_effective_lexicon(
+                words=words,
+                lexicon=lexicon,
+                mode=options.pronunciation_mode,
+                g2p=LocalEnglishG2P(),
+                chunker_vocabulary=chunk_vocabulary,
+                aligner_vocabulary=aligner_vocabulary,
+            )
         validate_transcript_lexicon(words, lexicon)
         audio = load_strict_pcm16_wav(request.audio_path, options.limits)
 
@@ -183,7 +202,7 @@ class AlignmentPipeline:
             ) from error
 
         raw_scores = _scores_from_word_spans(word_spans)
-        metadata = _chunk_metadata(words, word_spans, raw_scores)
+        metadata = _chunk_metadata(words, word_spans, raw_scores, pronunciation_notices)
         prepared_result = _public_result(
             request=request,
             options=options,
@@ -196,6 +215,7 @@ class AlignmentPipeline:
             merged=merged,
             output_sha256="0" * 64,
             config=stage2_config,
+            pronunciation_notices=pronunciation_notices,
         )
         output_sha256 = write_validated_artifacts(
             textgrid=merged,
@@ -783,10 +803,11 @@ def _chunk_metadata(
     words: Sequence[str],
     word_spans: Sequence[WordSpan],
     scores: Sequence[Score],
+    pronunciation_notices: Sequence[PronunciationNotice],
 ) -> dict[str, object]:
     if len(words) != len(word_spans) or len(words) != len(scores):
         raise AlignmentError("Chunk metadata inputs do not have one record per word")
-    return {
+    payload: dict[str, object] = {
         "schema_version": "1",
         "score_kind": ScoreKind.CHUNKER_EMISSION_GEOMETRIC_MEAN.value,
         "calibrated": False,
@@ -801,6 +822,27 @@ def _chunk_metadata(
             for word_index, word in enumerate(words)
         ],
     }
+    if pronunciation_notices:
+        payload["schema_version"] = "2"
+        notice_by_index = {
+            word_index: notice
+            for notice in pronunciation_notices
+            for word_index in notice.word_indices
+        }
+        word_payloads = payload["words"]
+        if not isinstance(word_payloads, list):
+            raise AssertionError("metadata words must be a list")
+        for word_index, word_payload in enumerate(word_payloads):
+            if not isinstance(word_payload, dict):
+                raise AssertionError("metadata word entry must be a mapping")
+            notice = notice_by_index.get(word_index)
+            word_payload["pronunciation_source"] = "g2p" if notice is not None else "lexicon"
+            if notice is not None:
+                word_payload["generated_pronunciation"] = list(notice.pronunciation)
+                word_payload["g2p_engine"] = notice.engine_id
+                word_payload["g2p_version"] = notice.engine_version
+        payload["pronunciation_warnings"] = [notice.to_dict() for notice in pronunciation_notices]
+    return payload
 
 
 def _public_result(
@@ -816,6 +858,7 @@ def _public_result(
     merged: TextGridDocument,
     output_sha256: str,
     config: Stage2DecodeConfig,
+    pronunciation_notices: tuple[PronunciationNotice, ...],
 ) -> AlignmentResult:
     del word_spans
     ignored = {
@@ -883,6 +926,7 @@ def _public_result(
             device=options.device,
             model_fingerprints=(),
         ),
+        pronunciation_notices=pronunciation_notices,
     )
 
 

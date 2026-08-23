@@ -13,6 +13,9 @@ AVAILABLE_IDS = {
     "cli",
     "capabilities.discovery",
     "alignment.single_file.en.cpu",
+    "models.auto_download",
+    "pronunciation.g2p.default",
+    "pronunciation.g2p.en.local",
 }
 
 PLACEHOLDER_IDS = {
@@ -20,11 +23,10 @@ PLACEHOLDER_IDS = {
     "device.gpu",
     "alignment.batch",
     "integration.web",
-    "models.auto_download",
+    "models.auto_resolution.python",
     "audio.multi_format",
     "audio.auto_resample",
     "text.zh_segmentation",
-    "pronunciation.g2p.default",
     "confidence.calibration",
 }
 

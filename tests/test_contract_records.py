@@ -15,6 +15,7 @@ IMMUTABLE_KW_ONLY_RECORDS = (
     "TextGridOutput",
     "AlignmentResult",
     "PhoneInterval",
+    "PronunciationNotice",
 )
 
 
@@ -66,6 +67,14 @@ def test_required_record_field_names(public_api: ModuleType) -> None:
             "word_index",
             "pronunciation_index",
             "phone_index",
+        },
+        "PronunciationNotice": {
+            "code",
+            "word",
+            "word_indices",
+            "pronunciation",
+            "engine_id",
+            "engine_version",
         },
     }
     for record_name, field_names in expected.items():

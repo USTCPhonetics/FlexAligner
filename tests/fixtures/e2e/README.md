@@ -31,5 +31,6 @@ Provenance：
 通过的 skip。
 
 决定 `D-033` 以 `release-e2e-fixture-only` 范围批准此 fixture 专用 OOV 发音。
-该批准允许关闭式 release E2E 使用冻结行，但不会启用公共默认 G2P 能力，也不建立
-通用发音标准。
+该批准只允许关闭式 release E2E 使用冻结行，本身不构成公共 G2P 的授权或通用发音
+标准。公共本地英语 OOV G2P 后来由独立决定 D-048--D-049 启用，其 checkpoint 输出、
+warning 和模型词表校验另行测试，不以本 fixture 的冻结发音作为准确率金标准。

@@ -24,10 +24,12 @@ class CapabilityId(str, Enum):
     BATCH = "alignment.batch"
     WEB = "integration.web"
     AUTO_MODEL_DOWNLOAD = "models.auto_download"
+    PYTHON_AUTO_MODEL_RESOLUTION = "models.auto_resolution.python"
     MULTI_FORMAT_AUDIO = "audio.multi_format"
     AUTO_RESAMPLE = "audio.auto_resample"
     CHINESE_SEGMENTATION = "text.zh_segmentation"
     DEFAULT_G2P = "pronunciation.g2p.default"
+    LOCAL_ENGLISH_G2P = "pronunciation.g2p.en.local"
     CONFIDENCE_CALIBRATION = "confidence.calibration"
 
 
@@ -128,9 +130,14 @@ _CAPABILITIES = (
     ),
     Capability(
         id=CapabilityId.AUTO_MODEL_DOWNLOAD,
+        status=CapabilityStatus.AVAILABLE,
+        summary="CLI cache resolution and confirmed download of the pinned English bundle.",
+    ),
+    Capability(
+        id=CapabilityId.PYTHON_AUTO_MODEL_RESOLUTION,
         status=CapabilityStatus.PLACEHOLDER,
-        summary="Automatic model resolution and download.",
-        reason="Models must remain local; network resolution is not implemented.",
+        summary="Python API automatic model resolution.",
+        reason="The Python API still requires an explicit LocalModelBundle.",
     ),
     Capability(
         id=CapabilityId.MULTI_FORMAT_AUDIO,
@@ -152,9 +159,13 @@ _CAPABILITIES = (
     ),
     Capability(
         id=CapabilityId.DEFAULT_G2P,
-        status=CapabilityStatus.PLACEHOLDER,
-        summary="Default grapheme-to-phoneme fallback.",
-        reason="Lexicon-only pronunciation remains strict by default.",
+        status=CapabilityStatus.AVAILABLE,
+        summary="CLI-default local English OOV G2P with explicit warnings.",
+    ),
+    Capability(
+        id=CapabilityId.LOCAL_ENGLISH_G2P,
+        status=CapabilityStatus.AVAILABLE,
+        summary="Fully local English OOV G2P backed by a pinned neural checkpoint.",
     ),
     Capability(
         id=CapabilityId.CONFIDENCE_CALIBRATION,

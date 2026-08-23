@@ -62,7 +62,6 @@ def test_human_capabilities_are_deterministic(
     [
         (("batch",), "alignment.batch"),
         (("serve",), "integration.web"),
-        (("models", "fetch"), "models.auto_download"),
     ],
 )
 def test_placeholder_commands_emit_stable_json_error(
@@ -86,7 +85,6 @@ def test_all_placeholder_cli_commands_share_one_exit_status(
     statuses = {
         run_cli("batch").returncode,
         run_cli("serve").returncode,
-        run_cli("models", "fetch").returncode,
     }
     assert len(statuses) == 1
     assert next(iter(statuses)) > 0

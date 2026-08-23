@@ -9,7 +9,7 @@ from typing import Any, cast
 import numpy as np
 import pytest
 
-from flexaligner import AlignmentOptions, ResourceLimits, ScoreKind
+from flexaligner import AlignmentOptions, PronunciationMode, ResourceLimits, ScoreKind
 from flexaligner.adapters.lexicon_file import PronouncingLexicon
 from flexaligner.adapters.wav_pcm16 import DecodedAudio
 from flexaligner.errors import (
@@ -183,6 +183,53 @@ def test_real_numpy_cores_produce_validated_outputs_and_public_result(tmp_path: 
     assert [item["value"] for item in metadata["words"]] == pytest.approx(
         [score.value for score in result.raw_scores]
     )
+
+
+def test_pipeline_uses_local_g2p_only_for_oov_and_records_provenance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = make_integration_fixture(tmp_path)
+    fixture.lexicon_path.write_text("alpha AH\n", encoding="utf-8")
+    request = replace(fixture.request, transcript="Alpha gamma")
+    calls: list[str] = []
+
+    class FakeLocalEnglishG2P:
+        engine_id = "fake-local"
+        engine_version = "test"
+
+        def pronounce(self, word: str) -> tuple[str, ...]:
+            calls.append(word)
+            return ("B",)
+
+    monkeypatch.setattr(
+        "flexaligner.adapters.g2p_en_local.LocalEnglishG2P",
+        FakeLocalEnglishG2P,
+    )
+    pipeline = AlignmentPipeline(inference_factory=FakeInferenceFactory())
+
+    result = pipeline.align(
+        request=request,
+        models=fixture.models,
+        lexicon_path=fixture.lexicon_path,
+        options=AlignmentOptions(pronunciation_mode=PronunciationMode.G2P),
+    )
+
+    assert calls == ["gamma"]
+    assert len(result.pronunciation_notices) == 1
+    notice = result.pronunciation_notices[0]
+    assert notice.word == "gamma"
+    assert notice.word_indices == (1,)
+    assert notice.pronunciation == ("B",)
+    metadata_path = request.output.chunk_metadata_path
+    assert metadata_path is not None
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert metadata["schema_version"] == "2"
+    assert [item["pronunciation_source"] for item in metadata["words"]] == [
+        "lexicon",
+        "g2p",
+    ]
+    assert metadata["pronunciation_warnings"] == [notice.to_dict()]
 
 
 @pytest.mark.parametrize(

@@ -252,6 +252,26 @@ class RunProvenance:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class PronunciationNotice:
+    code: str
+    word: str
+    word_indices: tuple[int, ...]
+    pronunciation: tuple[str, ...]
+    engine_id: str
+    engine_version: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "code": self.code,
+            "word": self.word,
+            "word_indices": list(self.word_indices),
+            "pronunciation": list(self.pronunciation),
+            "engine_id": self.engine_id,
+            "engine_version": self.engine_version,
+        }
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class AlignmentResult:
     utterance_id: str
     audio_duration_s: float
@@ -264,4 +284,5 @@ class AlignmentResult:
     output_path: Path
     output_sha256: str
     provenance: RunProvenance
+    pronunciation_notices: tuple[PronunciationNotice, ...] = ()
     schema_version: str = "1"

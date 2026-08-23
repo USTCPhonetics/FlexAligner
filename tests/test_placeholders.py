@@ -75,12 +75,7 @@ def test_default_alignment_requires_explicit_lexicon_before_input_io(
         (
             "model_resolution",
             ("auto_download", "remote", "download"),
-            "models.auto_download",
-        ),
-        (
-            "pronunciation_mode",
-            ("g2p", "default_g2p"),
-            "pronunciation.g2p.default",
+            "models.auto_resolution.python",
         ),
         (
             "confidence_calibration",

@@ -18,6 +18,9 @@ class ErrorCode(str, Enum):
     AUDIO_FORMAT_UNSUPPORTED = "audio_format_unsupported"
     MODEL_VALIDATION_ERROR = "model_validation_error"
     MODEL_INCOMPATIBLE = "model_incompatible"
+    MODEL_CACHE_MISS = "model_cache_miss"
+    MODEL_DOWNLOAD_ERROR = "model_download_error"
+    PRONUNCIATION_GENERATION_ERROR = "pronunciation_generation_error"
     RESOURCE_LIMIT_EXCEEDED = "resource_limit_exceeded"
     ALIGNMENT_FAILED = "alignment_failed"
     ALIGNMENT_END_UNREACHABLE = "alignment_end_unreachable"
@@ -101,6 +104,18 @@ class ModelValidationError(FlexAlignerError):
 
 class ModelCompatibilityError(ModelValidationError):
     default_code = ErrorCode.MODEL_INCOMPATIBLE
+
+
+class ModelCacheMissError(FlexAlignerError):
+    default_code = ErrorCode.MODEL_CACHE_MISS
+
+
+class ModelDownloadError(FlexAlignerError):
+    default_code = ErrorCode.MODEL_DOWNLOAD_ERROR
+
+
+class PronunciationGenerationError(FlexAlignerError):
+    default_code = ErrorCode.PRONUNCIATION_GENERATION_ERROR
 
 
 class ResourceLimitError(FlexAlignerError):

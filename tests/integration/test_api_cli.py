@@ -115,6 +115,99 @@ def test_cli_text_file_runs_once_and_prints_stable_success_json(
     assert read_paths == [transcript_path]
 
 
+def test_cli_default_g2p_emits_structured_warning_on_stderr(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fixture = make_integration_fixture(tmp_path, metadata=False)
+    fixture.lexicon_path.write_text("alpha AH\n", encoding="utf-8")
+    factory = FakeInferenceFactory()
+    monkeypatch.setattr(hf_local, "LocalHuggingFaceInferenceFactory", lambda: factory)
+
+    class FakeLocalEnglishG2P:
+        engine_id = "fake-local"
+        engine_version = "test"
+
+        def pronounce(self, word: str) -> tuple[str, ...]:
+            assert word == "gamma"
+            return ("B",)
+
+    monkeypatch.setattr(
+        "flexaligner.adapters.g2p_en_local.LocalEnglishG2P",
+        FakeLocalEnglishG2P,
+    )
+
+    status = cli.main(
+        [
+            "align",
+            "--audio",
+            str(fixture.request.audio_path),
+            "--text",
+            "Alpha gamma",
+            "--lexicon",
+            str(fixture.lexicon_path),
+            "--chunker-model",
+            str(fixture.models.chunker_dir),
+            "--aligner-model",
+            str(fixture.models.aligner_dir),
+            "--output",
+            str(fixture.request.output.path),
+        ]
+    )
+
+    streams = capsys.readouterr()
+    assert status == 0
+    assert json.loads(streams.out)["schema_version"] == "1"
+    prefix = "WARNING "
+    assert streams.err.startswith(prefix)
+    warning = json.loads(streams.err.removeprefix(prefix))
+    assert warning == {
+        "code": "oov_g2p_fallback",
+        "engine_id": "fake-local",
+        "engine_version": "test",
+        "pronunciation": ["B"],
+        "word": "gamma",
+        "word_indices": [1],
+    }
+
+
+def test_cli_lexicon_mode_keeps_oov_failure_strict(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fixture = make_integration_fixture(tmp_path, metadata=False)
+    fixture.lexicon_path.write_text("alpha AH\n", encoding="utf-8")
+
+    status = cli.main(
+        [
+            "align",
+            "--audio",
+            str(fixture.request.audio_path),
+            "--text",
+            "Alpha gamma",
+            "--lexicon",
+            str(fixture.lexicon_path),
+            "--chunker-model",
+            str(fixture.models.chunker_dir),
+            "--aligner-model",
+            str(fixture.models.aligner_dir),
+            "--output",
+            str(fixture.request.output.path),
+            "--pronunciation-mode",
+            "lexicon",
+        ]
+    )
+
+    streams = capsys.readouterr()
+    assert status != 0
+    assert streams.out == ""
+    error = json.loads(streams.err)
+    assert error["code"] == "input_validation_error"
+    assert error["context"]["word"] == "gamma"
+    assert not fixture.request.output.path.exists()
+
+
 def test_cli_placeholder_guard_precedes_missing_text_file_read(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

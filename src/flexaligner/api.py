@@ -38,9 +38,9 @@ def require_supported_options(options: AlignmentOptions) -> None:
     if options.audio_policy is AudioPolicy.AUTO_RESAMPLE:
         report.require(CapabilityId.AUTO_RESAMPLE)
     if options.pronunciation_mode is PronunciationMode.G2P:
-        report.require(CapabilityId.DEFAULT_G2P)
+        report.require(CapabilityId.LOCAL_ENGLISH_G2P)
     if options.model_resolution is ModelResolution.AUTO_DOWNLOAD:
-        report.require(CapabilityId.AUTO_MODEL_DOWNLOAD)
+        report.require(CapabilityId.PYTHON_AUTO_MODEL_RESOLUTION)
     if options.confidence_calibration is CalibrationMode.CALIBRATED:
         report.require(CapabilityId.CONFIDENCE_CALIBRATION)
     if options.algorithm_profile != "en-reference-v1":
