@@ -22,7 +22,7 @@ from .errors import (
 EPSILON = 1.0e-6
 MERGE_EPSILON = 1.0e-5
 EXPECTED_TIER_ORDER = ("phones", "words")
-FileIdentity = tuple[int, int]
+FileIdentity = tuple[int, int, int]
 
 
 @dataclass(frozen=True, slots=True)
@@ -483,7 +483,13 @@ def _temporary_path(path: Path) -> Path:
 
 def _identity(path: Path) -> FileIdentity:
     stat_result = os.lstat(path)
-    return stat_result.st_dev, stat_result.st_ino
+    return stat_result.st_dev, stat_result.st_ino, stat_result.st_ctime_ns
+
+
+def _same_file_object(left: FileIdentity, right: FileIdentity) -> bool:
+    """Compare the stable device/inode portion while a hard-link count changes."""
+
+    return left[:2] == right[:2]
 
 
 def _write_exclusive(
@@ -494,9 +500,10 @@ def _write_exclusive(
 ) -> None:
     try:
         with path.open("x", encoding="utf-8", newline="\n") as handle:
-            stat_result = os.fstat(handle.fileno())
-            owned[path] = (stat_result.st_dev, stat_result.st_ino)
             handle.write(contents)
+            handle.flush()
+            stat_result = os.fstat(handle.fileno())
+            owned[path] = (stat_result.st_dev, stat_result.st_ino, stat_result.st_ctime_ns)
     except FileExistsError as error:
         raise ArtifactExistsError(
             f"Temporary output appeared before staging: {path}",
@@ -595,15 +602,17 @@ def _publish_no_clobber(
             context={"path": str(official), "role": "official"},
         ) from error
 
-    owned_officials[official] = temporary_identity
+    linked_temporary_identity = _identity(temporary)
     official_identity = _identity(official)
-    if official_identity != temporary_identity:
+    if not _same_file_object(
+        linked_temporary_identity, temporary_identity
+    ) or not _same_file_object(official_identity, temporary_identity):
         raise OutputValidationError(
             "Temporary artifact identity changed during publication",
             context={"temporary_path": str(temporary), "official_path": str(official)},
         )
 
-    removed, unlink_error = _unlink_if_owned(temporary, temporary_identity)
+    removed, unlink_error = _unlink_if_owned(temporary, linked_temporary_identity)
     if unlink_error is not None:
         raise OutputError(
             "Published artifact but could not remove its temporary hard link",
@@ -614,6 +623,7 @@ def _publish_no_clobber(
             "Temporary artifact identity changed before cleanup",
             context={"path": str(temporary)},
         )
+    owned_officials[official] = _identity(official)
 
 
 def _validate_committed_bytes(

@@ -225,6 +225,6 @@ jobs:
       - name: Install security tool and base package
         run: |
           python -m pip install --upgrade pip==26.1.2
-          python -m pip install --group security .
+          python -m pip install --group security
       - name: Query the vulnerability service strictly
-        run: pip-audit --local --strict
+        run: pip-audit --strict .

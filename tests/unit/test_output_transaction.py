@@ -66,6 +66,19 @@ def _assert_no_temps(*paths: Path) -> None:
         assert not path.with_name(path.name + ".tmp").exists()
 
 
+def test_cleanup_identity_includes_ctime_to_reject_reused_inode(tmp_path: Path) -> None:
+    output = tmp_path / "external.TextGrid"
+    output.write_text("EXTERNAL-SENTINEL", encoding="utf-8")
+    actual_identity = textgrid_module._identity(output)
+    stale_identity = (actual_identity[0], actual_identity[1], actual_identity[2] - 1)
+
+    removed, error = textgrid_module._unlink_if_owned(output, stale_identity)
+
+    assert removed is False
+    assert error is None
+    assert output.read_text(encoding="utf-8") == "EXTERNAL-SENTINEL"
+
+
 def test_success_stages_validates_commits_and_returns_textgrid_sha256(tmp_path: Path) -> None:
     output, metadata_path, digest = _write(tmp_path, metadata=_metadata())
 

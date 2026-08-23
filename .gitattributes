@@ -1,0 +1,3 @@
+# These files are byte-frozen evidence.  Git must never rewrite their line endings.
+/reference/align_single_cpu.py binary
+/tests/fixtures/e2e/english_synthetic.dict binary
