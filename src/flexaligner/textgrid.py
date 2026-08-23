@@ -481,9 +481,15 @@ def _temporary_path(path: Path) -> Path:
     return path.with_name(path.name + ".tmp")
 
 
+def _identity_from_stat(stat_result: os.stat_result) -> FileIdentity:
+    """Return a file identity with a stable creation/generation timestamp."""
+
+    generation_ns = getattr(stat_result, "st_birthtime_ns", stat_result.st_ctime_ns)
+    return stat_result.st_dev, stat_result.st_ino, generation_ns
+
+
 def _identity(path: Path) -> FileIdentity:
-    stat_result = os.lstat(path)
-    return stat_result.st_dev, stat_result.st_ino, stat_result.st_ctime_ns
+    return _identity_from_stat(os.lstat(path))
 
 
 def _same_file_object(left: FileIdentity, right: FileIdentity) -> bool:
@@ -502,8 +508,7 @@ def _write_exclusive(
         with path.open("x", encoding="utf-8", newline="\n") as handle:
             handle.write(contents)
             handle.flush()
-            stat_result = os.fstat(handle.fileno())
-            owned[path] = (stat_result.st_dev, stat_result.st_ino, stat_result.st_ctime_ns)
+            owned[path] = _identity_from_stat(os.fstat(handle.fileno()))
     except FileExistsError as error:
         raise ArtifactExistsError(
             f"Temporary output appeared before staging: {path}",
