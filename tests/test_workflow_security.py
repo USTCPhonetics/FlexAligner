@@ -105,6 +105,9 @@ def test_model_e2e_is_offline_and_fails_closed_without_manifest() -> None:
     assert 'HF_HUB_DISABLE_TELEMETRY: "1"' in source
     assert 'TRANSFORMERS_OFFLINE: "1"' in source
     assert "--no-index" in source
+    assert "wheelhouse_manifest.sha256" in source
+    assert "sha256sum --check --strict" in source
+    assert "find . -maxdepth 1 -type f" in source
     assert "verify_model_assets.py" in source
     assert "--check-runtime" in source
     assert "--require-approved" in source
