@@ -96,8 +96,26 @@ graph TD
 
 ## 🚀 Installation
 
-FlexAligner currently targets Python 3.10–3.14. Install the preview from a
-reviewed source checkout:
+The import-safe core package targets Python 3.10–3.14. The frozen inference
+extra pins Torch 2.3.1 and Transformers 4.41.2 and is installable on Python
+3.10–3.12. Real-model release evidence currently covers only Linux x86_64 with
+Python 3.10.8; Python 3.13–3.14 are core-only.
+
+After the public alpha is available from PyPI, install the exact preview with:
+
+```bash
+python -m pip install "flexaligner[inference]==0.1.0a1"
+```
+
+For a CPU-only Linux environment, install the frozen Torch build from its CPU
+index first:
+
+```bash
+python -m pip install torch==2.3.1 --index-url https://download.pytorch.org/whl/cpu
+python -m pip install "flexaligner[inference]==0.1.0a1"
+```
+
+To work from a reviewed source checkout:
 
 ```bash
 git clone https://github.com/USTCPhonetics/FlexAligner.git
@@ -108,6 +126,12 @@ python -m pip install -e ".[inference]"
 
 The package does not include acoustic models. Prepare compatible local Chunker
 and Aligner model directories and a pronunciation dictionary before alignment.
+
+基础包支持 Python 3.10–3.14。首个 alpha 的推理依赖固定为 Torch 2.3.1 和
+Transformers 4.41.2，仅支持在 Python 3.10–3.12 上安装；真实模型发布验证目前仅覆盖
+Linux x86_64 与 Python 3.10.8。Python 3.13–3.14 暂时只承诺基础包和接口可用。
+wheel 不包含声学模型，也不会自动下载模型；运行前必须准备本地 Chunker、Aligner
+模型目录和发音词典。
 
 ## 💻 Usage
 
@@ -128,6 +152,8 @@ flexaligner align \
 ```
 
 Literal transcript text may be passed with `--text` instead of `--text-file`.
+`--num-threads` configures Torch's process-global CPU thread count for the
+inference lifetime; it is not isolated to a single aligner instance.
 Use the capability command to inspect the installed preview:
 
 ```bash
@@ -181,6 +207,7 @@ print(result.output_sha256)
 * 文本必须为 UTF-8，且发音词典需要覆盖全部输入词。
 * 模型与词典必须提前保存在本地。
 * 输出采用不覆盖已有文件的策略；若目标文件已存在，程序不会将其覆盖。
+* `--num-threads` 会设置 Torch 的进程全局 CPU 线程数，并非仅对单个 aligner 实例生效。
 
 ## 🗓️ Roadmap
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "flexaligner"
-version = "0.1.0.dev0"
+version = "0.1.0a1"
 description = "Two-stage forced alignment for long-form real-world speech."
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.10,<3.15"
@@ -16,7 +16,7 @@ authors = [
 ]
 keywords = ["forced-alignment", "speech", "phonetics", "ctc", "textgrid"]
 classifiers = [
-  "Development Status :: 2 - Pre-Alpha",
+  "Development Status :: 3 - Alpha",
   "Intended Audience :: Science/Research",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.10",
@@ -34,8 +34,8 @@ dependencies = [
 
 [project.optional-dependencies]
 inference = [
-  "torch>=2.3,<3",
-  "transformers>=4.41,<6",
+  "torch==2.3.1",
+  "transformers==4.41.2",
 ]
 
 [project.scripts]

@@ -81,6 +81,51 @@ def test_stage1_pipeline_requires_blank_for_repeats_from_lexicon_context(
     assert [word for chunk in chunks for word in chunk.words] == words
 
 
+def test_d040_phone_token_limit_accepts_exact_boundary_and_fails_before_trellis(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    log_probs = np.asarray(
+        [[-10.0, 0.0, -10.0], [-10.0, -10.0, 0.0]],
+        dtype=np.float32,
+    )
+    posterior = CtcPosterior(log_probs=log_probs, seconds_per_frame=0.01)
+    audio = DecodedAudio(
+        samples=np.zeros(16_000, dtype=np.float32),
+        sample_rate=16_000,
+        duration_s=1.0,
+    )
+    arguments = {
+        "posterior": posterior,
+        "audio": audio,
+        "words": ["word"],
+        "lexicon": PronouncingLexicon(entries={"word": (("AA", "B"),)}),
+        "vocabulary": {"<pad>": 0, "AA": 1, "B": 2},
+        "blank_id": 0,
+        "utterance_id": "phone-limit",
+    }
+
+    chunks, word_spans = _stage1_from_posterior(
+        **arguments,
+        options=AlignmentOptions(limits=ResourceLimits(max_phone_tokens=2)),
+    )
+    assert [span.pron for span in word_spans] == [["AA", "B"]]
+    assert [word for chunk in chunks for word in chunk.words] == ["word"]
+
+    def forbidden_trellis(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        raise AssertionError("trellis allocation must not run after the D-040 phone limit fails")
+
+    monkeypatch.setattr("flexaligner.pipeline.build_trellis", forbidden_trellis)
+    with pytest.raises(ResourceLimitError, match="before trellis allocation") as caught:
+        _stage1_from_posterior(
+            **arguments,
+            options=AlignmentOptions(limits=ResourceLimits(max_phone_tokens=1)),
+        )
+
+    assert caught.value.code == "resource_limit_exceeded"
+    assert caught.value.context == {"phones": 2, "limit": 1}
+
+
 def test_real_numpy_cores_produce_validated_outputs_and_public_result(tmp_path: Path) -> None:
     fixture = make_integration_fixture(tmp_path)
     factory = FakeInferenceFactory()

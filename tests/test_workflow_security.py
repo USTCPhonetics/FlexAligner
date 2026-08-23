@@ -50,7 +50,7 @@ def test_fast_ci_has_read_only_permissions_and_no_privileged_trigger() -> None:
     assert "python -m pip install --only-binary=:all: --force-reinstall dist/*.whl" in source
 
 
-def test_release_is_tag_only_and_oidc_is_confined_to_publish_job() -> None:
+def test_production_release_is_tag_only_and_oidc_is_confined_to_publish_jobs() -> None:
     sources = _workflow_sources()
     release = sources["release.yml"]
     assert "pull_request:" not in release
@@ -60,8 +60,29 @@ def test_release_is_tag_only_and_oidc_is_confined_to_publish_job() -> None:
     assert "PYPI_RELEASE_AUTHORIZED == 'true'" in release
     assert "name: pypi" in release
     assert "model-e2e" in release
-    assert sum(source.count("id-token: write") for source in sources.values()) == 1
+    assert "uses: ./.github/workflows/ci.yml" in release
+    assert sum(source.count("id-token: write") for source in sources.values()) == 2
     publish_block = release.split("\n  publish:\n", 1)[1]
+    assert "id-token: write" in publish_block
+    assert "actions/checkout@" not in publish_block
+    assert "python -m build" not in publish_block
+
+
+def test_testpypi_is_manual_default_rehearsal_and_separate_from_production() -> None:
+    source = _workflow_sources()["testpypi.yml"]
+    assert "push:" not in source
+    assert "pull_request:" not in source
+    assert "workflow_dispatch:" in source
+    assert "default: rehearsal" in source
+    assert "inputs.intent == 'publish'" in source
+    assert "TESTPYPI_RELEASE_AUTHORIZED == 'true'" in source
+    assert "vars.PYPI_RELEASE_AUTHORIZED" not in source
+    assert "name: testpypi" in source
+    assert "repository-url: https://test.pypi.org/legacy/" in source
+    assert "uses: ./.github/workflows/ci.yml" in source
+    assert "distribution_artifact: python-package-distributions" in source
+    assert 'if [ "$GITHUB_REF" != "refs/heads/main" ]' in source
+    publish_block = source.split("\n  publish:\n", 1)[1]
     assert "id-token: write" in publish_block
     assert "actions/checkout@" not in publish_block
     assert "python -m build" not in publish_block
@@ -72,7 +93,8 @@ def test_build_backend_is_exact_and_used_without_isolation() -> None:
     assert 'requires = ["hatchling==1.32.0"]' in pyproject
     build_command = "python -m build --no-isolation --sdist --wheel"
     assert build_command in _workflow_sources()["ci.yml"]
-    assert build_command in _workflow_sources()["release.yml"]
+    assert "workflow_call:" in _workflow_sources()["ci.yml"]
+    assert "uses: ./.github/workflows/ci.yml" in _workflow_sources()["release.yml"]
 
 
 def test_model_e2e_is_offline_and_fails_closed_without_manifest() -> None:

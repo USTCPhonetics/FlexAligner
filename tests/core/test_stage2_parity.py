@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from flexaligner.core import stage2 as production
-from tests.characterization.differential import assert_reference_equivalent
+from tests.characterization.differential import assert_reference_equivalent, first_mismatch
 from tests.characterization.reference_loader import load_reference_module
 from tests.characterization.stage2_oracle import exhaustive_viterbi, score_state_path
 from tests.core._stage2_cases import (
@@ -860,14 +860,23 @@ def test_phone_word_segments_preserve_repeated_word_indices(reference: ModuleTyp
     assert [actual_graph.states[state].edge.word_index for state in actual.state_path] == [0, 1]
 
 
-def test_equal_phone_same_word_keeps_approved_occurrence_identity(reference: ModuleType) -> None:
+def test_d038_equal_phone_before_after_has_field_level_occurrence_difference(
+    reference: ModuleType,
+) -> None:
     assert CURRENT_BEHAVIOR_EQUAL_PHONE.startswith("accepted_behavior:")
-    (_expected_graph, _expected_bias), (actual_graph, actual_bias) = _build_graph_pair(
+    (expected_graph, expected_bias), (actual_graph, actual_bias) = _build_graph_pair(
         reference,
         ["doubled"],
         {"doubled": [["AA", "AA"]]},
         {"AA": 0},
         **NO_GAPS,
+    )
+    expected = reference.align_beam_viterbi(
+        np.zeros((2, 1), dtype=np.float32),
+        expected_graph,
+        expected_bias,
+        p_stay=0.5,
+        beam_size=8,
     )
     actual = production.align_beam_viterbi(
         np.zeros((2, 1), dtype=np.float32),
@@ -876,10 +885,22 @@ def test_equal_phone_same_word_keeps_approved_occurrence_identity(reference: Mod
         p_stay=0.5,
         beam_size=8,
     )
+    expected_segments = reference.extract_state_segments_from_path(
+        expected_graph, expected_bias, expected.state_path
+    )
     actual_segments = production.extract_state_segments_from_path(
         actual_graph, actual_bias, actual.state_path
     )
+    before = [(segment[0].phone, segment[1], segment[2]) for segment in expected_segments]
+    after = [(segment[0].phone, segment[1], segment[2]) for segment in actual_segments]
+    mismatch = first_mismatch(before, after, path="$.phone_occurrences")
 
+    assert mismatch is not None
+    assert mismatch.path == "$.phone_occurrences"
+    assert mismatch.reason == "sequence length mismatch"
+    assert (mismatch.expected, mismatch.actual) == (1, 2)
+    assert before == [("AA", 0, 2)]
+    assert after == [("AA", 0, 1), ("AA", 1, 2)]
     assert np.unique(actual.state_path).size == 2
     assert actual.phone_segments_f == [("AA", 0, 1), ("AA", 1, 2)]
     assert len(actual_segments) == 2

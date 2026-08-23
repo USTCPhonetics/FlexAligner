@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the immutable source/version boundary for a production release."""
+"""Validate the immutable source/version boundary for a public alpha release."""
 
 from __future__ import annotations
 
@@ -13,28 +13,33 @@ if sys.version_info >= (3, 11):
 else:  # pragma: no cover - exercised by the configured Python 3.10 type/runtime gate
     import tomli as tomllib
 
-STABLE_VERSION = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)")
+ALPHA_VERSION = re.compile(
+    r"(?:0|[1-9][0-9]*)\."
+    r"(?:0|[1-9][0-9]*)\."
+    r"(?:0|[1-9][0-9]*)a(?:0|[1-9][0-9]*)"
+)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--tag", required=True)
+    boundary = parser.add_mutually_exclusive_group(required=True)
+    boundary.add_argument("--tag")
+    boundary.add_argument("--version-only", action="store_true")
     parser.add_argument("--pyproject", type=Path, default=Path("pyproject.toml"))
     args = parser.parse_args()
 
     with args.pyproject.open("rb") as handle:
         project = tomllib.load(handle)["project"]
     version = str(project["version"])
-    expected_tag = f"v{version}"
-
-    if args.tag != expected_tag:
-        raise RuntimeError(f"Tag/version mismatch: tag={args.tag!r}, expected={expected_tag!r}")
-    if STABLE_VERSION.fullmatch(version) is None:
+    if ALPHA_VERSION.fullmatch(version) is None:
         raise RuntimeError(
-            "The current PyPI workflow still accepts only stable X.Y.Z versions; "
-            f"got {version!r}. D-029 alpha-version support is not implemented yet."
+            f"The public-alpha workflow accepts only canonical X.Y.ZaN versions; got {version!r}."
         )
-    print(f"RELEASE_SOURCE_OK name={project['name']} version={version} tag={args.tag}")
+    expected_tag = f"v{version}"
+    if args.tag is not None and args.tag != expected_tag:
+        raise RuntimeError(f"Tag/version mismatch: tag={args.tag!r}, expected={expected_tag!r}")
+    mode = "version-only" if args.version_only else f"tag={args.tag}"
+    print(f"RELEASE_SOURCE_OK name={project['name']} version={version} {mode}")
 
 
 if __name__ == "__main__":

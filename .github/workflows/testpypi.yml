@@ -1,20 +1,27 @@
-name: Release to PyPI
+name: TestPyPI release rehearsal
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
+    inputs:
+      intent:
+        description: Rehearse only, or upload the verified artifacts to TestPyPI
+        required: true
+        type: choice
+        default: rehearsal
+        options:
+          - rehearsal
+          - publish
 
 permissions:
   contents: read
 
 jobs:
   source-gate:
-    name: Validate tagged alpha source
+    name: Validate main alpha source
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Check out tagged source
+      - name: Check out selected source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -23,16 +30,20 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - name: Require the tagged commit to be on main
+      - name: Require the selected commit to be the current main head
         shell: bash
         run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "TESTPYPI_BLOCKED: workflow must run from main" >&2
+            exit 1
+          fi
           git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main"
-          git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main
-      - name: Require an exact alpha tag and version match
-        run: python scripts/check_release.py --tag "$GITHUB_REF_NAME"
+          test "$GITHUB_SHA" = "$(git rev-parse refs/remotes/origin/main)"
+      - name: Require a canonical public alpha version
+        run: python scripts/check_release.py --version-only
 
   ci:
-    name: Validate exact tagged source
+    name: Validate exact candidate source
     needs: source-gate
     uses: ./.github/workflows/ci.yml
 
@@ -44,16 +55,21 @@ jobs:
       distribution_artifact: python-package-distributions
 
   publish:
-    name: Publish through Trusted Publishing
+    name: Publish verified artifacts to TestPyPI
     needs:
       - ci
       - model-e2e
-    if: ${{ needs.model-e2e.result == 'success' && vars.PYPI_RELEASE_AUTHORIZED == 'true' }}
+    if: >-
+      ${{
+        inputs.intent == 'publish' &&
+        needs.model-e2e.result == 'success' &&
+        vars.TESTPYPI_RELEASE_AUTHORIZED == 'true'
+      }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment:
-      name: pypi
-      url: https://pypi.org/p/flexaligner
+      name: testpypi
+      url: https://test.pypi.org/p/flexaligner
     permissions:
       id-token: write
     steps:
@@ -62,7 +78,8 @@ jobs:
         with:
           name: python-package-distributions
           path: dist
-      - name: Publish to PyPI
+      - name: Publish to TestPyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
+          repository-url: https://test.pypi.org/legacy/
           print-hash: true

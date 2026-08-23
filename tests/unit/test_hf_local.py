@@ -459,7 +459,7 @@ def test_processor_sample_rate_is_strictly_16khz(
     "conv_stride",
     [None, [], "5,2,2,2,2,2,1", [5, 2, True, 2, 2, 2, 1], [5, 2, 0, 2, 2, 2, 1]],
 )
-def test_aligner_nominal_conv_stride_is_required_and_strictly_validated(
+def test_d037_aligner_nominal_conv_stride_is_required_and_strictly_validated(
     conv_stride: object,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -479,7 +479,7 @@ def test_aligner_nominal_conv_stride_is_required_and_strictly_validated(
     }
 
 
-def test_aligner_nominal_conv_stride_must_equal_160_samples(
+def test_d037_aligner_nominal_conv_stride_must_equal_160_samples(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -501,7 +501,7 @@ def test_aligner_nominal_conv_stride_must_equal_160_samples(
     }
 
 
-def test_chunker_does_not_use_the_aligner_stride_contract(
+def test_d037_chunker_does_not_use_the_aligner_stride_contract(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -515,7 +515,7 @@ def test_chunker_does_not_use_the_aligner_stride_contract(
         assert session.sample_rate == 16_000
 
 
-def test_aligner_accepts_observed_frame_duration_that_is_not_exactly_10ms(
+def test_d037_aligner_accepts_observed_frame_duration_that_is_not_exactly_10ms(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
