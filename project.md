@@ -1,6 +1,6 @@
 # FlexAligner 干净基线重建项目档案
 
-> 文档状态：D-039/D-040 已实施；D-036--D-038 待实施；公开发布阻断
+> 文档状态：D-036--D-040 已实施并完成本地验收；公开发布仍阻断
 > 建立日期：2026-08-11（Asia/Shanghai）
 > 当前阶段：Stage 8 — 批阅决定实施与复验
 
@@ -55,7 +55,7 @@
 | SHA-256 | `9ed4e21e615718ddfd10930359f55769fb27a0d284599cce45a3fc755e835de1` |
 | 规模 | 2,548 行 |
 | 用途 | 算法语义参考、行为 oracle；生产包不得 import |
-| 当前限制 | Reference 仍包含 gap、未验证名义 stride、重复 phone state 折叠和简化重复标签 recurrence；当前代码已实施 D-039/D-040，D-036--D-038 仍待实施 |
+| 当前限制 | Reference 保留旧行为作为 before oracle；生产代码已按 D-036--D-040 实施全覆盖、stride 验证、phone occurrence、标准重复 CTC 和资源保险丝 |
 
 “以本地逻辑为准”不是逐行复制，也不是把已知限制静默宣布为正确行为。
 实施顺序是先特征化、再等价迁移；行为更改必须单独记录决定。
@@ -84,14 +84,14 @@
 | 测试 | 当前 696 项禁网 fast tests 通过，1 项模型 E2E deselected；Ruff、strict mypy 通过 |
 | reference | 仓内字节冻结并 hash guard；禁止进入生产 import、wheel 或 sdist |
 | E2E 资产 | 16 项资产与精确运行时通过；D-033 fixture-only approved exact-wheel 本地 E2E 通过；protected remote 门禁仍未运行 |
-| Stage 1 资源 | D-039 repeat-aware `(T+1,N+1)` trellis 与 D-040 默认 900 s/200M cells 已实施；`english_natural` 实测 11,546 cells；word/phone 默认值未固定 |
-| Stage 2 资源 | D-040 累计 200M transition evaluations 和 `beam=400` 已实施；`english_natural` 实测 281,411 work；900 s 长音频性能未通过，图状态默认值未固定 |
+| Stage 1 资源 | 默认 900 s、10,000 phone targets、200M cells 已实施；`english_natural` 实测 11,546 cells |
+| Stage 2 资源 | 默认 10,000 graph states、累计 200M transition evaluations 和 `beam=400` 已实施；`english_natural` 实测 281,411 work；900 s 长音频性能未通过 |
 
 ## 4. 核心算法契约摘要
 
 以下条目区分历史等价基线与后续修正。D-039 标准重复目标 CTC blank 约束和 D-040
-默认资源保险丝已经通过代码级与短自然语音 E2E；D-036 TextGrid 全覆盖、D-037 名义
-10 ms stride 验证和 D-038 phone occurrence 身份仍未实施。
+默认资源保险丝、D-036 TextGrid 全覆盖、D-037 名义 10 ms stride 验证和 D-038 phone
+occurrence 身份均已通过代码级与真实模型 E2E；接近 900 s 的性能仍未验收。
 
 ### Stage 1
 
@@ -135,12 +135,12 @@
 
 | ID | 冲突 | 当前处置 |
 |---|---|---|
-| C-001 | 旧会话曾描述 reference 已补齐连续 gap；当前脚本没有相邻无 gap/终点覆盖的严格保证 | 当前脚本优先；旧描述不进入基线；D-036 已批准修复目标，但实施/复验仍为 `NOT_RUN` |
+| C-001 | 旧会话曾描述 reference 已补齐连续 gap；当前脚本没有相邻无 gap/终点覆盖的严格保证 | 当前脚本作为 before 基线；D-036 已在生产代码实施并通过修正后 E2E，不反写 reference |
 | C-002 | 旧普通话实验曾使用 `optional_sph=False`；当前脚本默认 `True` | 普通话本里程碑仅占位，不继承旧实验特例 |
 | C-003 | 远端 README/代码描述多格式、批量、GPU、G2P 等能力；当前核心范围不实现 | README 能力表按新包实测重写；这些能力只留占位接口 |
 | C-004 | 远端核心与本地脚本虽同为“两阶段”，但终止、切块、图、评分和失败语义不同 | 不静默混合；新核心只以本地脚本为迁移参考 |
 | C-005 | 旧问题把 `openphonetics` 写成缺词典；当前 fixture 词典已包含该发音并完成工程 E2E | 当前文件优先；技术 OOV 已消失，且 D-033 已批准该发音仅作 release-E2E fixture |
-| C-006 | OpenPhonetics 既有 TextGrid SHA 为 `78a69bf4…e3e00`，当前权威脚本与新实现输出均为 `ddbe0fec…e415f` | 旧文件只保留为 hashed legacy candidate，不作为 oracle，也不与当前输出静默合并 |
+| C-006 | OpenPhonetics 既有 TextGrid SHA 为 `78a69bf4…e3e00`，权威脚本 before 为 `ddbe0fec…e415f`，D-036 新输出为 `d15265c2…2d32a` | 旧文件只保留为 hashed legacy candidate；新输出要求非 `NULL` 边界匹配 reference 并补齐 `NULL`，不得再声称整体字节一致 |
 | C-007 | 审阅报告曾推荐保留新旧双历史；当前用户明确选择直接替代 GitHub 主历史 | 当前用户消息优先，采用 D-030；不折中为 merge/graft，也不把策略批准解释为外部执行授权 |
 | C-008 | 用户要求许可/版权/作者采用远端 README 身份，但远端 README 没有精确版权行 | README 提供作者/品牌/引用；同提交 LICENSE 提供 MIT 正文与 `Copyright (c) 2026 WANG Yiming`；不推定版权转让给组织 |
 

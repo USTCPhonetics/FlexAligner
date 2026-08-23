@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 
 CURRENT_BEHAVIOR_EQUAL_PHONE = (
-    "current_behavior: adjacent equal-phone states inside one word collapse during extraction"
+    "accepted_behavior: adjacent equal-phone states keep pronunciation-position identity"
 )
 
 NO_GAPS = {

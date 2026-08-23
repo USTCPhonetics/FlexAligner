@@ -7,6 +7,7 @@ import pytest
 
 from flexaligner.core.stage1 import RuntimeChunk
 from flexaligner.textgrid import (
+    EPSILON,
     Interval,
     IntervalTier,
     LocalAlignment,
@@ -108,13 +109,19 @@ def test_validator_requires_exact_tier_order_and_rejects_overlap() -> None:
         validate_textgrid_structure(overlapping, context="overlap")
 
 
-def test_validator_preserves_known_leading_internal_and_tail_gap_limitation() -> None:
+def test_validator_can_require_full_coverage() -> None:
     gapped = _document(
         phone_intervals=(Interval(0.1, 0.2, "HH"), Interval(0.4, 0.5, "AH")),
         word_intervals=(Interval(0.1, 0.2, "hello"), Interval(0.4, 0.5, "again")),
     )
 
-    validate_textgrid_structure(gapped, context="TBD-ALG-001")
+    validate_textgrid_structure(gapped, context="local alignment")
+    with pytest.raises(ValueError, match="Uncovered interval"):
+        validate_textgrid_structure(
+            gapped,
+            context="public output",
+            require_full_coverage=True,
+        )
 
 
 def test_clip_shift_uses_local_coordinates_and_chunk_bounds() -> None:
@@ -213,6 +220,154 @@ def test_merge_local_alignments_adds_outer_gaps_and_preserves_word_instances() -
         merged.tiers[1].intervals,
         ignore_labels={"NULL", "sil", "[missing]"},
     ) == ("same", "same")
+
+
+def test_merge_fills_leading_internal_and_tail_gaps_in_both_tiers() -> None:
+    chunk = _chunk("utt.chunk001", 100, 900, ["hello", "again"], [0, 1])
+    local = LocalAlignment(
+        _document(
+            duration=0.8,
+            phone_intervals=(
+                Interval(0.1, 0.25, "HH"),
+                Interval(0.4, 0.6, "AH"),
+            ),
+            word_intervals=(
+                Interval(0.1, 0.25, "hello"),
+                Interval(0.4, 0.6, "again"),
+            ),
+        )
+    )
+
+    merged = merge_local_alignments(
+        chunks=(chunk,),
+        local_alignments=(local,),
+        full_duration_s=1.0,
+        expected_words=("hello", "again"),
+        word_sil_label="sil",
+        sph_word_label="[missing]",
+    )
+
+    expected = (
+        Interval(0.0, 0.2, "NULL"),
+        Interval(0.2, 0.35, "HH"),
+        Interval(0.35, 0.5, "NULL"),
+        Interval(0.5, 0.7, "AH"),
+        Interval(0.7, 1.0, "NULL"),
+    )
+    assert merged.tiers[0].intervals == expected
+    assert merged.tiers[1].intervals == (
+        Interval(0.0, 0.2, "NULL"),
+        Interval(0.2, 0.35, "hello"),
+        Interval(0.35, 0.5, "NULL"),
+        Interval(0.5, 0.7, "again"),
+        Interval(0.7, 1.0, "NULL"),
+    )
+    validate_textgrid_structure(
+        merged,
+        context="D-036",
+        require_full_coverage=True,
+    )
+
+
+def test_merge_fills_sub_epsilon_gap_and_normalizes_adjacent_null() -> None:
+    tiny_gap_end = 0.2 + EPSILON / 2
+    chunk = _chunk("utt.chunk001", 0, 1000, ["hello"], [0])
+    local = LocalAlignment(
+        _document(
+            phone_intervals=(
+                Interval(0.0, 0.2, "null"),
+                Interval(tiny_gap_end, 1.0, "HH"),
+            ),
+            word_intervals=(Interval(tiny_gap_end, 1.0, "hello"),),
+        )
+    )
+
+    merged = merge_local_alignments(
+        chunks=(chunk,),
+        local_alignments=(local,),
+        full_duration_s=1.0,
+        expected_words=("hello",),
+        word_sil_label="sil",
+        sph_word_label="[missing]",
+    )
+
+    assert merged.tiers[0].intervals == (
+        Interval(0.0, tiny_gap_end, "NULL"),
+        Interval(tiny_gap_end, 1.0, "HH"),
+    )
+    assert merged.tiers[1].intervals == (
+        Interval(0.0, tiny_gap_end, "NULL"),
+        Interval(tiny_gap_end, 1.0, "hello"),
+    )
+
+
+def test_merge_rejects_even_sub_epsilon_tier_overlap() -> None:
+    overlap_start = 0.2 - EPSILON / 2
+    chunk = _chunk("utt.chunk001", 0, 1000, ["hello", "again"], [0, 1])
+    local = LocalAlignment(
+        _document(
+            phone_intervals=(
+                Interval(0.0, 0.2, "HH"),
+                Interval(overlap_start, 1.0, "AH"),
+            ),
+            word_intervals=(
+                Interval(0.0, 0.2, "hello"),
+                Interval(overlap_start, 1.0, "again"),
+            ),
+        )
+    )
+
+    with pytest.raises(ValueError, match="Overlapping/backward intervals during coverage fill"):
+        merge_local_alignments(
+            chunks=(chunk,),
+            local_alignments=(local,),
+            full_duration_s=1.0,
+            expected_words=("hello", "again"),
+            word_sil_label="sil",
+            sph_word_label="[missing]",
+        )
+
+
+def test_merge_maps_local_phone_provenance_to_global_word_indices() -> None:
+    chunk = _chunk("utt.chunk002", 200, 500, ["same"], [7])
+    local = LocalAlignment(
+        _document(
+            duration=0.3,
+            phone_intervals=(
+                Interval(
+                    0.0,
+                    0.3,
+                    "S",
+                    word_index=0,
+                    pronunciation_index=1,
+                    phone_index=2,
+                ),
+            ),
+            word_intervals=(Interval(0.0, 0.3, "same"),),
+        )
+    )
+
+    merged = merge_local_alignments(
+        chunks=(chunk,),
+        local_alignments=(local,),
+        full_duration_s=0.7,
+        expected_words=("same",),
+        word_sil_label="sil",
+        sph_word_label="[missing]",
+    )
+
+    lexical = [interval for interval in merged.tiers[0].intervals if interval.text == "S"]
+    assert len(lexical) == 1
+    assert lexical[0].word_index == 7
+    assert lexical[0].pronunciation_index == 1
+    assert lexical[0].phone_index == 2
+    assert all(
+        interval.word_index is None
+        and interval.pronunciation_index is None
+        and interval.phone_index is None
+        for interval in merged.tiers[0].intervals
+        if interval.text == "NULL"
+    )
 
 
 def test_merge_clips_local_intervals_to_chunk_duration() -> None:

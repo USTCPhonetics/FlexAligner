@@ -1,6 +1,6 @@
 # FlexAligner 干净代码重建实施计划
 
-> 状态：D-039/D-040 已实施并通过短自然语音 E2E；D-036--D-038 待实施；公共发布仍被阻断
+> 状态：D-036--D-040 已实施并通过本地 fast/真实模型 E2E；公共发布仍被阻断
 >
 > 建立日期：2026-08-11（Asia/Shanghai）
 >
@@ -133,22 +133,18 @@ reference parity 代替修正后的验收。
 4. **只通过决定修正。**改变行为的修正需要新的 `DECISIONS.md` 条目、前后比较和
    专用测试。
 
-下列已知问题已由后续明确决定解决；D-039/D-040 已实施并通过短自然语音 E2E，
-D-036--D-038 尚未完成：
+下列已知问题已由后续明确决定解决，并已全部实施：
 
 - D-036：phones/words 两层以 `NULL` 填充开头、内部和末尾 gap，严格覆盖完整音频；
 - D-037：v0.1 只接受 16 kHz 下卷积总 stride 为 160 samples 的 Aligner，并固定使用
   10 ms 时间网格；
-- D-038：同词连续相同 phone 按至少 `(word_index, phone_index)` 的 occurrence 身份区分；
+- D-038：同词连续相同 phone 按 `(word_index, pronunciation_index, phone_index)` 区分；
 - D-039：相邻相同 Stage 1 目标必须由至少一个 CTC blank 帧分隔（已实施）；
-- D-040：alpha 初始默认保险丝为 900 s、单次 Stage 1 trellis 200,000,000 cells、
-  每请求累计 200,000,000 次 beam candidate transition evaluations，beam width 保持
-  400（已实施；`english_natural` 和 `example1` E2E 通过，长音频性能尚未验收）。
-  words、phone targets 和
-  Stage 2 图状态只保留调用方显式限制或实测后另行决定，不属于本次批准的默认值。
+- D-040：alpha 初始默认保险丝为 900 s、10,000 phone targets、单次 Stage 1 trellis
+  200,000,000 cells、10,000 Stage 2 graph states、每请求累计 200,000,000 次 beam
+  candidate transition evaluations；beam width 保持 400。长音频性能尚未验收。
 
-这些改变必须绑定决定 ID、专用测试和经审阅的 E2E golden。D-036--D-038 在对应验收项
-成为 `PASS` 前，只能描述为“已决定、待实施”。
+这些改变已经绑定决定 ID、专用测试和经审阅的 E2E golden，对应验收项为 `PASS`。
 
 ## 6. 目标仓库结构
 
@@ -448,8 +444,7 @@ publish workflow 只构建一次并发布同一上传 artifact；未经用户授
 - D-040：900 s、200,000,000 trellis cells 与累计 200,000,000 beam work 等 alpha
   初始资源保险丝；代码级与短/中等长度 E2E 已验证，长音频性能仍待新 fixture。
 
-D-036--D-040 取代 D-034 中与其冲突的旧行为保留/延期口径，但决定本身不构成实现或
-测试通过。
+D-036--D-040 取代 D-034 中与其冲突的旧行为保留/延期口径；五项现均已实施并测试。
 
 剩余问题是执行项或 alpha 后研究项：
 
@@ -457,20 +452,19 @@ D-036--D-040 取代 D-034 中与其冲突的旧行为保留/延期口径，但�
 - `[TBD-REMOTE-001]` 单独授权、可恢复的直接历史替代；
 - `[TBD-E2E-002]` 外部资产与 repo-local fixture 词典的远端可移植拆分；
 - `[TBD-REL-001]` 精确 protected environment、审批人和 Trusted Publisher；
-- D-036--D-040 的代码实施、before/after 审计、资源边界测试和修正后 E2E 复验。
+- 接近 900 s 输入的长样本资源与性能验收。
 
 已解决选择不授予外部操作权限，也不把未运行门禁变成通过。
 
 ## 12. 立即执行顺序
 
-1. 为 D-036--D-040 增加 before/after、边界、累计资源和失败原子性测试；
-2. 实施 D-036--D-040，重跑 fast 门禁并审阅修正后的 approved-fixture E2E golden；
-3. 选择新的经审阅长音频 fixture，记录总耗时、各阶段耗时、峰值 RSS、trellis cells、
+1. D-036--D-040 的代码、边界测试、fast 门禁和 approved-fixture golden 已验收；
+2. 选择新的经审阅长音频 fixture，记录总耗时、各阶段耗时、峰值 RSS、trellis cells、
    图状态、累计 transition evaluations 和 chunk 数，复核 D-040 alpha 初始门槛；
-4. 实施 `0.1.0a1` metadata 和 D-034 冻结推理契约，重建并测试 exact artifact；
-5. 在远端 E2E 前去除 manifest 对本地目录名的依赖；
-6. 直接替代远端 `main` 前取得单独授权并创建已验证恢复快照；
-7. 配置受保护 `pypi` environment、Trusted Publisher、自托管 E2E runner、asset root
+3. 实施 `0.1.0a1` metadata 和 D-034 冻结推理契约，重建并测试 exact artifact；
+4. 在远端 E2E 前去除 manifest 对本地目录名的依赖；
+5. 直接替代远端 `main` 前取得单独授权并创建已验证恢复快照；
+6. 配置受保护 `pypi` environment、Trusted Publisher、自托管 E2E runner、asset root
    和离线 wheelhouse；
-8. 运行声明的 Python/操作系统矩阵、依赖审计和 protected 模型 E2E；
-9. 所有发布阻断项清除后，再分别请求 D-013 要求的 tag 和 PyPI 发布授权。
+7. 运行声明的 Python/操作系统矩阵、依赖审计和 protected 模型 E2E；
+8. 所有发布阻断项清除后，再分别请求 D-013 要求的 tag 和 PyPI 发布授权。

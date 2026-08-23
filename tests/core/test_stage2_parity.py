@@ -134,8 +134,28 @@ def _stats_mapping(stats: Any) -> dict[str, int]:
     }
 
 
+def _legacy_edge_values(edge: Any) -> tuple[Any, ...]:
+    return (edge.u, edge.v, edge.phone, edge.phone_id, edge.word_index, edge.word)
+
+
+def _assert_legacy_graph_equivalent(expected: Any, actual: Any) -> None:
+    assert [_legacy_edge_values(state.edge) for state in actual.states] == [
+        _legacy_edge_values(state.edge) for state in expected.states
+    ]
+    assert [state.preds for state in actual.states] == [state.preds for state in expected.states]
+    assert [state.succs for state in actual.states] == [state.succs for state in expected.states]
+    assert actual.start_states == expected.start_states
+    assert actual.end_states == expected.end_states
+
+
+def _legacy_fixed_values(spec: Any) -> tuple[Any, ...]:
+    return (spec.phone, spec.phone_id, spec.word_index, spec.word, spec.bias)
+
+
 def _assert_prune_equivalent(expected: tuple[Any, Any], actual: tuple[Any, Any]) -> None:
-    assert_reference_equivalent(expected[0], actual[0])
+    assert [_legacy_fixed_values(spec) for spec in actual[0]] == [
+        _legacy_fixed_values(spec) for spec in expected[0]
+    ]
     assert_reference_equivalent(_stats_mapping(expected[1]), _stats_mapping(actual[1]))
 
 
@@ -245,7 +265,7 @@ def test_multi_pronunciation_graph_has_distinct_complete_paths(reference: Module
         **NO_GAPS,
     )
 
-    assert_reference_equivalent(expected_graph, actual_graph)
+    _assert_legacy_graph_equivalent(expected_graph, actual_graph)
     assert_reference_equivalent(expected_bias, actual_bias)
     assert all_complete_phone_paths(actual_graph) == {
         ("R", "IY", "D"),
@@ -273,7 +293,7 @@ def test_internal_gap_has_exact_six_silence_and_speech_paths(reference: ModuleTy
         **options,
     )
 
-    assert_reference_equivalent(expected_graph, actual_graph)
+    _assert_legacy_graph_equivalent(expected_graph, actual_graph)
     assert_reference_equivalent(expected_bias, actual_bias)
     assert internal_gap_paths(actual_graph) == SIX_INTERNAL_GAP_PATHS
 
@@ -297,7 +317,7 @@ def test_sph_is_reachable_at_start_and_end(reference: ModuleType) -> None:
         **options,
     )
 
-    assert_reference_equivalent(expected_graph, actual_graph)
+    _assert_legacy_graph_equivalent(expected_graph, actual_graph)
     assert_reference_equivalent(expected_bias, actual_bias)
     assert all_complete_phone_paths(actual_graph) == {
         ("W",),
@@ -840,36 +860,31 @@ def test_phone_word_segments_preserve_repeated_word_indices(reference: ModuleTyp
     assert [actual_graph.states[state].edge.word_index for state in actual.state_path] == [0, 1]
 
 
-def test_equal_phone_same_word_collapse_is_named_current_behavior(reference: ModuleType) -> None:
-    assert CURRENT_BEHAVIOR_EQUAL_PHONE.startswith("current_behavior:")
-    (expected_graph, expected_bias), (actual_graph, actual_bias) = _build_graph_pair(
+def test_equal_phone_same_word_keeps_approved_occurrence_identity(reference: ModuleType) -> None:
+    assert CURRENT_BEHAVIOR_EQUAL_PHONE.startswith("accepted_behavior:")
+    (_expected_graph, _expected_bias), (actual_graph, actual_bias) = _build_graph_pair(
         reference,
         ["doubled"],
         {"doubled": [["AA", "AA"]]},
         {"AA": 0},
         **NO_GAPS,
     )
-    _, actual = _alignment_pair(
-        reference,
-        expected_graph,
-        actual_graph,
+    actual = production.align_beam_viterbi(
         np.zeros((2, 1), dtype=np.float32),
+        actual_graph,
         actual_bias,
         p_stay=0.5,
         beam_size=8,
-    )
-    expected_segments = reference.extract_state_segments_from_path(
-        expected_graph, expected_bias, actual.state_path
     )
     actual_segments = production.extract_state_segments_from_path(
         actual_graph, actual_bias, actual.state_path
     )
 
-    assert_reference_equivalent(expected_segments, actual_segments)
     assert np.unique(actual.state_path).size == 2
-    assert len(actual_segments) == 1
-    assert actual_segments[0][0].phone == "AA"
-    assert actual_segments[0][1:] == (0, 2)
+    assert actual.phone_segments_f == [("AA", 0, 1), ("AA", 1, 2)]
+    assert len(actual_segments) == 2
+    assert [segment[0].phone_index for segment in actual_segments] == [0, 1]
+    assert [segment[0].pronunciation_index for segment in actual_segments] == [0, 0]
 
 
 @pytest.mark.parametrize(
@@ -955,7 +970,8 @@ def test_fixed_sequence_graph_is_linear_and_preserves_specs(reference: ModuleTyp
     expected = reference.build_fixed_sequence_graph(expected_specs)
     actual = production.build_fixed_sequence_graph(actual_specs)
 
-    assert_reference_equivalent(expected, actual)
+    _assert_legacy_graph_equivalent(expected[0], actual[0])
+    assert_reference_equivalent(expected[1], actual[1])
     graph, entry_bias = actual
     assert graph.start_states == [0]
     assert graph.end_states == [2]

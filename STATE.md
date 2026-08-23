@@ -77,15 +77,11 @@
   格式化 71 个文件，strict mypy 检查 20 个源文件且无错误。
 - Transcript 中的 `sil` 和 `null` 会在模型加载前失败，因为当前 tier 标签保留这些
   身份；未来身份方案为 `TBD-TEXT-001`。
-- Stage 8 更新后的 wheel 和 sdist 通过 Twine strict、check-wheel-contents 和仓库
-  inventory 审计，SHA-256 分别为
-  `a33dcc22f8023e4b4a7905bf7ab78bd827e4576a3fae368f24850b89f0ac9558`
-  和 `268e34970404c8c2c361a09358fc581db1185e23079eb9377f25dd4dc205569e`。
-- 该 exact wheel 从源码树外
-  `/tmp/flexaligner-stage8-final-wheel-site.uy5PIZ` 导入，通过版本/导入/包 smoke
-  和禁 socket 的 D-033 approved 英语 E2E。新实现与 reference 的 TextGrid 字节
-  完全一致，SHA-256 为
-  `ddbe0fecbbd7fc32442bd7b81ccb6257e391ab81970d398eb236de46a50e415f`。
+- D-036--D-040 合并后的 wheel 和 sdist 通过 Twine strict、check-wheel-contents 和仓库
+  inventory 审计，SHA-256 分别为 `0938914d...a1253` 和 `85beeaad...72a9`。
+- 该 exact wheel 从源码树外 `/tmp/flexaligner-wheel-site-after.ZXqAVU` 导入并完成
+  D-033 approved 英语 CLI E2E；TextGrid SHA-256 为 `d15265c2...2d32a`。它与 reference
+  的所有非 `NULL` interval/边界一致，并按 D-036 额外实现双 tier 全覆盖。
 - Fast tests 在本地 Python 3.10.8 和部分匹配的 Python 3.12.12 环境中通过
   （676 passed，1 个真实模型 marker deselected）。完整 Python/操作系统矩阵尚未
   运行，记录为 `TBD-CI-001`。
@@ -103,16 +99,19 @@
   快照 `c5361efe4b5d8ad02574dae1bd7caa89ed3e4af0` 批准。
 - v0.1 public preview 支持边界由 D-034 接受；披露的限制仍是限制，不是静默修正。
 - D-036--D-040 已解决 TBD-ALG-001--005，并明确取代 D-034 中冲突的旧行为保留口径。
-  D-039 和 D-040 已通过代码级验收：fast tests 为 696 passed、1 deselected，Ruff、
-  strict mypy 和 diff check 通过。D-036 TextGrid 全覆盖、D-037 stride 严格验证和
-  D-038 连续相同 phone occurrence 仍为已决定待实施。
-- 用户随后指定的 `english_natural.wav`（5.015 s、12 words）真实 E2E 通过：
-  11,546 trellis cells、281,411 beam work、42.215 s、峰值 RSS 约 2.09 GiB；输出与
-  给定 TextGrid 逐字节相同，SHA-256 为 `c8d8ef7b...a121f`。该 TextGrid 两层仍有
-  `[4.751, 4.773]` 的 22 ms gap，作为 D-036 尚未实施的 before 证据。
-- `example1.wav`（49.0413125 s、10 words）真实 E2E 也通过：83,368 trellis cells、
-  219,135 beam work、3 chunks、22.953 s、峰值 RSS 约 2.84 GiB，词序守恒且无 overlap。
-  phones/words 两层均复现三个约 19--21 ms gap，进一步确认 D-036 待实施。
+  五项均已实施：双 tier `NULL` 全覆盖、Aligner 名义 160-sample stride 验证、稳定
+  phone occurrence provenance、标准 repeated-target blank 约束，以及
+  900 s/10k/200M/10k/200M 保险丝。禁网非模型测试为 717 passed、1 deselected，分支
+  覆盖率 92.42%；Ruff、strict mypy 和 diff check 通过。
+- 用户指定的 `english_natural.wav`（5.015 s、12 words）在 D-036--D-040 合并后真实
+  E2E 通过；新 TextGrid SHA-256 为 `02ac0a42...e205d`。两层均以 `NULL` 精确覆盖，
+  所有旧非 `NULL` interval 及边界保持不变；旧字节一致结果仅保留为 before 证据。
+- `example1.wav`（49.0413125 s、10 words）合并后真实 E2E 通过；新 TextGrid SHA-256
+  为 `54d77a81...c1e3a`，3 chunks、词序守恒、无 overlap、双 tier 全覆盖，并保持所有
+  旧非 `NULL` interval 及边界。
+- approved release fixture 已重生 D-036 golden，TextGrid SHA-256 为
+  `d15265c2...2d32a`；真实 model E2E `1 passed`。与冻结 reference 不再要求整体字节
+  相同，而是要求所有非 `NULL` interval/边界相同，并额外要求新输出严格全覆盖。
 - D-035 固定文档语言：根目录对外 `README.md` 保持中英双语；内部项目文档使用中文。
   中文化前英文文档由提交 `31becaf` 和
   `docs/archive/2026-08-22-english-docs.md` 保存。
@@ -120,8 +119,8 @@
 
 ## 当前工作
 
-- 实施 D-036--D-038，并为 Chunker 增加经审阅的长音频分块或可取消 wall-time 策略；
-  然后选择新的经审阅长音频 fixture 重测实际 cells/work，再运行修正后 exact-wheel E2E。
+- 选择新的经审阅长音频 fixture，重测接近 900 s 时的实际 cells/work、耗时和峰值 RSS；
+  D-036--D-040 的功能实施已经完成。
 - Stage 8 已应用并在本地复验 D-033 release fixture；仍需实施 `0.1.0a1` 元数据和
   D-034 要求的窄推理契约。
 - approved fixture 仍存在仓库本地路径可移植性问题，记录为 `TBD-E2E-002`；

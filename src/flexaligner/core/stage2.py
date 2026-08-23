@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import pairwise
 from numbers import Real
 from typing import Any, Protocol
@@ -23,6 +23,7 @@ from ..errors import ResourceLimitError
 FloatArray = NDArray[np.floating[Any]]
 IntArray = NDArray[np.integer[Any]]
 FrameSegment = tuple[str, int, int]
+PhoneProvenanceSegment = tuple[str, int, int, int | None, int | None, int | None]
 StateSegment = tuple["FixedStateSpec", int, int]
 
 NEGATIVE_INFINITY = -1.0e30
@@ -36,6 +37,8 @@ class EmitEdge:
     phone_id: int
     word_index: int | None
     word: str | None
+    pronunciation_index: int | None = None
+    phone_index: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +62,7 @@ class ViterbiAlignment:
     state_path: NDArray[np.int32]
     aligned_phone_ids: NDArray[np.int32]
     score: float
+    phone_provenance_f: list[PhoneProvenanceSegment] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +72,8 @@ class FixedStateSpec:
     word_index: int | None
     word: str | None
     bias: float = 0.0
+    pronunciation_index: int | None = None
+    phone_index: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -345,6 +351,7 @@ def build_phone_graph_optional_sil_sph(
     optional_sph_at_end: bool | None = None,
     sph_cost: float = -2.5,
     sph_word_label: str = "[missing]",
+    max_graph_states: int | None = None,
 ) -> tuple[PhoneGraph, NDArray[np.float32]]:
     """Build the characterized multi-pronunciation DAG with six gap paths."""
 
@@ -372,6 +379,11 @@ def build_phone_graph_optional_sil_sph(
     sil_cost = _validate_finite_real("sil_cost", sil_cost)
     sph_cost = _validate_finite_real("sph_cost", sph_cost)
     sph_word_label = _validate_nonempty_string("sph_word_label", sph_word_label)
+    if max_graph_states is not None:
+        if isinstance(max_graph_states, bool) or not isinstance(max_graph_states, int):
+            raise TypeError("max_graph_states must be an integer or None")
+        if max_graph_states <= 0:
+            raise ValueError("max_graph_states must be positive when provided")
 
     if optional_sil_at_start is None:
         optional_sil_at_start = optional_sil_between_words
@@ -402,9 +414,17 @@ def build_phone_graph_optional_sil_sph(
         word_index: int | None,
         word: str | None,
         bias: float = 0.0,
+        pronunciation_index: int | None = None,
+        phone_index: int | None = None,
     ) -> None:
         if phone not in phone_to_id:
             raise KeyError(f"Phone {phone!r} not in model vocab.")
+        next_state_count = len(emit_edges) + 1
+        if max_graph_states is not None and next_state_count > max_graph_states:
+            raise ResourceLimitError(
+                "Stage 2 graph-state limit exceeded before graph materialization",
+                context={"states": next_state_count, "limit": max_graph_states},
+            )
         emit_edges.append(
             EmitEdge(
                 u=source,
@@ -413,6 +433,8 @@ def build_phone_graph_optional_sil_sph(
                 phone_id=phone_to_id[phone],
                 word_index=word_index,
                 word=word,
+                pronunciation_index=pronunciation_index,
+                phone_index=phone_index,
             )
         )
         entry_bias.append(bias)
@@ -458,7 +480,7 @@ def build_phone_graph_optional_sil_sph(
     for word_index, word in enumerate(normalized_words):
         end_of_word = new_node()
         pronunciations = _pronunciations_for_word(lexicon, word, word_index)
-        for pronunciation in pronunciations:
+        for pronunciation_index, pronunciation in enumerate(pronunciations):
             pronunciation_node = current_node
             for phone_index, phone in enumerate(pronunciation):
                 next_phone_node = (
@@ -470,6 +492,8 @@ def build_phone_graph_optional_sil_sph(
                     phone,
                     word_index,
                     word,
+                    pronunciation_index=pronunciation_index,
+                    phone_index=phone_index,
                 )
                 pronunciation_node = next_phone_node
         current_node = end_of_word
@@ -591,6 +615,19 @@ def _validate_graph(graph: PhoneGraph) -> int:
         _validate_nonnegative_id(f"graph.states[{state_id}].edge.phone_id", edge.phone_id)
         if edge.word_index is not None:
             _validate_nonnegative_id(f"graph.states[{state_id}].edge.word_index", edge.word_index)
+        if edge.pronunciation_index is not None:
+            _validate_nonnegative_id(
+                f"graph.states[{state_id}].edge.pronunciation_index",
+                edge.pronunciation_index,
+            )
+        if edge.phone_index is not None:
+            _validate_nonnegative_id(f"graph.states[{state_id}].edge.phone_index", edge.phone_index)
+        if edge.word_index is None and (
+            edge.pronunciation_index is not None or edge.phone_index is not None
+        ):
+            raise ValueError(
+                f"non-lexical graph state {state_id} must not have pronunciation provenance"
+            )
         if edge.word is not None:
             _validate_nonempty_string(f"graph.states[{state_id}].edge.word", edge.word)
         for relation_name, related in (("preds", state.preds), ("succs", state.succs)):
@@ -763,18 +800,57 @@ def _frame_segments_from_path(
     if by_word and first_edge.word is None:
         current_label = word_sil_label
     current_word_index = first_edge.word_index
+    current_pronunciation_index = first_edge.pronunciation_index
+    current_phone_index = first_edge.phone_index
     start = 0
     segments: list[FrameSegment] = []
     for frame in range(1, int(path.size)):
         edge = graph.states[int(path[frame])].edge
         label = (edge.word if edge.word is not None else word_sil_label) if by_word else edge.phone
-        if label != current_label or edge.word_index != current_word_index:
+        phone_identity_changed = not by_word and (
+            edge.word_index != current_word_index
+            or edge.pronunciation_index != current_pronunciation_index
+            or edge.phone_index != current_phone_index
+        )
+        if (
+            label != current_label
+            or (by_word and edge.word_index != current_word_index)
+            or phone_identity_changed
+        ):
             segments.append((current_label, start, frame))
             current_label = label
             current_word_index = edge.word_index
+            current_pronunciation_index = edge.pronunciation_index
+            current_phone_index = edge.phone_index
             start = frame
     segments.append((current_label, start, int(path.size)))
     return segments
+
+
+def _phone_provenance_segments_from_path(
+    graph: PhoneGraph,
+    path: NDArray[np.int32],
+) -> list[PhoneProvenanceSegment]:
+    segments = _frame_segments_from_path(
+        graph,
+        path,
+        by_word=False,
+        word_sil_label="sil",
+    )
+    result: list[PhoneProvenanceSegment] = []
+    for label, start, end in segments:
+        edge = graph.states[int(path[start])].edge
+        result.append(
+            (
+                label,
+                start,
+                end,
+                edge.word_index,
+                edge.pronunciation_index,
+                edge.phone_index,
+            )
+        )
+    return result
 
 
 def align_beam_viterbi(
@@ -990,6 +1066,7 @@ def align_beam_viterbi(
         state_path=state_path,
         aligned_phone_ids=aligned_phone_ids,
         score=float(best_score),
+        phone_provenance_f=_phone_provenance_segments_from_path(graph, state_path),
     )
 
 
@@ -1054,6 +1131,8 @@ def extract_state_segments_from_path(
             or edge.phone_id != current_edge.phone_id
             or edge.word_index != current_edge.word_index
             or edge.word != current_edge.word
+            or edge.pronunciation_index != current_edge.pronunciation_index
+            or edge.phone_index != current_edge.phone_index
         ):
             segments.append(
                 (
@@ -1063,6 +1142,8 @@ def extract_state_segments_from_path(
                         word_index=current_edge.word_index,
                         word=current_edge.word,
                         bias=current_bias,
+                        pronunciation_index=current_edge.pronunciation_index,
+                        phone_index=current_edge.phone_index,
                     ),
                     start,
                     frame,
@@ -1079,6 +1160,8 @@ def extract_state_segments_from_path(
                 word_index=current_edge.word_index,
                 word=current_edge.word,
                 bias=current_bias,
+                pronunciation_index=current_edge.pronunciation_index,
+                phone_index=current_edge.phone_index,
             ),
             start,
             int(path.size),
@@ -1094,6 +1177,14 @@ def _validate_fixed_state_spec(spec: object, *, context: str) -> FixedStateSpec:
     _validate_nonnegative_id(f"{context}.phone_id", spec.phone_id)
     if spec.word_index is not None:
         _validate_nonnegative_id(f"{context}.word_index", spec.word_index)
+    if spec.pronunciation_index is not None:
+        _validate_nonnegative_id(f"{context}.pronunciation_index", spec.pronunciation_index)
+    if spec.phone_index is not None:
+        _validate_nonnegative_id(f"{context}.phone_index", spec.phone_index)
+    if spec.word_index is None and (
+        spec.pronunciation_index is not None or spec.phone_index is not None
+    ):
+        raise ValueError(f"{context} non-lexical state must not have pronunciation provenance")
     if spec.word is not None:
         _validate_nonempty_string(f"{context}.word", spec.word)
     _validate_finite_real(f"{context}.bias", spec.bias)
@@ -1211,6 +1302,8 @@ def build_fixed_sequence_graph(
                     phone_id=spec.phone_id,
                     word_index=spec.word_index,
                     word=spec.word,
+                    pronunciation_index=spec.pronunciation_index,
+                    phone_index=spec.phone_index,
                 ),
                 preds=(state_id - 1,) if state_id > 0 else (),
                 succs=(state_id + 1,) if state_id + 1 < len(validated_specs) else (),

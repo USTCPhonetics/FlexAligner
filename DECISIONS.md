@@ -40,11 +40,11 @@
 | D-033 | 只批准 `openphonetics OW1 P AH0 N F AH0 N EH1 T IH0 K S` 作为冻结的 release-E2E 测试夹具发音 | 用户审阅消息 | 已接受并通过 approved exact wheel 本地复验；它不是规范发音、默认 G2P、准确率金标准或模型分发许可 |
 | D-034 | 接受下述 v0.1 公开预览支持边界（`ACCEPT_PREVIEW_BUNDLE`） | 用户审阅消息 | 已接受；允许 alpha 披露并延期研究问题，但不把实施、CI、远端 E2E 或发布门禁自动改成通过 |
 | D-035 | 对外发布项目的根 `README.md` 保持现有中英双语接口；给项目维护者使用的治理、计划、验收、资源和测试说明文档一律使用中文 | 用户当前消息 | 已接受；翻译前英文版由提交 `31becaf` 和 `docs/archive/2026-08-22-english-docs.md` 索引保存 |
-| D-036 | TextGrid 的 phones/words 两层都以大写 `NULL` 填充开头、内部和末尾的未覆盖时段，保持所有非 `NULL` 边界不变，合并相邻 `NULL`，并严格覆盖 `[0, audio_duration]` | 用户算法审阅消息 | 已接受；解决 TBD-ALG-001，实施后必须重新生成并审阅冻结 E2E golden |
-| D-037 | Stage 2 在 v0.1 只接受名义 10 ms stride：16 kHz 下 Aligner 卷积总 stride 必须为 160 samples；时间戳固定使用 `frame_index * 0.01`，不使用受卷积边缘影响的 `duration / output_frames` 动态推导 | 用户算法审阅消息 | 已接受；解决 TBD-ALG-002，不构成对其他 stride 模型的支持 |
-| D-038 | 同一词内连续相同 phone 必须按发音中的 occurrence 身份区分，身份至少保留 `word_index` 和 `phone_index`，不得仅因 phone label 相同而折叠 | 用户算法审阅消息 | 已接受；解决 TBD-ALG-003，并与 TBD-API-002 的 provenance 实施联动 |
+| D-036 | TextGrid 的 phones/words 两层都以大写 `NULL` 填充开头、内部和末尾的未覆盖时段，保持所有非 `NULL` 边界不变，合并相邻 `NULL`，并严格覆盖 `[0, audio_duration]` | 用户算法审阅消息 | 已实施并通过双 tier 合成测试、两个真实输入和冻结 release E2E；解决 TBD-ALG-001 |
+| D-037 | Stage 2 在 v0.1 只接受名义 10 ms stride：16 kHz 下 Aligner 卷积总 stride 必须为 160 samples；时间戳固定使用 `frame_index * 0.01`，不使用受卷积边缘影响的 `duration / output_frames` 动态推导 | 用户算法审阅消息 | 已实施；实际 Aligner 配置乘积为 160，非 160 和畸形配置关闭式失败；解决 TBD-ALG-002 |
+| D-038 | 同一词内连续相同 phone 必须按稳定 occurrence 身份 `(word_index, pronunciation_index, phone_index)` 区分，身份贯通图、两遍解码、分段和公共 phone provenance，不得仅因 phone label 相同而折叠 | 用户算法审阅及当前明确批准消息 | 已实施并贯通分块到公共 `PhoneInterval`；解决 TBD-ALG-003 和 TBD-API-002；特殊 `sil`/`sph`/`NULL` 身份为 `None` |
 | D-039 | Stage 1 采用标准重复目标 CTC blank 约束：相邻相同目标必须由至少一个 blank 帧分隔；同词、跨词及去除 ARPAbet 重音后形成的重复都适用 | 用户当前批准消息 | 已接受；解决 TBD-ALG-004；该行为有意偏离冻结 reference，必须保留 before/after 测试证据 |
-| D-040 | v0.1 alpha 初始资源保险丝为：音频最长 900 s、单次 Stage 1 trellis 最多 200,000,000 cells、每请求累计最多 200,000,000 次 beam candidate transition evaluations；beam width 保持 400 | 用户算法审阅及当前明确批准消息 | 已接受；解决 alpha 范围的 TBD-ALG-005。两个 200M 均为待实测初始门槛，不是延迟/SLA 保证；beam work 跨所有 chunk 及两次 Stage 2 decode 累计，达到上限前关闭式失败；word/phone 可由调用方显式收紧，独立 graph 上限留待实测后另行决定 |
+| D-040 | v0.1 alpha 初始资源保险丝为：音频最长 900 s、Stage 1 phone targets 最多 10,000、单次 Stage 1 trellis 最多 200,000,000 cells、单个 Stage 2 emitting graph 最多 10,000 states、每请求累计最多 200,000,000 次 beam candidate transition evaluations；beam width 保持 400 | 用户算法审阅及当前明确批准消息 | 已实施并通过精确边界/关闭式失败测试；解决 alpha 范围的 TBD-ALG-005。`10000` 明确定义为 `max_phone_tokens` 与 `max_stage2_graph_states`，不是 beam width 或累计 beam work；两个 200M 仍是待长样本继续实测的初始门槛，不构成延迟/SLA 保证 |
 
 ## 已接受的 v0.1 公开预览边界（D-034）
 
@@ -62,7 +62,8 @@
 6. 本条原批准保留 reference 的 gap、连续相同 phone 折叠和简化重复标签 recurrence；
    后续用户算法审阅已由 D-036、D-038、D-039 明确取代这些行为。固定 10 ms
    Stage 2 stride 由 D-037 收窄为显式验证契约。不得继续把旧行为视为发布目标。
-7. 置信度保持 raw 且未经校准。缺失的最终 phone provenance 保持 `None`，不得推断。
+7. 置信度保持 raw 且未经校准。词内 phone provenance 按 D-038 的稳定 occurrence 身份
+   提供；特殊 `sil`/`sph`/`NULL` 保持 `None`。
 8. 词项 `sil` 和 `null` 继续在模型加载前产生类型化输入错误。
 9. 本条原先没有批准默认资源上限；后续 D-040 已批准一组 v0.1 默认保险丝并取代
    该状态。保险丝只提供关闭式上限，不构成实时性、吞吐或任意不可信输入安全声明。
@@ -74,10 +75,9 @@
 |---|---|---|
 | TBD-ALG-001 | 两层 TextGrid 使用 `NULL` 实现全时轴覆盖 | D-036 |
 | TBD-ALG-002 | v0.1 只验证并使用名义 10 ms stride | D-037 |
-| TBD-ALG-003 | 连续相同 phone 按 occurrence 身份区分 | D-038 |
+| TBD-ALG-003 | 连续相同 phone 按 `(word_index, pronunciation_index, phone_index)` 区分 | D-038 |
 | TBD-ALG-004 | 加入标准重复目标 CTC blank 约束 | D-039 |
-| TBD-ALG-005 | 采用 D-040 的 900 s、200M trellis cells 与 200M transition evaluations alpha 初始保险丝 | D-040 |
+| TBD-ALG-005 | 采用 D-040 的 900 s、10,000 phone/graph states 与 200M/200M alpha 初始保险丝 | D-040 |
 
 D-036--D-040 是在 D-034 之后取得的明确算法决定，因此取代 D-034 中冲突的延期/保留
-口径。实现完成前，`STATE.md` 和验收表必须继续标为“已决定、待实施”，不得把决定本身
-写成已经通过的代码事实。
+口径。D-036--D-040 均已实施；900 s 接近上限的真实性能仍必须保持为未验收事实。

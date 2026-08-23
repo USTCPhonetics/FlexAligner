@@ -88,7 +88,10 @@ class _Processor:
 class _Model:
     def __init__(self, runtime: _FakeRuntime) -> None:
         self.runtime = runtime
-        self.config = SimpleNamespace(vocab_size=runtime.model_vocab_size)
+        self.config = SimpleNamespace(
+            vocab_size=runtime.model_vocab_size,
+            conv_stride=runtime.model_conv_stride,
+        )
 
     def to(self, device: object) -> _Model:
         self.runtime.model_devices.append(device)
@@ -127,6 +130,7 @@ class _FakeRuntime:
         self.processor_sample_rate: object = 16_000
         self.vocabulary: object = {"<pad>": 0, "a": 1, "b": 2}
         self.model_vocab_size: object = 3
+        self.model_conv_stride: object = [5, 2, 2, 2, 2, 2, 1]
         self.logits: Any = np.array(
             [[[1.0, 2.0, -1.0], [0.5, -0.5, 1.5]]],
             dtype=np.float64,
@@ -449,6 +453,84 @@ def test_processor_sample_rate_is_strictly_16khz(
     ):
         raise AssertionError("unreachable")
     assert runtime.gc_calls == 1
+
+
+@pytest.mark.parametrize(
+    "conv_stride",
+    [None, [], "5,2,2,2,2,2,1", [5, 2, True, 2, 2, 2, 1], [5, 2, 0, 2, 2, 2, 1]],
+)
+def test_aligner_nominal_conv_stride_is_required_and_strictly_validated(
+    conv_stride: object,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime, model_dir = _installed_runtime(monkeypatch, tmp_path)
+    runtime.model.config.conv_stride = conv_stride
+
+    with (
+        pytest.raises(ModelValidationError, match=r"config\.conv_stride") as error,
+        LocalHuggingFaceInferenceFactory().aligner_session(model_dir, num_threads=1),
+    ):
+        raise AssertionError("unreachable")
+
+    assert error.value.context == {
+        "session": "aligner",
+        "conv_stride": str(conv_stride),
+    }
+
+
+def test_aligner_nominal_conv_stride_must_equal_160_samples(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime, model_dir = _installed_runtime(monkeypatch, tmp_path)
+    runtime.model.config.conv_stride = [5, 2, 2, 2, 2, 2, 2]
+
+    with (
+        pytest.raises(ModelCompatibilityError, match="160 samples") as error,
+        LocalHuggingFaceInferenceFactory().aligner_session(model_dir, num_threads=1),
+    ):
+        raise AssertionError("unreachable")
+
+    assert error.value.context == {
+        "session": "aligner",
+        "conv_stride": "[5, 2, 2, 2, 2, 2, 2]",
+        "nominal_stride_samples": 320,
+        "required_stride_samples": 160,
+        "sample_rate": 16_000,
+    }
+
+
+def test_chunker_does_not_use_the_aligner_stride_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime, model_dir = _installed_runtime(monkeypatch, tmp_path)
+    runtime.model.config.conv_stride = None
+
+    with LocalHuggingFaceInferenceFactory().chunker_session(
+        model_dir,
+        num_threads=1,
+    ) as session:
+        assert session.sample_rate == 16_000
+
+
+def test_aligner_accepts_observed_frame_duration_that_is_not_exactly_10ms(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _, model_dir = _installed_runtime(monkeypatch, tmp_path)
+    audio = np.ones(800, dtype=np.float32)
+
+    with LocalHuggingFaceInferenceFactory().aligner_session(
+        model_dir,
+        num_threads=1,
+    ) as session:
+        posterior = session.infer(audio, 16_000)
+
+    assert posterior.log_probs.shape[0] == 2
+    assert posterior.seconds_per_frame == pytest.approx(0.025)
+    assert posterior.seconds_per_frame != pytest.approx(0.01)
 
 
 def test_compatibility_error_traceback_does_not_retain_loaded_resources(

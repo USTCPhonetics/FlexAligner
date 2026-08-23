@@ -24,6 +24,7 @@ from flexaligner.errors import AlignmentError, ModelCompatibilityError, ModelVal
 from flexaligner.ports import CtcPosterior, CtcSessionPort, Float32Array
 
 _TARGET_SAMPLE_RATE = 16_000
+_ALIGNER_NOMINAL_STRIDE_SAMPLES = 160
 
 
 class _LocalCtcSession:
@@ -438,6 +439,9 @@ def _load_local_session_impl(
             context={"session": kind, "sample_rate": sample_rate},
         )
 
+    if kind == "aligner":
+        _validate_aligner_nominal_stride(model)
+
     tokenizer = getattr(processor, "tokenizer", None)
     get_vocab = getattr(tokenizer, "get_vocab", None)
     if not callable(get_vocab):
@@ -484,6 +488,39 @@ def _load_local_session_impl(
         sample_rate=sample_rate,
         pad_token=pad_token,
     )
+
+
+def _validate_aligner_nominal_stride(model: Any) -> None:
+    """Require the reviewed 10 ms Aligner convolution stride at 16 kHz."""
+
+    raw_stride = getattr(getattr(model, "config", None), "conv_stride", None)
+    if not isinstance(raw_stride, (list, tuple)) or not raw_stride:
+        raise ModelValidationError(
+            "Aligner model config.conv_stride must be a non-empty list or tuple.",
+            context={"session": "aligner", "conv_stride": str(raw_stride)},
+        )
+
+    stride: list[int] = []
+    for value in raw_stride:
+        if type(value) is not int or value <= 0:
+            raise ModelValidationError(
+                "Aligner model config.conv_stride must contain positive integers.",
+                context={"session": "aligner", "conv_stride": str(raw_stride)},
+            )
+        stride.append(value)
+
+    nominal_stride_samples = math.prod(stride)
+    if nominal_stride_samples != _ALIGNER_NOMINAL_STRIDE_SAMPLES:
+        raise ModelCompatibilityError(
+            "Aligner model nominal convolution stride must be 160 samples (10 ms at 16 kHz).",
+            context={
+                "session": "aligner",
+                "conv_stride": str(stride),
+                "nominal_stride_samples": nominal_stride_samples,
+                "required_stride_samples": _ALIGNER_NOMINAL_STRIDE_SAMPLES,
+                "sample_rate": _TARGET_SAMPLE_RATE,
+            },
+        )
 
 
 def _validate_vocabulary(value: Any, *, kind: str) -> dict[str, int]:

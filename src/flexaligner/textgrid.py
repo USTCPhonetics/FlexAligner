@@ -30,6 +30,9 @@ class Interval:
     xmin: float
     xmax: float
     text: str
+    word_index: int | None = None
+    pronunciation_index: int | None = None
+    phone_index: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,11 +180,9 @@ def validate_textgrid_structure(
     *,
     context: str,
     expected_tier_order: tuple[str, ...] = EXPECTED_TIER_ORDER,
+    require_full_coverage: bool = False,
 ) -> None:
-    """Validate bounds, exact tier order, and non-overlapping intervals.
-
-    Continuous coverage is intentionally not required; that remains TBD-ALG-001.
-    """
+    """Validate bounds, tier order, intervals, and optionally exact coverage."""
 
     if not math.isfinite(textgrid.xmin) or not math.isfinite(textgrid.xmax):
         raise ValueError(f"Non-finite TextGrid bounds for {context}")
@@ -221,7 +222,17 @@ def validate_textgrid_structure(
                     f"Overlapping/backward intervals for {context}, tier={tier.name!r}, "
                     f"interval_index={interval_index}"
                 )
+            if require_full_coverage and interval.xmin != previous_end:
+                raise ValueError(
+                    f"Uncovered interval for {context}, tier={tier.name!r}, "
+                    f"start={previous_end}, end={interval.xmin}"
+                )
             previous_end = interval.xmax
+        if require_full_coverage and previous_end != tier.xmax:
+            raise ValueError(
+                f"Uncovered interval for {context}, tier={tier.name!r}, "
+                f"start={previous_end}, end={tier.xmax}"
+            )
 
 
 def clip_shift_interval(
@@ -247,6 +258,9 @@ def clip_shift_interval(
         xmin=chunk_start + local_start,
         xmax=chunk_start + local_end,
         text=local.text,
+        word_index=local.word_index,
+        pronunciation_index=local.pronunciation_index,
+        phone_index=local.phone_index,
     )
 
 
@@ -266,7 +280,7 @@ def merge_adjacent_null(intervals: Iterable[Interval]) -> tuple[Interval, ...]:
 
     merged: list[Interval] = []
     for interval in sorted(intervals, key=lambda item: (item.xmin, item.xmax, item.text)):
-        if interval.xmax - interval.xmin <= EPSILON:
+        if interval.xmax <= interval.xmin:
             continue
         if (
             interval.text == "NULL"
@@ -279,6 +293,41 @@ def merge_adjacent_null(intervals: Iterable[Interval]) -> tuple[Interval, ...]:
         else:
             merged.append(interval)
     return tuple(merged)
+
+
+def _fill_gaps_with_null(
+    intervals: Iterable[Interval],
+    *,
+    xmin: float,
+    xmax: float,
+    context: str,
+) -> tuple[Interval, ...]:
+    """Fill every uncovered span while preserving all non-NULL boundaries."""
+
+    ordered = sorted(intervals, key=lambda item: (item.xmin, item.xmax, item.text))
+    covered: list[Interval] = []
+    cursor = xmin
+    for interval_index, interval in enumerate(ordered):
+        if interval.xmin < cursor:
+            raise ValueError(
+                f"Overlapping/backward intervals during coverage fill for {context}, "
+                f"interval_index={interval_index}, start={interval.xmin}, "
+                f"previous_end={cursor}"
+            )
+        if interval.xmin > cursor:
+            covered.append(Interval(cursor, interval.xmin, "NULL"))
+        if interval.text.strip().lower() == "null":
+            covered.append(Interval(interval.xmin, interval.xmax, "NULL"))
+        else:
+            covered.append(interval)
+        cursor = interval.xmax
+    if cursor < xmax:
+        covered.append(Interval(cursor, xmax, "NULL"))
+    elif cursor > xmax:
+        raise ValueError(
+            f"Intervals exceed coverage bound for {context}: end={cursor}, xmax={xmax}"
+        )
+    return merge_adjacent_null(covered)
 
 
 def _validate_word_sequence(
@@ -309,7 +358,7 @@ def merge_local_alignments(
     word_sil_label: str,
     sph_word_label: str,
 ) -> TextGridDocument:
-    """Merge chunk-local TextGrids while preserving reference gap behavior."""
+    """Merge local TextGrids and fill both output tiers continuously with ``NULL``."""
 
     if len(chunks) != len(local_alignments):
         raise ValueError(
@@ -354,6 +403,20 @@ def merge_local_alignments(
                 )
                 if shifted is None:
                     continue
+                if tier.name == "phones" and shifted.word_index is not None:
+                    if shifted.word_index >= len(chunk.word_indices):
+                        raise ValueError(
+                            "Local phone word index is outside the chunk word mapping: "
+                            f"chunk_id={chunk.chunk_id}, local_word_index={shifted.word_index}"
+                        )
+                    shifted = Interval(
+                        xmin=shifted.xmin,
+                        xmax=shifted.xmax,
+                        text=shifted.text,
+                        word_index=chunk.word_indices[shifted.word_index],
+                        pronunciation_index=shifted.pronunciation_index,
+                        phone_index=shifted.phone_index,
+                    )
                 accumulated[tier.name].append(shifted)
                 if tier.name == "words":
                     shifted_words.append(shifted)
@@ -379,12 +442,21 @@ def merge_local_alignments(
             name=tier_name,
             xmin=0.0,
             xmax=full_duration_s,
-            intervals=merge_adjacent_null(accumulated[tier_name]),
+            intervals=_fill_gaps_with_null(
+                accumulated[tier_name],
+                xmin=0.0,
+                xmax=full_duration_s,
+                context=f"merged tier {tier_name!r}",
+            ),
         )
         for tier_name in EXPECTED_TIER_ORDER
     )
     merged = TextGridDocument(0.0, full_duration_s, final_tiers)
-    validate_textgrid_structure(merged, context="merged TextGrid")
+    validate_textgrid_structure(
+        merged,
+        context="merged TextGrid",
+        require_full_coverage=True,
+    )
 
     word_tier = merged.tiers[1]
     merged_words = labels_from_intervals(word_tier.intervals, ignore_labels=ignored_labels)
@@ -441,7 +513,11 @@ def _validate_written_textgrid(
 ) -> TextGridDocument:
     try:
         parsed = parse_textgrid_long(path)
-        validate_textgrid_structure(parsed, context=f"written TextGrid {path}")
+        validate_textgrid_structure(
+            parsed,
+            context=f"written TextGrid {path}",
+            require_full_coverage=True,
+        )
         words = labels_from_intervals(
             parsed.tiers[1].intervals,
             ignore_labels={"", "NULL", "null", word_sil_label, sph_word_label},

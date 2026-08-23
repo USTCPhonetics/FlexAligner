@@ -35,7 +35,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = REPO_ROOT / "tests" / "fixtures" / "e2e" / "asset_manifest.json"
 REFERENCE_PATH = REPO_ROOT / "reference" / "align_single_cpu.py"
 REFERENCE_SHA256 = "9ed4e21e615718ddfd10930359f55769fb27a0d284599cce45a3fc755e835de1"
-EXPECTED_TEXTGRID_SHA256 = "ddbe0fecbbd7fc32442bd7b81ccb6257e391ab81970d398eb236de46a50e415f"
+EXPECTED_TEXTGRID_SHA256 = "d15265c207faa6c1d5b588aef645bb97e457868ec8f458112a54335c3ec2d32a"
 EXPECTED_METADATA_SHA256 = "c6c5b035be5aeb3727996538c37c168e5af0c5591b08b38befeaace5a9f36140"
 EXPECTED_WORDS = (
     "this",
@@ -281,7 +281,11 @@ def test_frozen_english_release_e2e_fixture_matches_reference(
     assert _sha256(metadata_path) == EXPECTED_METADATA_SHA256
 
     parsed = parse_textgrid_long(output_path)
-    validate_textgrid_structure(parsed, context="frozen English E2E")
+    validate_textgrid_structure(
+        parsed,
+        context="frozen English E2E",
+        require_full_coverage=True,
+    )
     assert tuple(tier.name for tier in parsed.tiers) == ("phones", "words")
     assert _lexical_words(tuple(interval.text for interval in parsed.tiers[1].intervals)) == (
         EXPECTED_WORDS
@@ -306,7 +310,24 @@ def test_frozen_english_release_e2e_fixture_matches_reference(
     assert reference_run.returncode == 0, (
         f"reference stdout:\n{reference_run.stdout}\nreference stderr:\n{reference_run.stderr}"
     )
-    assert reference_output.read_bytes() == output_path.read_bytes()
+    reference_grid = parse_textgrid_long(reference_output)
+    actual_non_null = tuple(
+        tuple(
+            (interval.xmin, interval.xmax, interval.text)
+            for interval in tier.intervals
+            if interval.text.strip().lower() != "null"
+        )
+        for tier in parsed.tiers
+    )
+    reference_non_null = tuple(
+        tuple(
+            (interval.xmin, interval.xmax, interval.text)
+            for interval in tier.intervals
+            if interval.text.strip().lower() != "null"
+        )
+        for tier in reference_grid.tiers
+    )
+    assert actual_non_null == reference_non_null
 
     reference_metadata = json.loads(
         reference_metadata_path.read_text(encoding="utf-8", errors="strict")

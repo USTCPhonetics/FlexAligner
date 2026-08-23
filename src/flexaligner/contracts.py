@@ -61,8 +61,9 @@ class ResourceLimits:
 
     max_audio_seconds: float = 900.0
     max_transcript_words: int | None = None
-    max_phone_tokens: int | None = None
+    max_phone_tokens: int = 10_000
     max_trellis_cells: int = 200_000_000
+    max_stage2_graph_states: int = 10_000
     max_beam_work_units: int = 200_000_000
 
     def __post_init__(self) -> None:
@@ -81,10 +82,11 @@ class ResourceLimits:
             "max_transcript_words",
             "max_phone_tokens",
             "max_trellis_cells",
+            "max_stage2_graph_states",
             "max_beam_work_units",
         ):
             value = getattr(self, name)
-            optional = name in {"max_transcript_words", "max_phone_tokens"}
+            optional = name == "max_transcript_words"
             if value is None and not optional:
                 raise ConfigurationError(
                     f"{name} must be an integer",
@@ -221,6 +223,7 @@ class PhoneInterval:
     start_s: float
     end_s: float
     word_index: int | None
+    pronunciation_index: int | None
     phone_index: int | None
 
 

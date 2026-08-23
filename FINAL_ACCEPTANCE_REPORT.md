@@ -23,7 +23,7 @@ GitHub 直接替代策略、包名/owner、上游身份文本与 fixture-only �
 | 严格 pipeline/API/CLI/TextGrid | PASS | 676 项 fast tests；92.31% branch coverage |
 | 格式、lint、严格类型 | PASS | Ruff 76 files；mypy 20 source/script files |
 | wheel/sdist | PASS | Twine strict、wheel contents、distribution inventory、仓外安装 |
-| approved-fixture 本地 E2E | PASS | D-033；exact wheel；16/16 assets；TextGrid 与 reference 字节一致 |
+| approved-fixture 本地 E2E | PASS | D-033；当前 exact wheel；TextGrid 非 `NULL` interval 与 reference 一致且双 tier 全覆盖 |
 | 十项未来能力 | PLACEHOLDER | 类型化 pre-I/O failure；无下载、转换、回退或端口绑定 |
 | Python 3.10–3.14 全远程矩阵 | BLOCKED | 本地仅验证 3.10 与部分 3.12；仓库无 remote/Actions 结果 |
 | protected remote release E2E | BLOCKED | runner/wheelhouse 未配置；manifest repo-local 路径尚不可移植 |
@@ -36,8 +36,8 @@ GitHub 直接替代策略、包名/owner、上游身份文本与 fixture-only �
 
 | Artifact | SHA-256 |
 |---|---|
-| `flexaligner-0.1.0.dev0-py3-none-any.whl` | `a33dcc22f8023e4b4a7905bf7ab78bd827e4576a3fae368f24850b89f0ac9558` |
-| `flexaligner-0.1.0.dev0.tar.gz` | `268e34970404c8c2c361a09358fc581db1185e23079eb9377f25dd4dc205569e` |
+| `flexaligner-0.1.0.dev0-py3-none-any.whl` | `0938914d1418ec0f4b61dc628e7ead89502a40a09692c0cb655133e0bb8a1253` |
+| `flexaligner-0.1.0.dev0.tar.gz` | `85beeadaa7a24394d58081ee8bc045b08bd704fcef772a67ff317bb8a3fc72a9` |
 
 这些 artifact 位于临时审计目录，不是已发布文件；仓库原有 `dist/` 中的旧
 Stage 3 产物没有被当作最终证据，也没有覆盖或删除。

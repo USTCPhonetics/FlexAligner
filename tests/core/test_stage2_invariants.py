@@ -145,6 +145,41 @@ def test_multi_pronunciation_graph_is_a_consistent_finite_dag() -> None:
     assert phone_paths == {("R", "IY", "D"), ("R", "EH", "D")}
 
 
+def test_graph_state_limit_accepts_exact_limit_and_rejects_next_state() -> None:
+    args = (
+        ["word"],
+        {"word": [["A", "B"]]},
+        {"A": 0, "B": 1},
+    )
+
+    graph, _entry_bias = stage2.build_phone_graph_optional_sil_sph(
+        *args,
+        **NO_GAPS,
+        max_graph_states=2,
+    )
+    assert len(graph.states) == 2
+
+    with pytest.raises(ResourceLimitError, match="before graph materialization") as caught:
+        stage2.build_phone_graph_optional_sil_sph(
+            *args,
+            **NO_GAPS,
+            max_graph_states=1,
+        )
+    assert caught.value.context == {"states": 2, "limit": 1}
+
+
+@pytest.mark.parametrize("value", [True, 0, -1, 1.5])
+def test_graph_state_limit_rejects_invalid_values(value: object) -> None:
+    with pytest.raises((TypeError, ValueError)):
+        stage2.build_phone_graph_optional_sil_sph(
+            ["word"],
+            {"word": [["A"]]},
+            {"A": 0},
+            **NO_GAPS,
+            max_graph_states=value,  # type: ignore[arg-type]
+        )
+
+
 @pytest.mark.parametrize(
     ("words", "lexicon", "vocabulary", "options", "error"),
     [
@@ -320,6 +355,46 @@ def test_repeated_word_labels_remain_distinct_by_word_index() -> None:
     assert [graph.states[state].edge.word_index for state in alignment.state_path] == [0, 1]
 
 
+def test_graph_assigns_stable_pronunciation_and_phone_positions() -> None:
+    graph, _entry_bias = stage2.build_phone_graph_optional_sil_sph(
+        ["read"],
+        {"read": [["R", "IY", "D"], ["R", "EH", "D"]]},
+        {"R": 0, "IY": 1, "EH": 2, "D": 3},
+        **NO_GAPS,
+    )
+
+    identities = {
+        (
+            state.edge.phone,
+            state.edge.word_index,
+            state.edge.pronunciation_index,
+            state.edge.phone_index,
+        )
+        for state in graph.states
+    }
+    assert identities == {
+        ("R", 0, 0, 0),
+        ("IY", 0, 0, 1),
+        ("D", 0, 0, 2),
+        ("R", 0, 1, 0),
+        ("EH", 0, 1, 1),
+        ("D", 0, 1, 2),
+    }
+
+
+def test_gap_states_keep_none_pronunciation_identity() -> None:
+    graph, _entry_bias = stage2.build_phone_graph_optional_sil_sph(
+        ["word"],
+        {"word": [["W"]]},
+        {"W": 0, "sil": 1, "sph": 2},
+        sil_phone="sil",
+    )
+
+    gaps = [state.edge for state in graph.states if state.edge.word_index is None]
+    assert gaps
+    assert all(edge.pronunciation_index is None and edge.phone_index is None for edge in gaps)
+
+
 def test_silence_lock_matches_exact_dp_and_blocks_early_exit() -> None:
     graph = _manual_graph(
         state_specs=[
@@ -459,8 +534,18 @@ def _fixed_spec(
     word: str | None,
     *,
     bias: float = 0.0,
+    pronunciation_index: int | None = None,
+    phone_index: int | None = None,
 ) -> stage2.FixedStateSpec:
-    return stage2.FixedStateSpec(phone, phone_id, word_index, word, bias)
+    return stage2.FixedStateSpec(
+        phone,
+        phone_id,
+        word_index,
+        word,
+        bias,
+        pronunciation_index,
+        phone_index,
+    )
 
 
 @pytest.mark.parametrize(
@@ -594,9 +679,9 @@ def test_pruning_rejects_malformed_or_noncontiguous_segments(
 
 def test_fixed_sequence_graph_is_linear_and_preserves_metadata_and_bias() -> None:
     specs = [
-        _fixed_spec("A", 0, 0, "left", bias=0.1),
+        _fixed_spec("A", 0, 0, "left", bias=0.1, pronunciation_index=1, phone_index=0),
         _fixed_spec("sil", 1, None, None, bias=-0.5),
-        _fixed_spec("B", 2, 1, "right", bias=0.2),
+        _fixed_spec("B", 2, 1, "right", bias=0.2, pronunciation_index=0, phone_index=2),
     ]
 
     graph, entry_bias = stage2.build_fixed_sequence_graph(specs)
@@ -608,6 +693,8 @@ def test_fixed_sequence_graph_is_linear_and_preserves_metadata_and_bias() -> Non
     assert [state.succs for state in graph.states] == [(1,), (2,), ()]
     assert [state.edge.phone for state in graph.states] == ["A", "sil", "B"]
     assert [state.edge.word_index for state in graph.states] == [0, None, 1]
+    assert [state.edge.pronunciation_index for state in graph.states] == [1, None, 0]
+    assert [state.edge.phone_index for state in graph.states] == [0, None, 2]
     assert entry_bias.dtype == np.float32
     assert entry_bias.tolist() == pytest.approx([0.1, -0.5, 0.2])
 

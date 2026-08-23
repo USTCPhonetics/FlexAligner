@@ -2,7 +2,7 @@
 
 > 日期：2026-08-11（Asia/Shanghai）
 >
-> 文档状态：**REVIEWED — D-039/D-040 已实施；D-036--D-038 待实施；长音频性能未通过**
+> 文档状态：**REVIEWED — D-036--D-040 已实施；长音频性能未通过**
 >
 > 本地工程基线：主 agent 基于测试证据判定 `ACCEPT`
 >
@@ -52,8 +52,8 @@ audit 和 Trusted Publisher 是否真正通过，
 | 远端只读复核 | `USTCPhonetics/FlexAligner` 的 `main`/HEAD 仍为 `c5361efe…`，`dev` 为 `ea3b5836…` |
 | 包元数据 | distribution 已选定为 `flexaligner`；当前版本 `0.1.0.dev0`；`Pre-Alpha` |
 | PyPI 名称探测 | 官方 JSON 端点当前返回 404；这只表示未发现公开项目，**不证明名称一定可注册或归本项目所有** |
-| 工程门禁 | 676 项禁网 fast tests；92.31% branch coverage；Ruff、strict mypy、包审计通过 |
-| approved-fixture 本地 E2E | exact wheel、16/16 资产、冻结运行时通过；新旧 TextGrid 字节一致 |
+| 工程门禁 | 当前 717 项禁网 fast tests；Ruff、strict mypy、包审计通过 |
+| approved-fixture 本地 E2E | 当前 exact wheel、16/16 资产通过；非 `NULL` interval 匹配 reference 且双 tier 全覆盖 |
 | E2E 发布状态 | D-033 approved 配置通过 16/16 preflight 与 exact-wheel 本地 E2E；protected remote E2E 尚未运行 |
 | 外部变更 | GitHub、PyPI、模型资产均未修改 |
 
@@ -156,8 +156,8 @@ openphonetics OW1 P AH0 N F AH0 N EH1 T IH0 K S
 ```
 
 该行有当前 OpenPhonetics README 与 PRODUCT_REQUIREMENTS 的文件哈希作为来源；
-本地源目录没有 Git metadata。使用它时，新实现与权威 reference 的真实模型
-TextGrid 已达到字节一致。
+本地源目录没有 Git metadata。D-036 之前，新实现与权威 reference 的真实模型
+TextGrid 达到字节一致；D-036 之后改为非 `NULL` interval/边界一致并补齐 `NULL`。
 
 **用户决定：`APPROVE_FIXTURE_ONLY`。** 仅批准它作为冻结的 release-E2E 测试材料。
 该批准不表示它是语言学规范发音，不启用默认 G2P，不构成准确率金标准，也不把模型
@@ -212,15 +212,16 @@ recurrence 或“无默认资源上限”作为发布目标。固定 10 ms 也�
 
 | 决定 | 已批准目标 | 当前实施状态 |
 |---|---|---|
-| D-036 | phones/words 两层以大写 `NULL` 填充开头、内部和末尾 gap，保持非 `NULL` 边界并严格覆盖完整音频 | `NOT_RUN` |
-| D-037 | v0.1 只接受 16 kHz 下卷积总 stride 160 samples；时间戳固定为 `frame_index * 0.01` | `NOT_RUN` |
-| D-038 | 同词连续相同 phone 以至少 `(word_index, phone_index)` 的 occurrence 身份区分 | `NOT_RUN` |
+| D-036 | phones/words 两层以大写 `NULL` 填充开头、内部和末尾 gap，保持非 `NULL` 边界并严格覆盖完整音频 | `PASS` |
+| D-037 | v0.1 只接受 16 kHz 下卷积总 stride 160 samples；时间戳固定为 `frame_index * 0.01` | `PASS` |
+| D-038 | 同词连续相同 phone 以 `(word_index, pronunciation_index, phone_index)` 区分 | `PASS` |
 | D-039 | 相邻相同 Stage 1 目标必须由至少一个 CTC blank 帧分隔 | `PASS`（代码级与短自然语音 E2E） |
-| D-040 | 900 s、200,000,000 trellis cells、每请求累计 200,000,000 candidate transition evaluations；beam width 400；word/phone/graph 默认值未在本次固定 | `PASS`（保险丝与短 E2E）；900 s 性能未通过 |
+| D-040 | 900 s、10,000 phone targets、200M trellis cells、10,000 graph states、每请求累计 200M transition evaluations；beam width 400 | `PASS`（保险丝与短 E2E）；900 s 性能未通过 |
 
 D-040 的两个 200,000,000 数值是待实测复核的 alpha 初始门槛，不是性能或成功 SLA。
-用户指定的 `english_natural` 真实 E2E 已取得 11,546 cells、281,411 work，并与给定
-TextGrid 字节一致；`example1` 真实 E2E 取得 83,368 cells、219,135 work 和 3 chunks。
+用户指定的 `english_natural` 真实 E2E 已取得 11,546 cells、281,411 work；`example1`
+取得 83,368 cells、219,135 work 和 3 chunks。D-036 后两者均严格全覆盖且保持全部旧
+非 `NULL` interval 边界。
 D-040 的代码保险丝可以通过，但当前样本不支持 900 s 性能声明。完整证据见
 `ALPHA_RESOURCE_VALIDATION.md`。
 
@@ -230,9 +231,9 @@ D-040 的代码保险丝可以通过，但当前样本不支持 900 s 性能声�
 
 | 原 ID | 解决结果 | 决定 | 实施/验收 |
 |---|---|---|---|
-| `TBD-ALG-001` | TextGrid 两层 `NULL` 全覆盖 | D-036 | `NOT_RUN` |
-| `TBD-ALG-002` | 只验证名义 10 ms stride | D-037 | `NOT_RUN` |
-| `TBD-ALG-003` | 连续相同 phone 保留 occurrence 身份 | D-038 | `NOT_RUN` |
+| `TBD-ALG-001` | TextGrid 两层 `NULL` 全覆盖 | D-036 | `PASS` |
+| `TBD-ALG-002` | 只验证名义 10 ms stride | D-037 | `PASS` |
+| `TBD-ALG-003` | 连续相同 phone 保留 occurrence 身份 | D-038 | `PASS` |
 | `TBD-ALG-004` | 标准 repeated-target blank 约束 | D-039 | `PASS` |
 | `TBD-ALG-005` | D-040 alpha 初始保险丝；200M/200M | D-040 | `PASS`（代码/短 E2E）；长音频性能 `FAIL` |
 
@@ -241,7 +242,6 @@ D-040 的代码保险丝可以通过，但当前样本不支持 900 s 性能声�
 | ID | 当前保守行为 | 何时重新决策 |
 |---|---|---|
 | `TBD-OUT-001` | 进程内回滚；不承诺两文件掉电原子性 | 要求 power-loss crash consistency 时 |
-| `TBD-API-002` | 未知 phone provenance 返回 `None` | 设计可验证的 fixed-state 身份方案时 |
 | `TBD-PROV-001` | 公开结果暂不伪造 model fingerprint | 确定版本化 manifest digest schema 时 |
 | `TBD-INF-001` | 仅保留冻结模型/运行时的候选工程 E2E 证据 | 要公开承诺广泛 Hugging Face 兼容时 |
 | `TBD-THREAD-001` | 设置请求线程数，不承诺恢复宿主全局值 | 嵌入式 API 需要线程隔离时 |

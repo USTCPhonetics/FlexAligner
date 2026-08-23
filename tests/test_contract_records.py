@@ -14,6 +14,7 @@ IMMUTABLE_KW_ONLY_RECORDS = (
     "LocalModelBundle",
     "TextGridOutput",
     "AlignmentResult",
+    "PhoneInterval",
 )
 
 
@@ -58,6 +59,14 @@ def test_required_record_field_names(public_api: ModuleType) -> None:
             "confidence_calibration",
             "limits",
         },
+        "PhoneInterval": {
+            "label",
+            "start_s",
+            "end_s",
+            "word_index",
+            "pronunciation_index",
+            "phone_index",
+        },
     }
     for record_name, field_names in expected.items():
         record_type = cast(Any, getattr(public_api, record_name))
@@ -83,7 +92,13 @@ def test_beam_work_limit_has_approved_default_and_rejects_none(
 
 
 def test_approved_default_limits_cannot_be_disabled_with_none(public_api: ModuleType) -> None:
-    for field_name in ("max_audio_seconds", "max_trellis_cells", "max_beam_work_units"):
+    for field_name in (
+        "max_audio_seconds",
+        "max_phone_tokens",
+        "max_trellis_cells",
+        "max_stage2_graph_states",
+        "max_beam_work_units",
+    ):
         with pytest.raises(public_api.ConfigurationError):
             public_api.ResourceLimits(**{field_name: None})
     with pytest.raises(public_api.ConfigurationError):
@@ -93,7 +108,10 @@ def test_approved_default_limits_cannot_be_disabled_with_none(public_api: Module
 def test_alpha_resource_limits_have_approved_initial_defaults(public_api: ModuleType) -> None:
     limits = public_api.ResourceLimits()
     assert limits.max_audio_seconds == 900.0
+    assert limits.max_phone_tokens == 10_000
     assert limits.max_trellis_cells == 200_000_000
+    assert limits.max_stage2_graph_states == 10_000
+    assert limits.max_beam_work_units == 200_000_000
     assert public_api.AlignmentOptions().limits == limits
 
 

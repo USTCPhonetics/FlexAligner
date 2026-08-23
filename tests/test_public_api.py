@@ -16,6 +16,7 @@ PUBLIC_SYMBOLS = {
     "FlexAligner",
     "FlexAlignerError",
     "LocalModelBundle",
+    "PhoneInterval",
     "TextGridOutput",
     "get_capabilities",
 }

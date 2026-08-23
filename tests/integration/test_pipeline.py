@@ -109,6 +109,18 @@ def test_real_numpy_cores_produce_validated_outputs_and_public_result(tmp_path: 
     lexical_words = [interval for interval in result.words if interval.word_index is not None]
     assert lexical_words[0].start_s == pytest.approx(0.0)
     assert lexical_words[-1].end_s == pytest.approx(result.chunks[0].end_s, abs=0.011)
+    lexical_phones = [interval for interval in result.phones if interval.word_index is not None]
+    assert [interval.label for interval in lexical_phones] == ["AH", "B"]
+    assert [interval.word_index for interval in lexical_phones] == [0, 1]
+    assert [interval.pronunciation_index for interval in lexical_phones] == [0, 0]
+    assert [interval.phone_index for interval in lexical_phones] == [0, 0]
+    assert all(
+        interval.word_index is None
+        and interval.pronunciation_index is None
+        and interval.phone_index is None
+        for interval in result.phones
+        if interval.label in {"sil", "sph", "NULL"}
+    )
 
     parsed = parse_textgrid_long(result.output_path)
     assert [tier.name for tier in parsed.tiers] == ["phones", "words"]
@@ -193,6 +205,27 @@ def test_stage2_beam_work_limit_is_typed_and_leaves_no_artifact(tmp_path: Path) 
 
     assert caught.value.code == "resource_limit_exceeded"
     assert caught.value.context["limit"] == 1
+    official_paths = (fixture.request.output.path, fixture.request.output.chunk_metadata_path)
+    for path in official_paths:
+        assert path is not None
+        assert not path.exists()
+        assert not path.with_name(path.name + ".tmp").exists()
+
+
+def test_stage2_graph_state_limit_is_typed_and_leaves_no_artifact(tmp_path: Path) -> None:
+    fixture = make_integration_fixture(tmp_path)
+    pipeline = AlignmentPipeline(inference_factory=FakeInferenceFactory())
+
+    with pytest.raises(ResourceLimitError, match="before graph materialization") as caught:
+        pipeline.align(
+            request=fixture.request,
+            models=fixture.models,
+            lexicon_path=fixture.lexicon_path,
+            options=AlignmentOptions(limits=ResourceLimits(max_stage2_graph_states=1)),
+        )
+
+    assert caught.value.code == "resource_limit_exceeded"
+    assert caught.value.context == {"states": 2, "limit": 1}
     official_paths = (fixture.request.output.path, fixture.request.output.chunk_metadata_path)
     for path in official_paths:
         assert path is not None

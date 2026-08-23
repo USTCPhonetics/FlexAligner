@@ -330,6 +330,7 @@ class AlignmentPipeline:
                         config=config,
                         context=f"local chunk_id={chunk.chunk_id}",
                         beam_work_budget=beam_work_budget,
+                        max_graph_states=options.limits.max_stage2_graph_states,
                     )
                 )
             return local_alignments
@@ -644,6 +645,7 @@ def _stage2_from_posterior(
     config: Stage2DecodeConfig,
     context: str,
     beam_work_budget: BeamWorkBudget,
+    max_graph_states: int,
 ) -> LocalAlignment:
     silence_id = vocabulary[config.sil_phone]
     speech_gap_id = vocabulary[config.sph_phone]
@@ -662,6 +664,7 @@ def _stage2_from_posterior(
         optional_sph_at_end=None,
         sph_cost=SPEECH_GAP_COST,
         sph_word_label=config.sph_word_label,
+        max_graph_states=max_graph_states,
     )
     try:
         first_pass = align_beam_viterbi(
@@ -732,8 +735,18 @@ def _stage2_from_posterior(
                         xmin=float(start) * config.frame_hop_s,
                         xmax=float(end) * config.frame_hop_s,
                         text=label,
+                        word_index=word_index,
+                        pronunciation_index=pronunciation_index,
+                        phone_index=phone_index,
                     )
-                    for label, start, end in aligned.phone_segments_f
+                    for (
+                        label,
+                        start,
+                        end,
+                        word_index,
+                        pronunciation_index,
+                        phone_index,
+                    ) in aligned.phone_provenance_f
                 ),
             ),
             IntervalTier(
@@ -834,8 +847,9 @@ def _public_result(
             label=interval.text,
             start_s=interval.xmin,
             end_s=interval.xmax,
-            word_index=None,
-            phone_index=None,
+            word_index=interval.word_index,
+            pronunciation_index=interval.pronunciation_index,
+            phone_index=interval.phone_index,
         )
         for interval in merged.tiers[0].intervals
     )

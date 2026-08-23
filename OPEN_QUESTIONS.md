@@ -10,7 +10,6 @@
 | TBD-E2E-002 | approved E2E manifest 如何去除对 `flexaligner-rebuild/tests/fixtures/e2e/english_synthetic.dict` 本地路径的依赖，并在目标远端 runner 证明可移植性？ | 保留 approved 本地 fixture 并关闭式失败；本地 Q-007 只覆盖已验证的 exact-wheel 运行，在完成可移植布局和实际复跑前不得声称 protected remote E2E 通过 | 远端/release E2E 可移植性 |
 | TBD-REL-001 | `USTCPhonetics/FlexAligner` 将使用哪个精确 workflow identity、受保护 `pypi` environment、审批人和 Trusted Publisher 绑定？ | 目标项目和包 owner 已选定，但尚未配置或授权远端 environment/publisher | 实际 PyPI 上传 |
 | TBD-OUT-001 | 可选 metadata 与 TextGrid 两个文件之间应采用什么崩溃一致性协议？ | 两者均先暂存并验证；先提交 metadata，最后提交 TextGrid；回滚进程可见失败 | 多产物崩溃/断电原子性声明 |
-| TBD-API-002 | 最终 phone interval 如何保留固定状态的 word/phone provenance？ | 暴露 `word_index=None`、`phone_index=None`；不得推断缺失 provenance | phone 到 word 的 provenance 声明 |
 | TBD-PROV-001 | 公共 provenance 应采用什么规范的模型目录指纹格式？ | `model_fingerprints` 保持空；E2E manifest 保留资产 hash | 公共可复现性 schema |
 | TBD-INF-001 | 公开 alpha 能诚实安装的 `[inference]` 解析/运行时范围是什么？ | 当前宽范围不视为已批准支持；收窄到有证据的范围并测试公共索引解析，否则移除公开 extra | 公开 alpha 推理契约 |
 | TBD-THREAD-001 | 对齐完成后是否应恢复进程全局 Torch 线程数？ | 只在推理生命周期内设置请求的正 CPU 线程数；alpha 前文档化进程全局影响 | 线程隔离声明；alpha 文档 |
@@ -33,6 +32,7 @@
 | TBD-ALG-003 | 连续相同 phone 按 occurrence 身份区分 | D-038 |
 | TBD-ALG-004 | 采用标准重复目标 CTC blank 约束 | D-039 |
 | TBD-ALG-005 | 采用 900 s、200M trellis cells 与累计 200M transition evaluations 的待实测 alpha 初始保险丝 | D-040 |
+| TBD-API-002 | 最终 phone interval 使用 `(word_index, pronunciation_index, phone_index)`；特殊 `sil`/`sph`/`NULL` 为 `None` | D-038 |
 
 ## 当前范围已经固定、不是问题的事项
 
