@@ -52,8 +52,8 @@ The first public preview focuses on **English, CPU, and single-file alignment**.
 Mandarin, GPU, batch processing, Web services, multi-format decoding,
 resampling, and confidence calibration remain reserved interfaces. Local English
 OOV G2P is implemented in the current `0.2.0a1` source tree.
-Validated English model retrieval is implemented in the current `0.2.0a1`
-source tree and is not part of the already published `0.1.0a1` package.
+Validated English model retrieval and local English OOV G2P are published in
+`flexaligner==0.2.0a1`.
 
 ---
 
@@ -82,7 +82,7 @@ FlexAligner 将强制对齐分为两个阶段：
 
 首个公开预览版聚焦于**英语、CPU、单文件对齐**。普通话、GPU、批处理、Web 服务、
 多格式解码、自动重采样和置信度校准目前仍仅保留接口。经校验的英语模型获取和本地
-英语 OOV G2P 已在当前 `0.2.0a1` 源码中实现，但尚未进入已经发布的 `0.1.0a1` 包。
+英语 OOV G2P 已随 `flexaligner==0.2.0a1` 发布。
 
 ---
 
@@ -105,10 +105,10 @@ extra pins Torch 2.3.1 and Transformers 4.41.2 and is installable on Python
 3.10–3.12. Real-model release evidence currently covers only Linux x86_64 with
 Python 3.10.8; Python 3.13–3.14 are core-only.
 
-The currently published preview remains:
+Install the current public preview:
 
 ```bash
-python -m pip install "flexaligner[inference]==0.1.0a1"
+python -m pip install "flexaligner[inference]==0.2.0a1"
 ```
 
 For a CPU-only Linux environment, install the frozen Torch build from its CPU
@@ -116,7 +116,7 @@ index first:
 
 ```bash
 python -m pip install torch==2.3.1 --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "flexaligner[inference]==0.1.0a1"
+python -m pip install "flexaligner[inference]==0.2.0a1"
 ```
 
 To work from a reviewed source checkout:
@@ -280,8 +280,8 @@ print(result.output_sha256)
   download, mirror/official selection, and manifest/hash verification.
 - [x] **Local English OOV G2P:** Lexicon-first ARPAbet fallback with structured
   CLI warnings and strict vocabulary validation.
-- [x] **PyPI Public Alpha:** `flexaligner==0.1.0a1` is published; the downloader
-  is planned for the next `0.2.0a1` preview.
+- [x] **PyPI Public Alpha:** `flexaligner==0.2.0a1` is published with validated
+  model retrieval and local English OOV G2P.
 
 ## 👨‍💻 Authors & Affiliation
 
