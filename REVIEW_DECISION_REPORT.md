@@ -2,7 +2,7 @@
 
 > 日期：2026-08-11（Asia/Shanghai）
 >
-> 文档状态：**REVIEWED — 用户批阅结果已接受，见 D-029 至 D-034**
+> 文档状态：**REVIEWED — D-039/D-040 已实施；D-036--D-038 待实施；长音频性能未通过**
 >
 > 本地工程基线：主 agent 基于测试证据判定 `ACCEPT`
 >
@@ -14,7 +14,7 @@
 用户已经明确选择干净基线重建，英语 CPU 单文件链路也已形成可安装、可测试的
 pip 包候选。
 
-本报告提出了以下六组发布与产品边界供审阅：
+本报告最初提出了以下六组发布与产品边界供审阅：
 
 1. 首个公开版本是开发者预览，还是生产级产品；
 2. 新历史如何接入 GitHub；
@@ -36,6 +36,7 @@ audit 和 Trusted Publisher 是否真正通过，
 | R-04 | 固定远端身份文本：README 提供作者/品牌/引用，LICENSE 提供 MIT/版权行 | D-032 |
 | R-05 | `APPROVE_FIXTURE_ONLY` | D-033 |
 | R-06 | `ACCEPT_PREVIEW_BUNDLE` | D-034 |
+| R-07 | 算法与资源修正已批准，代码/测试仍待实施 | D-036--D-040 |
 
 本次回复没有授予任何外部操作权限，D-013 继续生效。
 
@@ -200,18 +201,45 @@ TextGrid 已达到字节一致。
 
 **不决定时的默认行为：** 当前实现不变，但不公开发布。
 
-## 4. 不需要现在选择技术方案的事项
+以上第 6、9 项是 2026-08-11 的历史批准口径。2026-08-23 后续算法审阅已经由
+D-036--D-040 明确取代冲突部分：不再把 gap、连续相同 phone 折叠、简化 repeated-label
+recurrence 或“无默认资源上限”作为发布目标。固定 10 ms 也由 D-037 收窄为必须验证的
+名义 stride 契约。保留这段原文用于审计历史，不表示当前仍批准延期这些修正。
 
-如果采用 `PUBLIC_ALPHA + ACCEPT_PREVIEW_BUNDLE`，建议把以下问题作为 alpha 后的
-独立实验包，而不是让用户在缺少 before/after 数据时盲选算法：
+### R-07 — 后续算法与资源批阅
+
+用户已接受以下目标：
+
+| 决定 | 已批准目标 | 当前实施状态 |
+|---|---|---|
+| D-036 | phones/words 两层以大写 `NULL` 填充开头、内部和末尾 gap，保持非 `NULL` 边界并严格覆盖完整音频 | `NOT_RUN` |
+| D-037 | v0.1 只接受 16 kHz 下卷积总 stride 160 samples；时间戳固定为 `frame_index * 0.01` | `NOT_RUN` |
+| D-038 | 同词连续相同 phone 以至少 `(word_index, phone_index)` 的 occurrence 身份区分 | `NOT_RUN` |
+| D-039 | 相邻相同 Stage 1 目标必须由至少一个 CTC blank 帧分隔 | `PASS`（代码级与短自然语音 E2E） |
+| D-040 | 900 s、200,000,000 trellis cells、每请求累计 200,000,000 candidate transition evaluations；beam width 400；word/phone/graph 默认值未在本次固定 | `PASS`（保险丝与短 E2E）；900 s 性能未通过 |
+
+D-040 的两个 200,000,000 数值是待实测复核的 alpha 初始门槛，不是性能或成功 SLA。
+用户指定的 `english_natural` 真实 E2E 已取得 11,546 cells、281,411 work，并与给定
+TextGrid 字节一致。623.115875 s 的 `s0101a` 长样本在 1,370.879 s 后仍停留于
+Chunker 并被安全中止，因此 D-040 的代码保险丝可以通过，但不得声称 900 s 性能可用。
+完整证据见 `ALPHA_RESOURCE_VALIDATION.md`。
+
+## 4. 已解决算法项与仍未决技术事项
+
+原报告把 `TBD-ALG-001..005` 建议为 alpha 后实验；D-036--D-040 已经取代该建议：
+
+| 原 ID | 解决结果 | 决定 | 实施/验收 |
+|---|---|---|---|
+| `TBD-ALG-001` | TextGrid 两层 `NULL` 全覆盖 | D-036 | `NOT_RUN` |
+| `TBD-ALG-002` | 只验证名义 10 ms stride | D-037 | `NOT_RUN` |
+| `TBD-ALG-003` | 连续相同 phone 保留 occurrence 身份 | D-038 | `NOT_RUN` |
+| `TBD-ALG-004` | 标准 repeated-target blank 约束 | D-039 | `PASS` |
+| `TBD-ALG-005` | D-040 alpha 初始保险丝；200M/200M | D-040 | `PASS`（代码/短 E2E）；长音频性能 `FAIL` |
+
+以下问题仍未解决：
 
 | ID | 当前保守行为 | 何时重新决策 |
 |---|---|---|
-| `TBD-ALG-001` | 保留已特征化的 gap；冻结 fixture 实测约 18 ms 尾 gap | 要求 TextGrid 全时轴连续覆盖时 |
-| `TBD-ALG-002` | Stage 2 固定 10 ms | 支持不同输出 stride 的模型时 |
-| `TBD-ALG-003` | 保留连续同 phone state 折叠 | 有定向语料和 phone provenance 对比时 |
-| `TBD-ALG-004` | 保留当前简化 CTC recurrence | 有标准 repeated-label before/after benchmark 时 |
-| `TBD-ALG-005` | 仅调用方可显式提供限制，无批准默认值 | 有目标硬件/输入分布，或定位为生产安全时 |
 | `TBD-OUT-001` | 进程内回滚；不承诺两文件掉电原子性 | 要求 power-loss crash consistency 时 |
 | `TBD-API-002` | 未知 phone provenance 返回 `None` | 设计可验证的 fixed-state 身份方案时 |
 | `TBD-PROV-001` | 公开结果暂不伪造 model fingerprint | 确定版本化 manifest digest schema 时 |
@@ -231,6 +259,10 @@ TextGrid 已达到字节一致。
 5. 名称/版本/许可最终化后重新 build once，并让同一 artifact 通过全部门禁。
 6. 最终化 `[inference]` 的实际 resolver/runtime 契约，并验证公共索引安装解析路径；
    hosted fast CI 和基础 dependency audit 不能替代真实推理依赖验证。
+7. 为 D-036--D-040 保留 before/after 证据并运行全部新增边界/关闭式失败测试；
+8. 使用 `s0101a.wav` / `s0101a.txt` 完成 D-040 的资源实测；
+9. 重新生成修正后的 E2E candidate，字段级审阅后才可接受新 golden，并对 exact wheel
+   重跑完整 fast、包审计和 approved-fixture E2E。
 
 任何失败都必须回到实现或缩窄支持声明，不能降低断言、更新 golden 掩盖差异，
 也不能由用户口头“批准为通过”。
@@ -262,6 +294,8 @@ TextGrid 已达到字节一致。
 - GPU、批处理、Web、自动模型下载、多格式音频、自动重采样、中文分词、默认
   G2P、置信度校准只留接口并显式失败；
 - 不自动下载、不静默回退、不用缺资产的 skip 伪造 E2E 成功；
+- TextGrid 全覆盖、10 ms stride 验证、phone occurrence、标准重复目标 blank 约束和
+  D-040 初始资源保险丝已经决定，不应再次作为算法选择提问；
 - 未经另行授权不修改远端、不打 tag、不上传 PyPI。
 
 ## 8. 已发现并在 Stage 8 修订的治理记录
@@ -275,6 +309,9 @@ TextGrid 已达到字节一致。
    approved exact-wheel 本地 E2E 已通过，protected remote E2E 仍单独阻断。
 4. 工具 pins 和覆盖率门槛已经由 D-015、D-027 与 `pyproject.toml` 固定；
    `TBD-CI-001` 现在只剩远程矩阵的实际执行证据。
+5. 2026-08-23 的 D-036--D-040 又取代了 D-034 中 gap、stride、相同 phone、简化
+   recurrence 和无默认资源上限的冲突口径；当前只完成决定落档，实施和验证仍为
+   `NOT_RUN`。
 
 这些冲突按权威顺序以当前代码、`STATE.md` 和最终实验输出为准；本文没有静默合并
 旧描述。关闭结果记录在 `OPEN_QUESTIONS.md` 的 resolved ledger。
@@ -282,6 +319,6 @@ TextGrid 已达到字节一致。
 ## 9. 批阅结果落档
 
 批阅结果已经拆分写入独立的 `DECISIONS.md`、`STATE.md` 与
-`OPEN_QUESTIONS.md`：前者记录 D-029 至 D-034，第二份记录当前实施/验证状态，
+`OPEN_QUESTIONS.md`：前者记录 D-029--D-040，第二份记录当前实施/验证状态，
 第三份列出仍未解决的问题并保留已关闭问题的 resolved ledger。任何远端替代、
 GitHub 设置、tag 或 PyPI 上传仍须按第 6 节逐项获得独立授权。

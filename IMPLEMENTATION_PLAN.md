@@ -1,6 +1,6 @@
 # FlexAligner 干净代码重建实施计划
 
-> 状态：执行完成——工程基线已接受；公共发布仍被阻断
+> 状态：D-039/D-040 已实施并通过短自然语音 E2E；D-036--D-038 待实施；公共发布仍被阻断
 >
 > 建立日期：2026-08-11（Asia/Shanghai）
 >
@@ -20,8 +20,10 @@
     -> 经验证、原子 no-clobber 发布的 TextGrid
 ```
 
-在任何改变行为的修正前，实现必须保留当前 `align_single_cpu.py` reference 已接受的
-算法语义。Reference 是 oracle 和证据来源，生产代码不得导入它。
+在任何改变行为的修正前，实现必须先特征化当前 `align_single_cpu.py` reference 的算法
+语义。Reference 是迁移 oracle 和 before 证据来源，生产代码不得导入它。D-036--D-040
+已经批准五项有意修正；这些修正实施后必须保留字段级 before/after 证据，不能再以
+reference parity 代替修正后的验收。
 
 仓库还必须为未来工作暴露有意设计并有文档的扩展边界，但不得把尚未实现的能力伪装
 成可用。
@@ -131,15 +133,22 @@
 4. **只通过决定修正。**改变行为的修正需要新的 `DECISIONS.md` 条目、前后比较和
    专用测试。
 
-需要单独决定的已知问题：
+下列已知问题已由后续明确决定解决；D-039/D-040 已实施并通过短自然语音 E2E，
+D-036--D-038 尚未完成：
 
-- `[TBD-ALG-001]` interval 连续覆盖和帧网格尾部 gap；
-- `[TBD-ALG-002]` Stage 2 帧 stride 的验证/动态处理；
-- `[TBD-ALG-003]` 同一词内连续相同 phone 状态的身份；
-- `[TBD-ALG-004]` Stage 1 CTC 重复标签 blank 约束；
-- `[TBD-ALG-005]` 时长、词、phone、trellis cell 和 beam work 上限。
+- D-036：phones/words 两层以 `NULL` 填充开头、内部和末尾 gap，严格覆盖完整音频；
+- D-037：v0.1 只接受 16 kHz 下卷积总 stride 为 160 samples 的 Aligner，并固定使用
+  10 ms 时间网格；
+- D-038：同词连续相同 phone 按至少 `(word_index, phone_index)` 的 occurrence 身份区分；
+- D-039：相邻相同 Stage 1 目标必须由至少一个 CTC blank 帧分隔（已实施）；
+- D-040：alpha 初始默认保险丝为 900 s、单次 Stage 1 trellis 200,000,000 cells、
+  每请求累计 200,000,000 次 beam candidate transition evaluations，beam width 保持
+  400（已实施；`english_natural` 短 E2E 通过，`s0101a` 长样本性能失败）。
+  words、phone targets 和
+  Stage 2 图状态只保留调用方显式限制或实测后另行决定，不属于本次批准的默认值。
 
-这些问题必须有测试且明确可见，不得在模块抽取时静默“修复”。
+这些改变必须绑定决定 ID、专用测试和经审阅的 E2E golden。D-036--D-038 在对应验收项
+成为 `PASS` 前，只能描述为“已决定、待实施”。
 
 ## 6. 目标仓库结构
 
@@ -299,30 +308,38 @@ README 能力表；严格 CI 和受保护 release workflow。
 
 ### Stage 3 — Stage 1 实现
 
-交付物：首条发音选择与重音数字移除；可提前结束的 CTC trellis/backtrace；word
-emission confidence；anchor、严格合并边界和毫秒 chunk 取整；完整有序 word-index
-覆盖检查。
+交付物：首条发音选择与重音数字移除；可提前结束的 CTC trellis/backtrace；D-039
+标准重复目标 blank 约束；word emission confidence；anchor、严格合并边界和毫秒 chunk
+取整；完整有序 word-index 覆盖检查；D-040 Stage 1 默认资源保险丝。
 
-门禁：合成数组等价精确或处于明确记录容差内；严格失败案例通过；复杂度/资源行为有
-测量，`TBD-ALG-005` 被解决或保持明确 release 限制。
+门禁：除 D-039 的具名偏离外，合成数组等价精确或处于明确记录容差内；同词、跨词和
+去除 ARPAbet 重音后形成的相邻重复目标都有 before/after 测试；900 s 和
+200,000,000 trellis cells 的边界与分配前关闭式失败通过；复杂度、实际 cell 核算和
+资源行为重新测量。
 
 ### Stage 4 — Stage 2 实现
 
-交付物：多发音 phone DAG；可选 `sil`/`sph` gap path；保留 stay/move、frame bias、
-进入代价和边界对比语义的 beam Viterbi；完整终态强制；内部短状态剪枝和固定序列
-第二次解码；state 到 phone/word 分段。
+交付物：多发音 phone DAG；可选 `sil`/`sph` gap path；D-038 occurrence 身份；保留
+stay/move、frame bias、进入代价和边界对比语义的 beam Viterbi；完整终态强制；内部
+短状态剪枝和固定序列第二次解码；state 到 phone/word 分段；D-040 图规模与累计 beam
+work 保险丝。
 
-门禁：图/path/剪枝/第二遍特征化测试通过；不完整 path 明确失败；相邻重复词保持
-不同实例；不静默改变 `TBD-ALG-003`。
+门禁：图/path/剪枝/第二遍特征化测试通过；不完整 path 明确失败；相邻重复词和同词
+连续相同 phone occurrence 都保持不同实例；每请求 transition evaluation 计数跨所有
+chunk、第一遍和固定序列第二遍累计，精确边界允许，下一次将超出 200,000,000 时
+关闭式失败。Stage 2 图状态默认上限不由 D-040 固定。
 
 ### Stage 5 — 推理、Pipeline、CLI 与输出
 
-交付物：严格 WAV/text/词典/模型验证；惰性本地 Hugging Face 推理 adapter；顺序
-Chunker/Aligner 加载和释放；local-to-global 合并和已验证 TextGrid；Python API 和
-单文件 CLI；结构化且未经校准的 metadata。
+交付物：严格 WAV/text/词典/模型验证；D-037 名义 10 ms stride 验证；惰性本地
+Hugging Face 推理 adapter；顺序 Chunker/Aligner 加载和释放；D-036 全覆盖
+local-to-global TextGrid；Python API 和单文件 CLI；结构化且未经校准的 metadata。
 
-门禁：失败不留正式输出；输出写到同目录临时文件、回读验证后不覆盖原子发布；
-归一化的非特殊词序与输入完全一致；不联网；核心保持仅 CPU。
+门禁：失败不留正式输出；输出写到同目录临时文件、回读验证后不覆盖原子发布；两层
+TextGrid 在保留所有非 `NULL` 边界的同时严格覆盖 `[0, audio_duration]`；只接受
+16 kHz 下名义卷积总 stride 160 samples，时间戳使用 `frame_index * 0.01`；所有 D-040
+默认保险丝经公共 API/CLI 生效；归一化的非特殊词序与输入完全一致；不联网；核心保持
+仅 CPU。
 
 ### Stage 6 — 包、真实模型 E2E 与发布演练
 
@@ -374,7 +391,7 @@ publish workflow 只构建一次并发布同一上传 artifact；未经用户授
 | C2 包 smoke | 构建、metadata、干净 wheel 安装、导入和 CLI | 支持的 Python 矩阵 | 阻断 |
 | C3 posterior 等价 | 固定合成 posterior Stage 1/2 差分报告 | 每次变更/main | 阻断 |
 | C4 真实模型 E2E | 离线英语 reference/新实现双跑与完整 hash | 可信 runner/release | 发布阻断；不得成为通过的 skip |
-| C5 资源 | 上限、耗时、峰值 RSS 和模型生命周期证据 | nightly/release candidate | 发布策略 `[TBD]` |
+| C5 资源 | D-040 上限边界/关闭式失败、耗时、峰值 RSS、累计 work 和模型生命周期证据 | nightly/release candidate | 阻断 |
 
 测试采用三条分离 oracle 轨道：
 
@@ -422,23 +439,39 @@ publish workflow 只构建一次并发布同一上传 artifact；未经用户授
 - D-034：接受已披露 v0.1 预览边界，不提供宽泛旧别名；
 - D-035：根公共 README 保持中英双语，内部项目文档使用中文。
 
+2026-08-23 后续算法审阅又接受：
+
+- D-036：TextGrid 两层以 `NULL` 实现完整时间覆盖；
+- D-037：v0.1 只验证名义 10 ms Stage 2 stride；
+- D-038：连续相同 phone 按 occurrence 身份区分；
+- D-039：标准重复目标 CTC blank 约束；
+- D-040：900 s、200,000,000 trellis cells 与累计 200,000,000 beam work 等 alpha
+  初始资源保险丝，待时长 623.115875 s 的 `s0101a.wav` / `s0101a.txt` 实测复核。
+
+D-036--D-040 取代 D-034 中与其冲突的旧行为保留/延期口径，但决定本身不构成实现或
+测试通过。
+
 剩余问题是执行项或 alpha 后研究项：
 
 - `[TBD-CI-001]` 实际远端 Python/操作系统矩阵证据；
 - `[TBD-REMOTE-001]` 单独授权、可恢复的直接历史替代；
 - `[TBD-E2E-002]` 外部资产与 repo-local fixture 词典的远端可移植拆分；
 - `[TBD-REL-001]` 精确 protected environment、审批人和 Trusted Publisher；
-- 第 5 节列出的 `[TBD-ALG-001..005]` 行为修正。
+- D-036--D-040 的代码实施、before/after 审计、资源边界测试和修正后 E2E 复验。
 
 已解决选择不授予外部操作权限，也不把未运行门禁变成通过。
 
 ## 12. 立即执行顺序
 
-1. 在不削弱 candidate 关闭式保护的情况下应用并复验 D-033 approved manifest；
-2. 实施 `0.1.0a1` metadata 和 D-034 冻结推理契约，重建并测试 exact artifact；
-3. 在远端 E2E 前去除 manifest 对本地目录名的依赖；
-4. 直接替代远端 `main` 前取得单独授权并创建已验证恢复快照；
-5. 配置受保护 `pypi` environment、Trusted Publisher、自托管 E2E runner、asset root
+1. 为 D-036--D-040 增加 before/after、边界、累计资源和失败原子性测试；
+2. 实施 D-036--D-040，重跑 fast 门禁并审阅修正后的 approved-fixture E2E golden；
+3. 使用时长 623.115875 s 的 `s0101a.wav` / `s0101a.txt` 记录总耗时、各阶段耗时、
+   峰值 RSS、trellis cells、图状态、累计 transition evaluations 和 chunk 数，复核
+   D-040 alpha 初始门槛；
+4. 实施 `0.1.0a1` metadata 和 D-034 冻结推理契约，重建并测试 exact artifact；
+5. 在远端 E2E 前去除 manifest 对本地目录名的依赖；
+6. 直接替代远端 `main` 前取得单独授权并创建已验证恢复快照；
+7. 配置受保护 `pypi` environment、Trusted Publisher、自托管 E2E runner、asset root
    和离线 wheelhouse；
-6. 运行声明的 Python/操作系统矩阵、依赖审计和 protected 模型 E2E；
-7. 所有发布阻断项清除后，再分别请求 D-013 要求的 tag 和 PyPI 发布授权。
+8. 运行声明的 Python/操作系统矩阵、依赖审计和 protected 模型 E2E；
+9. 所有发布阻断项清除后，再分别请求 D-013 要求的 tag 和 PyPI 发布授权。

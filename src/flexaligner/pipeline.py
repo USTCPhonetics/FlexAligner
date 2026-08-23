@@ -58,6 +58,7 @@ from .core.stage1 import (
     word_segments_with_confidence,
 )
 from .core.stage2 import (
+    BeamWorkBudget,
     Stage2DecodeConfig,
     align_beam_viterbi,
     build_phone_graph_optional_sil_sph,
@@ -306,6 +307,7 @@ class AlignmentPipeline:
             )
             config = Stage2DecodeConfig()
             _validate_special_phones(vocabulary, session.model_vocab_size, config)
+            beam_work_budget = BeamWorkBudget(limit=options.limits.max_beam_work_units)
 
             local_alignments: list[LocalAlignment] = []
             for chunk in chunks:
@@ -327,6 +329,7 @@ class AlignmentPipeline:
                         vocabulary=vocabulary.token_to_id,
                         config=config,
                         context=f"local chunk_id={chunk.chunk_id}",
+                        beam_work_budget=beam_work_budget,
                     )
                 )
             return local_alignments
@@ -640,6 +643,7 @@ def _stage2_from_posterior(
     vocabulary: Mapping[str, int],
     config: Stage2DecodeConfig,
     context: str,
+    beam_work_budget: BeamWorkBudget,
 ) -> LocalAlignment:
     silence_id = vocabulary[config.sil_phone]
     speech_gap_id = vocabulary[config.sph_phone]
@@ -675,6 +679,7 @@ def _stage2_from_posterior(
             sil_enter_cost=SILENCE_ENTER_COST,
             sph_phone_id=speech_gap_id,
             sph_enter_cost=SPEECH_GAP_ENTER_COST,
+            beam_work_budget=beam_work_budget,
         )
         aligned, stats = redecode_with_pruned_fixed_sequence(
             first_pass_ali=first_pass,
@@ -686,6 +691,7 @@ def _stage2_from_posterior(
             sph_phone=config.sph_phone,
             sph_phone_id=speech_gap_id,
             config=config,
+            beam_work_budget=beam_work_budget,
         )
     except RuntimeError as error:
         if "Viterbi failed to reach any end state" in str(error):

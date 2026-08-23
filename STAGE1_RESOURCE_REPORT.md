@@ -1,6 +1,6 @@
 # Stage 1 稠密 trellis 资源报告
 
-> 状态：Stage 3 无模型审计完成
+> 状态：D-039/D-040 已实施并通过代码级与短自然语音 E2E；长音频性能待解决
 >
 > 日期：2026-08-11（Asia/Shanghai）
 >
@@ -8,8 +8,8 @@
 
 ## 复杂度契约
 
-设 `T` 为 emission 帧数，`N` 为目标 phone token 数。稠密动态规划表形状为
-`(T + 1, N + 1)`：
+以下公式描述 D-039 之前、当前已验证的简化 recurrence。设 `T` 为 emission 帧数，
+`N` 为目标 phone token 数。稠密动态规划表形状为 `(T + 1, N + 1)`：
 
 ```text
 cells = (T + 1) * (N + 1)
@@ -35,21 +35,39 @@ bytes = cells * dtype.itemsize
 这些估算只描述分配大小，不表示较大的示例可以安全运行。进程峰值内存还包括模型、
 emission、Python 对象、NumPy 临时对象和分配器开销。
 
+## D-039 重复目标修正的核算要求
+
+D-039 已批准标准重复目标 CTC blank 约束：相邻相同目标必须由至少一个 blank 帧分隔，
+且同词、跨词及去除 ARPAbet 重音后形成的重复一视同仁。该决定有意偏离上述冻结
+reference 行为，现已实施并通过具名 before/after 与独立穷举测试。
+
+当前 repeat-aware recurrence 保持 `(T + 1, N + 1)` trellis：进入重复目标时从
+`t-2` 状态一次计入 separator blank 和当前 emit，backtrace 同步跳过该 blank 帧。
+因此 cell 公式仍为 `(T + 1)(N + 1)`，但最少所需帧数变为 `N + R`，其中 `R` 是相邻
+重复目标数。D-040 上限在分配前按该实际矩阵精确核算。
+
 ## 上限策略与已验证不变量
 
-`TBD-ALG-005` 尚未解决：本阶段**没有**建立适用于整个包的安全默认时长、phone 数、
-trellis cell、峰值 RSS 或 beam work 上限。当前唯一接受的 Stage 1 保护是调用方提供
-正数 `max_trellis_cells`。
+D-040 已批准并实施 v0.1 alpha 初始默认保险丝：音频最长 900 s、单次 Stage 1
+trellis 最多 200,000,000 cells。精确边界和分配前失败测试通过。指定 `s0101a`
+静态精确核算为 105,089,188 cells，但 1,370.879 s 的真实运行仍停留在 Chunker
+前向，没有实际分配 trellis；详见 `ALPHA_RESOURCE_VALIDATION.md`。words 和 phone
+targets 的包级默认值未由 D-040 固定，仍可使用调用方显式限制。
 
-实施门禁要求在分配前失败：
+修正后的实施门禁要求在昂贵工作/分配前失败：
 
-1. 验证维度、ID、有限 score 和请求的上限；
-2. 使用 Python 整数计算精确 cell 数；
-3. 如果 `cells > max_trellis_cells`，抛出类型化资源上限错误；
-4. 只有通过后才分配稠密 trellis。
+1. 从已验证 WAV header 拒绝 `duration_s > 900`；
+2. 验证维度、ID、有限 score 和请求的上限；
+3. 使用 Python 整数计算 D-039 修正后实际 trellis cell 数；
+4. 如果 `cells > 200_000_000`，抛出 `ResourceLimitError`；精确等于上限允许继续；
+5. 只有全部检查通过后才分配稠密 trellis。
 
-不变量测试会 monkeypatch trellis 分配器，证明超过显式上限时会在调用
-`numpy.full` 前抛错。`None` 表示调用方没有提供上限，不得把它描述成安全默认值。
+若调用方提供比默认值更窄的正限制，应采用更窄限制；不得通过传入 `None` 无意关闭
+包级默认保险丝。错误必须带稳定的 `resource_limit_exceeded` code 和实际值/上限 context。
+
+下列既有不变量证据只验证 D-040 之前的显式调用方上限。新门禁必须继续使用分配器
+monkeypatch，分别证明每个默认边界的等值通过、超值失败，以及超限时没有调用
+`numpy.full` 或进入后续模型/对齐工作。
 
 ## 本地验证
 
@@ -76,6 +94,7 @@ ruff format --check tests/core/test_stage1_invariants.py STAGE1_RESOURCE_REPORT.
 
 ## 验收边界
 
-本报告支持可复现的复杂度核算和显式调用方保护，但没有解决 `TBD-ALG-005`，没有
-建立生产安全默认值，也不对长录音作可靠性声明。确定默认值需要在已接受的硬件和
-工作负载范围上测量峰值 RSS 与耗时，然后记录明确决定。
+2026-08-11 数值表仍是修正前历史证据；上方公式已按当前 D-039 实现复核。D-039/D-040
+代码级门禁通过，但不证明 900 s 输入一定成功、满足 SLA 或适合任意不可信输入。
+`s0101a` 实测因 Chunker 前向性能中止，实际 trellis 尚未分配；该长样本验收保持失败，
+详见 `ALPHA_RESOURCE_VALIDATION.md`。

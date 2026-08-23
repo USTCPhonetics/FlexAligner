@@ -16,6 +16,7 @@ import numpy as np
 import pytest
 
 from flexaligner.core import stage2
+from flexaligner.errors import ResourceLimitError
 from tests.characterization.stage2_oracle import exhaustive_viterbi, score_state_path
 
 NO_GAPS = {
@@ -688,6 +689,100 @@ def _baseline_decode_inputs() -> tuple[stage2.PhoneGraph, np.ndarray, np.ndarray
     return graph, np.zeros((3, 2), dtype=np.float32), np.zeros(2, dtype=np.float32)
 
 
+def test_beam_work_budget_counts_start_stay_successors_and_terminal() -> None:
+    graph, logp, entry_bias = _baseline_decode_inputs()
+    budget = stage2.BeamWorkBudget(limit=8)
+
+    stage2.align_beam_viterbi(
+        logp,
+        graph,
+        entry_bias,
+        beam_size=2,
+        beam_work_budget=budget,
+    )
+
+    # start=1; frame 1: stay+move=2; frame 2: (stay+move)+(stay)=3; terminal=2.
+    assert budget.used == 8
+
+
+def test_beam_work_budget_fails_closed_one_unit_below_exact_work() -> None:
+    graph, logp, entry_bias = _baseline_decode_inputs()
+    budget = stage2.BeamWorkBudget(limit=7)
+
+    with pytest.raises(ResourceLimitError) as caught:
+        stage2.align_beam_viterbi(
+            logp,
+            graph,
+            entry_bias,
+            beam_size=2,
+            beam_work_budget=budget,
+        )
+
+    assert caught.value.code == "resource_limit_exceeded"
+    assert dict(caught.value.context) == {"used": 6, "requested": 2, "limit": 7}
+    assert budget.used == 6
+
+
+def test_beam_work_budget_is_cumulative_across_decodes() -> None:
+    graph, logp, entry_bias = _baseline_decode_inputs()
+    budget = stage2.BeamWorkBudget(limit=15)
+    arguments = {
+        "logp": logp,
+        "graph": graph,
+        "entry_bias": entry_bias,
+        "beam_size": 2,
+        "beam_work_budget": budget,
+    }
+
+    stage2.align_beam_viterbi(**arguments)
+    with pytest.raises(ResourceLimitError):
+        stage2.align_beam_viterbi(**arguments)
+
+    assert budget.used == 14
+
+
+def test_beam_work_budget_counts_successor_blocked_by_silence_lock() -> None:
+    graph = _manual_graph(
+        state_specs=[("sil", 0, None, None), ("A", 1, 0, "word")],
+        successors=[(1,), ()],
+        start_states=[0],
+        end_states=[1],
+    )
+    budget = stage2.BeamWorkBudget(limit=2)
+
+    with pytest.raises(ResourceLimitError) as caught:
+        stage2.align_beam_viterbi(
+            np.zeros((2, 2), dtype=np.float32),
+            graph,
+            np.zeros(2, dtype=np.float32),
+            beam_size=2,
+            sil_phone_id=0,
+            min_sil_dur_ms=30.0,
+            beam_work_budget=budget,
+        )
+
+    # The locked successor is visited by the loop and therefore charged.
+    assert dict(caught.value.context) == {"used": 1, "requested": 2, "limit": 2}
+
+
+@pytest.mark.parametrize(
+    ("arguments", "error"),
+    [
+        ({"limit": True}, TypeError),
+        ({"limit": 0}, ValueError),
+        ({"used": True}, TypeError),
+        ({"used": -1}, ValueError),
+        ({"limit": 1, "used": 2}, ValueError),
+    ],
+)
+def test_beam_work_budget_rejects_invalid_state(
+    arguments: dict[str, object],
+    error: type[Exception],
+) -> None:
+    with pytest.raises(error):
+        stage2.BeamWorkBudget(**arguments)
+
+
 @pytest.mark.parametrize(
     ("bad_logp", "error"),
     [
@@ -850,6 +945,7 @@ def test_redecode_clears_gap_constraints_and_returns_typed_stats(
         return first_pass
 
     monkeypatch.setattr(stage2, "align_beam_viterbi", capture_decoder)
+    beam_work_budget = stage2.BeamWorkBudget()
     _alignment, stats = stage2.redecode_with_pruned_fixed_sequence(
         first_pass_ali=first_pass,
         first_pass_graph=graph,
@@ -860,9 +956,11 @@ def test_redecode_clears_gap_constraints_and_returns_typed_stats(
         sph_phone="sph",
         sph_phone_id=None,
         config=stage2.Stage2DecodeConfig(),
+        beam_work_budget=beam_work_budget,
     )
 
     assert captured["min_sil_dur_ms"] == 0.0
     assert captured["sil_enter_cost"] == 0.0
     assert captured["sph_enter_cost"] == 0.0
+    assert captured["beam_work_budget"] is beam_work_budget
     assert isinstance(stats, stage2.RedecodeStats)

@@ -41,6 +41,17 @@ def _score_emission_frames(
     return score
 
 
+def _has_required_repeat_separators(
+    targets: Sequence[int],
+    emission_frames: Sequence[int],
+) -> bool:
+    return all(
+        targets[index] != targets[index - 1]
+        or emission_frames[index] >= emission_frames[index - 1] + 2
+        for index in range(1, len(targets))
+    )
+
+
 def _brute_force_trellis(
     log_probs: FloatArray,
     targets: Sequence[int],
@@ -62,6 +73,8 @@ def _brute_force_trellis(
         for consumed in range(1, min(time, target_count) + 1):
             best = -math.inf
             for emission_frames in itertools.combinations(range(time), consumed):
+                if not _has_required_repeat_separators(targets[:consumed], emission_frames):
+                    continue
                 candidate = _score_emission_frames(
                     log_probs,
                     targets[:consumed],
@@ -125,6 +138,14 @@ def test_fixed_seed_small_trellises_match_exhaustive_paths(dtype: Any) -> None:
             scores = rng.normal(size=(frame_count, 4)).astype(dtype)
             targets = rng.integers(1, 4, size=target_count).tolist()
 
+            required_frames = target_count + sum(
+                current == previous for previous, current in itertools.pairwise(targets)
+            )
+            if required_frames > frame_count:
+                with pytest.raises(RuntimeError, match="failed to consume all targets"):
+                    stage1.build_trellis(scores, targets, blank_id=0)
+                continue
+
             actual = stage1.build_trellis(scores, targets, blank_id=0)
             expected = _brute_force_trellis(scores, targets, blank_id=0)
 
@@ -139,15 +160,22 @@ def test_fixed_seed_small_trellises_match_exhaustive_paths(dtype: Any) -> None:
                 atol=2e-6,
             )
             for time_index in range(frame_count + 1):
-                reachable = min(time_index, target_count)
-                assert np.isfinite(actual[time_index, : reachable + 1]).all()
-                assert np.isneginf(actual[time_index, reachable + 1 :]).all()
+                for consumed in range(target_count + 1):
+                    minimum_frames = consumed + sum(
+                        current == previous
+                        for previous, current in itertools.pairwise(targets[:consumed])
+                    )
+                    if minimum_frames <= time_index:
+                        assert np.isfinite(actual[time_index, consumed])
+                    else:
+                        assert np.isneginf(actual[time_index, consumed])
 
             points = stage1.backtrace(actual, scores, targets, blank_id=0)
             emission_frames = [point.time_index for point in points]
             finish = int(np.argmax(actual[:, target_count]))
             assert [point.token_index for point in points] == list(range(target_count))
             assert emission_frames == sorted(set(emission_frames))
+            assert _has_required_repeat_separators(targets, emission_frames)
             assert all(0 <= frame < finish <= frame_count for frame in emission_frames)
             assert _path_score(
                 scores,
@@ -377,8 +405,11 @@ def test_trellis_rejects_out_of_range_target_id(target_id: int) -> None:
         stage1.build_trellis(np.zeros((2, 3), dtype=np.float64), [target_id], blank_id=0)
 
 
-def test_trellis_accepts_numpy_integer_ids_and_repeated_targets() -> None:
-    scores = np.asarray([[0.0, 2.0], [0.0, 2.0]], dtype=np.float64)
+def test_trellis_requires_blank_between_repeated_numpy_integer_targets() -> None:
+    scores = np.asarray(
+        [[-10.0, 0.0], [0.0, -10.0], [-10.0, 0.0]],
+        dtype=np.float64,
+    )
 
     trellis = stage1.build_trellis(
         scores,
@@ -387,7 +418,15 @@ def test_trellis_accepts_numpy_integer_ids_and_repeated_targets() -> None:
     )
     points = stage1.backtrace(trellis, scores, [1, 1], blank_id=0)
 
-    assert [(point.token_index, point.time_index) for point in points] == [(0, 0), (1, 1)]
+    assert trellis.shape == (4, 3)
+    assert [(point.token_index, point.time_index) for point in points] == [(0, 0), (1, 2)]
+
+
+def test_trellis_rejects_adjacent_repeats_without_separator_frame() -> None:
+    scores = np.asarray([[-10.0, 0.0], [-10.0, 0.0]], dtype=np.float64)
+
+    with pytest.raises(RuntimeError, match="failed to consume all targets"):
+        stage1.build_trellis(scores, [1, 1], blank_id=0)
 
 
 def test_trellis_rejects_empty_or_unreachable_targets() -> None:

@@ -9,18 +9,76 @@ from typing import Any, cast
 import numpy as np
 import pytest
 
-from flexaligner import AlignmentOptions, ScoreKind
+from flexaligner import AlignmentOptions, ResourceLimits, ScoreKind
+from flexaligner.adapters.lexicon_file import PronouncingLexicon
+from flexaligner.adapters.wav_pcm16 import DecodedAudio
 from flexaligner.errors import (
     AlignmentError,
     FlexAlignerError,
     InternalError,
     ModelCompatibilityError,
+    ResourceLimitError,
     UnreachableAlignmentError,
 )
-from flexaligner.pipeline import AlignmentPipeline, _validate_posterior_vocabulary
+from flexaligner.pipeline import (
+    AlignmentPipeline,
+    _stage1_from_posterior,
+    _validate_posterior_vocabulary,
+)
 from flexaligner.ports import CtcPosterior
 from flexaligner.textgrid import labels_from_intervals, parse_textgrid_long
 from tests.integration._support import FakeInferenceFactory, make_integration_fixture
+
+
+@pytest.mark.parametrize(
+    ("words", "entries", "phone"),
+    [
+        pytest.param(
+            ["within"],
+            {"within": (("AA1", "AA2"),)},
+            "AA",
+            id="same-word-after-stress-stripping",
+        ),
+        pytest.param(
+            ["first", "second"],
+            {"first": (("S",),), "second": (("S",),)},
+            "S",
+            id="cross-word",
+        ),
+    ],
+)
+def test_stage1_pipeline_requires_blank_for_repeats_from_lexicon_context(
+    words: list[str],
+    entries: dict[str, tuple[tuple[str, ...], ...]],
+    phone: str,
+) -> None:
+    log_probs = np.asarray(
+        [[-10.0, 0.0], [0.0, -10.0], [-10.0, 0.0]],
+        dtype=np.float32,
+    )
+    posterior = CtcPosterior(log_probs=log_probs, seconds_per_frame=0.01)
+    audio = DecodedAudio(
+        samples=np.zeros(16_000, dtype=np.float32),
+        sample_rate=16_000,
+        duration_s=1.0,
+    )
+
+    chunks, word_spans = _stage1_from_posterior(
+        posterior=posterior,
+        audio=audio,
+        words=words,
+        lexicon=PronouncingLexicon(entries=entries),
+        vocabulary={"<pad>": 0, phone: 1},
+        blank_id=0,
+        utterance_id="repeat",
+        options=AlignmentOptions(),
+    )
+
+    assert [span.word for span in word_spans] == words
+    assert [span.pron for span in word_spans] == [[phone] * len(entries[word][0]) for word in words]
+    assert word_spans[0].start_frame == 0
+    assert word_spans[-1].end_frame == 3
+    assert [word for chunk in chunks for word in chunk.words] == words
 
 
 def test_real_numpy_cores_produce_validated_outputs_and_public_result(tmp_path: Path) -> None:
@@ -119,6 +177,27 @@ def test_unreachable_stage2_is_typed_and_leaves_no_artifact(tmp_path: Path) -> N
             options=AlignmentOptions(),
         )
     assert not fixture.request.output.path.exists()
+
+
+def test_stage2_beam_work_limit_is_typed_and_leaves_no_artifact(tmp_path: Path) -> None:
+    fixture = make_integration_fixture(tmp_path)
+    pipeline = AlignmentPipeline(inference_factory=FakeInferenceFactory())
+
+    with pytest.raises(ResourceLimitError) as caught:
+        pipeline.align(
+            request=fixture.request,
+            models=fixture.models,
+            lexicon_path=fixture.lexicon_path,
+            options=AlignmentOptions(limits=ResourceLimits(max_beam_work_units=1)),
+        )
+
+    assert caught.value.code == "resource_limit_exceeded"
+    assert caught.value.context["limit"] == 1
+    official_paths = (fixture.request.output.path, fixture.request.output.chunk_metadata_path)
+    for path in official_paths:
+        assert path is not None
+        assert not path.exists()
+        assert not path.with_name(path.name + ".tmp").exists()
 
 
 def test_chunk_tokenizer_mapping_must_exactly_match_external_vocab(

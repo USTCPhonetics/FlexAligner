@@ -1,6 +1,6 @@
 # FlexAligner 干净基线重建项目档案
 
-> 文档状态：工程验收完成；用户发布决策已落档；公开发布阻断
+> 文档状态：D-039/D-040 已实施；D-036--D-038 待实施；公开发布阻断
 > 建立日期：2026-08-11（Asia/Shanghai）
 > 当前阶段：Stage 8 — 批阅决定实施与复验
 
@@ -55,7 +55,7 @@
 | SHA-256 | `9ed4e21e615718ddfd10930359f55769fb27a0d284599cce45a3fc755e835de1` |
 | 规模 | 2,548 行 |
 | 用途 | 算法语义参考、行为 oracle；生产包不得 import |
-| 当前限制 | 连续覆盖、固定 Stage 2 stride、重复 phone state、Stage 1 重复标签约束、资源上限等问题尚未解决 |
+| 当前限制 | Reference 仍包含 gap、未验证名义 stride、重复 phone state 折叠和简化重复标签 recurrence；当前代码已实施 D-039/D-040，D-036--D-038 仍待实施 |
 
 “以本地逻辑为准”不是逐行复制，也不是把已知限制静默宣布为正确行为。
 实施顺序是先特征化、再等价迁移；行为更改必须单独记录决定。
@@ -81,13 +81,17 @@
 | 首个公开版本 | `PUBLIC_ALPHA` / `0.1.0a1`；当前 `pyproject.toml` 仍为 `0.1.0.dev0`，待实施复验 |
 | 发布 | 未授权、未执行 |
 | 生产代码 | 严格英语 CPU 单文件管线、API/CLI、本地推理、TextGrid 事务及未来能力占位已接通 |
-| 测试 | 676 项禁网 fast tests 通过；分支覆盖率 92.31% |
+| 测试 | 当前 696 项禁网 fast tests 通过，1 项模型 E2E deselected；Ruff、strict mypy 通过 |
 | reference | 仓内字节冻结并 hash guard；禁止进入生产 import、wheel 或 sdist |
 | E2E 资产 | 16 项资产与精确运行时通过；D-033 fixture-only approved exact-wheel 本地 E2E 通过；protected remote 门禁仍未运行 |
-| Stage 1 资源 | 精确 O(TN) 估算和显式 cell limit 已验证；安全默认值 `[TBD-ALG-005]` |
-| Stage 2 资源 | O(TB(1+d)) / O(TB) 复杂度已审计；`beam=400` 不是已验证安全上限 |
+| Stage 1 资源 | D-039 repeat-aware `(T+1,N+1)` trellis 与 D-040 默认 900 s/200M cells 已实施；`english_natural` 实测 11,546 cells；word/phone 默认值未固定 |
+| Stage 2 资源 | D-040 累计 200M transition evaluations 和 `beam=400` 已实施；`english_natural` 实测 281,411 work；900 s 长音频性能未通过，图状态默认值未固定 |
 
 ## 4. 核心算法契约摘要
+
+以下条目区分历史等价基线与后续修正。D-039 标准重复目标 CTC blank 约束和 D-040
+默认资源保险丝已经通过代码级与短自然语音 E2E；D-036 TextGrid 全覆盖、D-037 名义
+10 ms stride 验证和 D-038 phone occurrence 身份仍未实施。
 
 ### Stage 1
 
@@ -131,7 +135,7 @@
 
 | ID | 冲突 | 当前处置 |
 |---|---|---|
-| C-001 | 旧会话曾描述 reference 已补齐连续 gap；当前脚本没有相邻无 gap/终点覆盖的严格保证 | 当前脚本优先；旧描述不进入基线，修复为 `[TBD-ALG-001]` |
+| C-001 | 旧会话曾描述 reference 已补齐连续 gap；当前脚本没有相邻无 gap/终点覆盖的严格保证 | 当前脚本优先；旧描述不进入基线；D-036 已批准修复目标，但实施/复验仍为 `NOT_RUN` |
 | C-002 | 旧普通话实验曾使用 `optional_sph=False`；当前脚本默认 `True` | 普通话本里程碑仅占位，不继承旧实验特例 |
 | C-003 | 远端 README/代码描述多格式、批量、GPU、G2P 等能力；当前核心范围不实现 | README 能力表按新包实测重写；这些能力只留占位接口 |
 | C-004 | 远端核心与本地脚本虽同为“两阶段”，但终止、切块、图、评分和失败语义不同 | 不静默混合；新核心只以本地脚本为迁移参考 |
@@ -151,5 +155,5 @@
 | `OPEN_QUESTIONS.md` | 未决项、默认占位和阻塞范围 |
 | `REAL_MODEL_E2E_REPORT.md` | 冻结资产、确切 wheel、reference 差分及发布阻断证据 |
 | `FINAL_ACCEPTANCE_REPORT.md` | 工程验收结论、发行候选和最小发布前计划 |
-| `REVIEW_DECISION_REPORT.md` | 用户批阅选项、D-029..D-034 结果和外部授权边界 |
+| `REVIEW_DECISION_REPORT.md` | 用户批阅选项、D-029--D-040 结果和外部授权边界 |
 | `docs/archive/2026-08-22-english-docs.md` | 中文化前英文内部文档的提交、SHA-256 与 Git blob 恢复索引 |

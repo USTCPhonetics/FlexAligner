@@ -9,11 +9,6 @@
 | TBD-REMOTE-001 | 何时取得直接替代 `USTCPhonetics/FlexAligner` main 历史的单独外部授权？替代前保留什么经过验证的恢复快照？ | `REPLACE_MAIN_HISTORY` 只是已接受策略；尚未授权 remote、push、force update、默认分支修改或历史删除 | 远端历史替代 |
 | TBD-E2E-002 | approved E2E manifest 如何去除对 `flexaligner-rebuild/tests/fixtures/e2e/english_synthetic.dict` 本地路径的依赖，并在目标远端 runner 证明可移植性？ | 保留 approved 本地 fixture 并关闭式失败；本地 Q-007 只覆盖已验证的 exact-wheel 运行，在完成可移植布局和实际复跑前不得声称 protected remote E2E 通过 | 远端/release E2E 可移植性 |
 | TBD-REL-001 | `USTCPhonetics/FlexAligner` 将使用哪个精确 workflow identity、受保护 `pypi` environment、审批人和 Trusted Publisher 绑定？ | 目标项目和包 owner 已选定，但尚未配置或授权远端 environment/publisher | 实际 PyPI 上传 |
-| TBD-ALG-001 | 是否修正连续覆盖？ | 已完成当前行为特征化；alpha 保留并披露 gap 行为 | 行为修正后的 MVP 声明 |
-| TBD-ALG-002 | Stage 2 stride 策略是什么？ | 为保持等价，保留 0.01 s 并报告不匹配 | 动态 timing 声明 |
-| TBD-ALG-003 | 连续相同 phone 状态如何区分身份？ | 为保持等价，保留当前行为 | 修正后的 phone 身份声明 |
-| TBD-ALG-004 | 是否加入标准重复标签 CTC 约束？ | 为保持等价，保留当前简化 recurrence | 算法修正声明 |
-| TBD-ALG-005 | 资源上限如何确定？ | 只有测量后才加入保守且有测试的上限 | 生产安全声明 |
 | TBD-OUT-001 | 可选 metadata 与 TextGrid 两个文件之间应采用什么崩溃一致性协议？ | 两者均先暂存并验证；先提交 metadata，最后提交 TextGrid；回滚进程可见失败 | 多产物崩溃/断电原子性声明 |
 | TBD-API-002 | 最终 phone interval 如何保留固定状态的 word/phone provenance？ | 暴露 `word_index=None`、`phone_index=None`；不得推断缺失 provenance | phone 到 word 的 provenance 声明 |
 | TBD-PROV-001 | 公共 provenance 应采用什么规范的模型目录指纹格式？ | `model_fingerprints` 保持空；E2E manifest 保留资产 hash | 公共可复现性 schema |
@@ -33,6 +28,11 @@
 | TBD-LIC-001 | 使用固定的原远端 README 和同提交 LICENSE 作为 MIT、版权、作者、单位与引用身份来源 | D-032 |
 | TBD-API-001 | v0.1 预览不提供宽泛旧兼容层；只有确认真实调用方后才重开 | D-034 |
 | TBD-E2E-001 | 指定发音只批准为冻结 release-E2E fixture | D-033 |
+| TBD-ALG-001 | phones/words 两层以 `NULL` 填充全部未覆盖时段 | D-036 |
+| TBD-ALG-002 | v0.1 只验证名义 10 ms stride | D-037 |
+| TBD-ALG-003 | 连续相同 phone 按 occurrence 身份区分 | D-038 |
+| TBD-ALG-004 | 采用标准重复目标 CTC blank 约束 | D-039 |
+| TBD-ALG-005 | 采用 900 s、200M trellis cells 与累计 200M transition evaluations 的待实测 alpha 初始保险丝 | D-040 |
 
 ## 当前范围已经固定、不是问题的事项
 

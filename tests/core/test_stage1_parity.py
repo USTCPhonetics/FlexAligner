@@ -257,29 +257,24 @@ def test_backtrace_tie_prefers_stay(reference: SimpleNamespace) -> None:
     assert _point_pairs(actual_points) == [(0, 0), (1, 2)]
 
 
-def test_repeated_target_keeps_named_current_behavior(reference: SimpleNamespace) -> None:
+def test_repeated_target_intentionally_corrects_frozen_reference_behavior(
+    reference: SimpleNamespace,
+) -> None:
     assert oracle.CURRENT_BEHAVIOR_REPEATED_TARGETS.startswith("current_behavior:")
     expected_trellis = reference.build_trellis(
         oracle.as_reference_tensor(REPEATED_TARGET_LOG_PROBS),
         REPEATED_TARGETS,
         0,
     )
-    actual_trellis = production.build_trellis(REPEATED_TARGET_LOG_PROBS, REPEATED_TARGETS, 0)
     expected_points = reference.backtrace(
         expected_trellis,
         oracle.as_reference_tensor(REPEATED_TARGET_LOG_PROBS),
         REPEATED_TARGETS,
         0,
     )
-    actual_points = production.backtrace(
-        actual_trellis,
-        REPEATED_TARGET_LOG_PROBS,
-        REPEATED_TARGETS,
-        0,
-    )
-
-    assert_reference_equivalent(expected_points, actual_points)
-    assert _point_pairs(actual_points) == [(0, 0), (1, 1)]
+    assert _point_pairs(expected_points) == [(0, 0), (1, 1)]
+    with pytest.raises(RuntimeError, match="failed to consume all targets"):
+        production.build_trellis(REPEATED_TARGET_LOG_PROBS, REPEATED_TARGETS, 0)
 
 
 def test_trellis_resource_estimate_and_limit_fail_before_allocation() -> None:

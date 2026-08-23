@@ -74,6 +74,38 @@ def test_integer_resource_limits_are_strict(
         public_api.ResourceLimits(max_trellis_cells=value)
 
 
+def test_beam_work_limit_has_approved_default_and_rejects_none(
+    public_api: ModuleType,
+) -> None:
+    assert public_api.ResourceLimits().max_beam_work_units == 200_000_000
+    with pytest.raises(public_api.ConfigurationError):
+        public_api.ResourceLimits(max_beam_work_units=None)
+
+
+def test_approved_default_limits_cannot_be_disabled_with_none(public_api: ModuleType) -> None:
+    for field_name in ("max_audio_seconds", "max_trellis_cells", "max_beam_work_units"):
+        with pytest.raises(public_api.ConfigurationError):
+            public_api.ResourceLimits(**{field_name: None})
+    with pytest.raises(public_api.ConfigurationError):
+        public_api.AlignmentOptions(limits=None)
+
+
+def test_alpha_resource_limits_have_approved_initial_defaults(public_api: ModuleType) -> None:
+    limits = public_api.ResourceLimits()
+    assert limits.max_audio_seconds == 900.0
+    assert limits.max_trellis_cells == 200_000_000
+    assert public_api.AlignmentOptions().limits == limits
+
+
+@pytest.mark.parametrize("value", [True, 1.5, 0, -1])
+def test_beam_work_limit_is_a_strict_positive_integer(
+    public_api: ModuleType,
+    value: object,
+) -> None:
+    with pytest.raises(public_api.ConfigurationError):
+        public_api.ResourceLimits(max_beam_work_units=value)
+
+
 @pytest.mark.parametrize("value", [True, 0.0, -1.0, float("nan"), float("inf")])
 def test_audio_resource_limit_is_positive_finite_real(
     public_api: ModuleType,

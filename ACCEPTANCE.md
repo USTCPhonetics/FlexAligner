@@ -6,6 +6,9 @@
 >
 > 状态词表：`NOT_RUN`、`IN_PROGRESS`、`PASS`、`FAIL`、`BLOCKED`、
 > `PLACEHOLDER`、`N/A`。
+>
+> 2026-08-23 边界：既有 `PASS` 是 D-036--D-040 之前的迁移/工程基线证据。新增决定
+> 取代冲突的发布目标，但不会倒写历史测试结果；修正项必须由下列新增行独立复验。
 
 ## A. Stage 0 — 仓库与治理
 
@@ -42,16 +45,19 @@
 | S2-005 | 差分框架报告字段级不一致并禁止随意更新 golden | PASS | 差分测试 4 passed；特征化规则审计 | A/B/C 类分开；没有 update-golden 入口 |
 | S2-006 | 真实模型 fixture manifest 记录 hash、版本和 provenance | PASS | 16/16 hash 加精确 3.10.8/2.2.6/2.3.1/4.41.2 运行时预检 | D-033 approved fixture；本地 exact-wheel 对齐证据另见 Q-007 |
 | S2-007 | 缺少 E2E 资产产生 `BLOCKED`/明确预检失败，不得变成通过的 skip | PASS | `test_verify_model_assets.py`：7 passed；负例子进程非零退出 | Workflow 绑定已提交 manifest 和精确运行时检查 |
+| S2-008 | D-036--D-040 每项修正都有绑定决定 ID 的 before/after 特征化和独立 oracle | NOT_RUN | 待新增具名测试与字段级差分报告 | 不得覆盖 reference fixture 或用新 golden 代替旧行为证据 |
 
 ## D. Stage 3 — Stage 1 实现
 
 | ID | 验收条件 | 状态 | 证据/命令 | 审阅备注 |
 |---|---|---|---|---|
 | S3-001 | 第一条发音与 Chunker 重音数字移除匹配 reference | PASS | 三方等价测试：123 passed | 覆盖首个 variant/顺序/失败上下文 |
-| S3-002 | Trellis/backtrace（含目标提前完成）匹配 reference | PASS | reference + NumPy oracle + 固定种子穷举 | 固定 tie-stay 和重复目标当前行为 |
+| S3-002 | D-039 之前的 trellis/backtrace（含目标提前完成）匹配 reference | PASS | reference + NumPy oracle + 固定种子穷举 | 历史迁移证据；其中“重复目标当前行为”已被 D-039 取代，不是新发布目标 |
 | S3-003 | Word emission confidence 匹配未经校准的 reference 定义 | PASS | emission/平均帧/phone-to-word 数值等价 | 保留概率几何平均语义 |
 | S3-004 | ±0.3 s anchor、严格 `<0.2 s` 合并和毫秒网格匹配 reference | PASS | 边界/取整/尾部裁剪等价与负例 | D-019 下 NaN/Inf 在取整前明确失败 |
 | S3-005 | 每个 word index 按顺序恰好覆盖一次，否则对齐失败 | PASS | 重复/缺失/乱序/word mismatch 不变量 | 重复 word label 仍按 index 区分 |
+| S3-006 | D-039 标准重复目标 CTC blank 约束已实施 | PASS | 同词、跨词、去除 ARPAbet 重音后重复、2 帧失败/3 帧 blank 分隔测试；fast 696 passed | 有意偏离冻结 reference；before 行为仍由具名 parity 测试保存 |
+| S3-007 | D-040 Stage 1 默认保险丝在工作分配前生效 | PASS | 默认 900 s/200M 契约测试；精确 cell 等值通过/超值在 `numpy.full` 前失败；`s0101a` 静态为 105,089,188 cells | 真实长样本在 trellis 前因 Chunker 性能中止；详见 `ALPHA_RESOURCE_VALIDATION.md` |
 
 ## E. Stage 4 — Stage 2 实现
 
@@ -63,7 +69,9 @@
 | S4-004 | 内部短 `sil`/`sph` 剪枝匹配 65/50 ms 阈值 | PASS | 专用锁定/剪枝边界测试 | Viterbi 使用 `round`（65 ms → 6）；prune 使用 `ceil`（65 ms → 7） |
 | S4-005 | 固定状态第二次解码匹配 reference | PASS | reference 等价、精确 DP 不变量和参数捕获回归 | 第二遍明确清零 minimum lock 和两个进入代价 |
 | S4-006 | 相邻重复词保留不同 word index | PASS | 重复 `go go` phone/word 分段测试 | Word 身份按 index，不只按 label |
-| S4-007 | 相同 phone 状态限制已特征化，未静默修改 | PASS | 具名当前行为测试；D-020 | 同一词内相同 phone 状态仍折叠，等待 TBD-ALG-003 |
+| S4-007 | D-038 之前的相同 phone 状态限制已特征化 | PASS | 具名当前行为测试；D-020 | 历史迁移证据；折叠行为已被 D-038 取代，不是新发布目标 |
+| S4-008 | D-038 连续相同 phone occurrence 在两遍解码和分段中保持独立身份 | NOT_RUN | 待验证至少 `(word_index, phone_index)` 经图、path、fixed state、phone/word segment 传播 | 与 `TBD-API-002` provenance 实施联动，不得按 label 合并 |
+| S4-009 | D-040 Stage 2 累计 beam work 保险丝关闭式生效 | PASS | start/stay/successor/terminal 精确计数、少一单位超限、跨 decode/两遍共享和 pipeline 无残留测试；fast 696 passed | 默认 200M，beam 400；指定长样本未进入 Stage 2，实际 work 仍待性能优化后复测 |
 
 ## F. Stage 5 — Pipeline、CLI 与输出
 
@@ -76,6 +84,11 @@
 | S5-005 | TextGrid 临时写入、回读验证并以不覆盖方式原子发布 | PASS | 34 项 TextGrid/事务测试 | No-clobber 硬链接提交；inode/字节/语义后验证；保留 TBD-OUT-001 |
 | S5-006 | 失败运行不留下正式成功产物 | PASS | 竞态、篡改、symlink 和失败注入测试 | 回滚只删除仍由本次调用拥有的产物 |
 | S5-007 | Confidence metadata 明确未经校准 | PASS | pipeline/API/metadata 集成测试 | Raw score 为有限 `[0,1]`；`calibrated=false`，不替换为校准 score |
+| S5-008 | D-036 phones/words 两层以 `NULL` 严格覆盖完整音频 | NOT_RUN | `english_natural` before 输出在两层均有 `[4.751, 4.773]` 的 22 ms gap；待实施填充和修正后 golden | 保持所有非 `NULL` 边界；覆盖区间为 `[0, audio_duration]` |
+| S5-009 | D-037 v0.1 Aligner 名义 10 ms stride 契约关闭式生效 | NOT_RUN | 待验证 16 kHz、卷积总 stride 160 samples、输出长度兼容性和非 10 ms 模型拒绝 | 时间戳使用 `frame_index * 0.01`，不得以 `duration / output_frames` 动态替代 |
+| S5-010 | D-040 默认保险丝经 Python API/CLI 统一应用且不可被无意绕过 | PASS | `AlignmentOptions()` 默认 900 s/200M/200M；显式窄 beam work 产生 `resource_limit_exceeded` 且无正式输出；fast 696 passed | 保险丝不是延迟、吞吐或 900 s 成功 SLA |
+| S5-011 | 使用 `english_natural.wav` / `.txt` 实测复核 D-039/D-040 | PASS | `ALPHA_RESOURCE_VALIDATION.md`：5.015 s、12 words、11,546 cells、281,411 work、42.215 s、2.09 GiB；输出与给定 TextGrid 字节一致 | 证明短自然语音真实 E2E 和保险丝计数；不证明 900 s 性能；同时暴露 D-036 的 22 ms gap |
+| S5-012 | 使用 `s0101a.wav` / `.txt` 复核长音频性能 | FAIL | `ALPHA_RESOURCE_VALIDATION.md`：623.115875 s；1,370.879 s 后仍在 Chunker，峰值 RSS 5.48 GiB，人工安全中止 | 未进入 trellis/Stage 2；需要 Chunker 分块或可取消 wall-time 策略后按同一 hash 复测 |
 
 ## G. 用户要求的占位接口
 
@@ -104,12 +117,13 @@
 | Q-006 | 构建的 wheel 在仓库源码树外安装并运行 | PASS | `/tmp/flexaligner-stage8-final-wheel-site.uy5PIZ`；目标安装和外部导入路径审计 | 使用 exact wheel `a33dcc22...ac9558` |
 | Q-007 | 英语真实模型 E2E 使用冻结资产通过，或如实标为 `BLOCKED` | PASS | D-033 approved manifest；16/16 预检；exact-wheel E2E `1 passed, 676 deselected`；TextGrid `ddbe0fec...e415f` | 本地 release fixture 通过；protected remote runner 因 `TBD-E2E-002` 和基础设施仍为 NOT_RUN/BLOCKED |
 | Q-008 | 测试或包导入不执行未声明网络请求 | PASS | 676 fast tests 和 D-033 exact-wheel E2E 均禁 socket；离线模型环境 | 依赖安装是单独的联网准备步骤 |
+| Q-009 | D-036--D-040 修正后的 exact wheel 通过完整 fast、包审计和 approved-fixture E2E | NOT_RUN | 待构建新的 content-addressed artifact 并记录测试数、覆盖率、依赖/模型/input/output hash | Q-005--Q-008 是修正前 artifact 的历史证据，不可直接充当本行证据 |
 
 ## I. Stage 7 — 最终审计
 
 | ID | 验收条件 | 状态 | 证据/命令 | 审阅备注 |
 |---|---|---|---|---|
-| F-001 | 所有必要行均为 `PASS`，有意延期的未来能力为 `PLACEHOLDER` | BLOCKED | 主 agent 验收审计 | Q-003 远端矩阵、protected remote E2E/基础设施和 alpha 发布工作仍阻断；没有伪造 PASS |
+| F-001 | 所有必要行均为 `PASS`，有意延期的未来能力为 `PLACEHOLDER` | BLOCKED | 主 agent 验收审计 | S2-008、S3-006--007、S4-008--009、S5-008--011、Q-009 尚未运行；原远端/alpha 阻断仍存在 |
 | F-002 | README 声明映射到测试/证据，不把占位能力宣传为支持 | PASS | README/runtime capability 交叉审计；占位测试 | 英语链路可用；十项未来能力保持占位 |
-| F-003 | `STATE`、决定和未决问题与已验证仓库状态一致 | PASS | D-029..D-034 主 agent 跨文档审计 | 用户决定、本地 approved E2E 和 protected remote 阻断明确分开 |
+| F-003 | `STATE`、决定和未决问题与已验证仓库状态一致 | PASS | D-036--D-040 跨文档审计；`ALPHA_RESOURCE_VALIDATION.md`；git diff check | D-039/D-040 代码级通过，D-036--D-038 待实施，长样本性能 FAIL，三者明确分开 |
 | F-004 | 工作树、提交、remote 和未执行发布步骤报告准确 | PASS | Stage 8 `git status`、`git log`、`git remote -v`、release guard 审计 | 只有本地 main；无 remote/tag/GitHub/PyPI 修改或发布；无关 `.DS_Store` 保持未跟踪 |

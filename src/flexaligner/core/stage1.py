@@ -1,9 +1,9 @@
 """NumPy implementation of the reference Stage 1 alignment semantics.
 
 This module is intentionally independent of model frameworks and the frozen
-reference snapshot.  It preserves the characterized recurrence, backtrace,
-confidence, anchor, merge, and millisecond-rounding behavior.  In particular,
-it does not add the unresolved repeated-target CTC blank constraint.
+reference snapshot.  It preserves the characterized confidence, anchor,
+merge, and millisecond-rounding behavior while applying the standard CTC
+blank separator required between adjacent identical targets.
 """
 
 from __future__ import annotations
@@ -290,7 +290,13 @@ def build_trellis(
     *,
     max_trellis_cells: int | None = None,
 ) -> FloatArray:
-    """Build the dense reference recurrence without repeated-target correction."""
+    """Build a dense CTC trellis with blank-separated adjacent repeats.
+
+    The public ``(T + 1) x (N + 1)`` shape is retained. A transition into a
+    target identical to its predecessor consumes two frames at once: one
+    blank separator followed by the target emission. Other transitions keep
+    the characterized one-frame stay/emit recurrence.
+    """
 
     frame_count, vocab_size = _validate_log_probs(log_probs)
     if len(targets) <= 0:
@@ -327,10 +333,20 @@ def build_trellis(
     trellis[0, 0] = 0.0
     trellis[1:, 0] = np.cumsum(log_probs[:, normalized_blank])
     target_array = np.asarray(target_ids, dtype=np.intp)
+    repeated_positions = np.flatnonzero(target_array[1:] == target_array[:-1]) + 1
     for time_index in range(1, frame_count + 1):
         scores = log_probs[time_index - 1]
         stay = trellis[time_index - 1, 1:] + scores[normalized_blank]
         emit = trellis[time_index - 1, :-1] + scores[target_array]
+        if repeated_positions.size:
+            if time_index >= 2:
+                emit[repeated_positions] = (
+                    trellis[time_index - 2, repeated_positions]
+                    + log_probs[time_index - 2, normalized_blank]
+                    + scores[target_array[repeated_positions]]
+                )
+            else:
+                emit[repeated_positions] = -np.inf
         trellis[time_index, 1:] = np.maximum(stay, emit)
     if not bool(np.isfinite(np.max(trellis[:, len(target_ids)]))):
         raise RuntimeError(
@@ -346,7 +362,11 @@ def backtrace(
     targets: Sequence[int],
     blank_id: int,
 ) -> list[Point]:
-    """Backtrace from the earliest maximum finish; ties prefer staying blank."""
+    """Backtrace from the earliest maximum finish; ties prefer staying blank.
+
+    Repeat transitions skip over their required blank separator while still
+    returning exactly one :class:`Point` for each target token.
+    """
 
     frame_count, vocab_size = _validate_log_probs(log_probs)
     target_ids = _validate_token_ids(targets, blank_id, vocab_size)
@@ -370,13 +390,27 @@ def backtrace(
     while time_index > 0 and target_index > 0:
         scores = log_probs[time_index - 1]
         score_stay = trellis[time_index - 1, target_index] + scores[normalized_blank]
-        score_emit = (
-            trellis[time_index - 1, target_index - 1] + scores[target_ids[target_index - 1]]
+        repeated_target = (
+            target_index > 1 and target_ids[target_index - 1] == target_ids[target_index - 2]
         )
+        if repeated_target:
+            score_emit = -np.inf
+            if time_index >= 2:
+                score_emit = (
+                    trellis[time_index - 2, target_index - 1]
+                    + log_probs[time_index - 2, normalized_blank]
+                    + scores[target_ids[target_index - 1]]
+                )
+        else:
+            score_emit = (
+                trellis[time_index - 1, target_index - 1] + scores[target_ids[target_index - 1]]
+            )
         if score_emit > score_stay:
             path.append(Point(token_index=target_index - 1, time_index=time_index - 1))
             target_index -= 1
-        time_index -= 1
+            time_index -= 2 if repeated_target else 1
+        else:
+            time_index -= 1
     path.reverse()
     if target_index != 0:
         raise RuntimeError(

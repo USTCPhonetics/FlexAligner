@@ -1,6 +1,6 @@
 # 当前状态
 
-> 最后更新：2026-08-22（Asia/Shanghai）
+> 最后更新：2026-08-23（Asia/Shanghai）
 
 ## 当前阶段
 
@@ -17,6 +17,9 @@
 - Stage 8（已审阅发布决定与实施复验）：进行中。用户已接受 public alpha 产品决定，
   本地 approved-fixture exact-wheel 复跑通过；alpha 元数据/推理约束、manifest
   可移植性和远端发布门禁尚未完成。
+- Stage 9（算法审阅修正）：D-039 标准重复目标 CTC 和 D-040 900 s/200M/200M
+  保险丝已实施并通过 fast/quality 门禁；D-036--D-038 与修正后 exact-wheel E2E
+  尚未完成。指定 `s0101a` 长样本因 Chunker 性能未通过，不能据此声称 900 s E2E 可用。
 
 ## 已验证的当前事实
 
@@ -52,8 +55,9 @@
 - 干净的 NumPy Stage 1 核心已实现，不导入 reference、Torch 或 Transformers。
   通过 123 项三方等价测试和 76 项独立不变量/资源测试；当时完整测试为 348 项，
   分支覆盖率 94.75%。
-- 已实现稠密 trellis 精确资源核算和调用方提供的预分配 cell 上限。没有声称包级
-  安全默认值；该问题仍为 `TBD-ALG-005`，详见 `STAGE1_RESOURCE_REPORT.md`。
+- 已实现稠密 trellis 精确资源核算和调用方提供的预分配 cell 上限。D-040 已批准
+  并实施包级默认 200M cell 保险丝；短自然语音实测为 11,546 cells，详见
+  `STAGE1_RESOURCE_REPORT.md` 和 `ALPHA_RESOURCE_VALIDATION.md`。
 - Stage 3 wheel 在源码树外 `/tmp/flexaligner-stage3-smoke.TPMkh3` 安装，并通过
   `pip check`、包/core 导入、CLI、capability 和资源估算 smoke。
 - 干净的 NumPy Stage 2 核心已实现，不导入 reference、Torch 或 Transformers。
@@ -62,7 +66,8 @@
 - 独立只读交叉审计检查了全部 64 种边界/内部 SIL/SPH flag 组合，以及 100 个固定
   种子随机小图，并同时与冻结 reference 和独立精确 DP oracle 比较；未发现生产缺陷。
 - Stage 2 资源复杂度和限制记录于 `STAGE2_RESOURCE_REPORT.md`。继承的 `beam=400`
-  不被视为经过实证的安全上限；`TBD-ALG-005` 仍未解决。
+  保持不变；D-040 已批准请求级累计 200,000,000 次 beam work 保险丝，但当前已验证
+  代码基线尚未实施和实测该保险丝。
 - 严格英语 CPU 单文件 pipeline 已实现，包含严格 transcript/词典/WAV/模型/词表
   检查、惰性本地推理，以及不重叠的顺序 Chunker/Aligner session。
 - TextGrid 和可选 metadata 会先暂存并回读验证。发布使用原子 no-clobber 硬链接、
@@ -97,6 +102,17 @@
 - MIT 许可、版权、作者、单位和引用身份已按固定原远端 README 和同提交 LICENSE
   快照 `c5361efe4b5d8ad02574dae1bd7caa89ed3e4af0` 批准。
 - v0.1 public preview 支持边界由 D-034 接受；披露的限制仍是限制，不是静默修正。
+- D-036--D-040 已解决 TBD-ALG-001--005，并明确取代 D-034 中冲突的旧行为保留口径。
+  D-039 和 D-040 已通过代码级验收：fast tests 为 696 passed、1 deselected，Ruff、
+  strict mypy 和 diff check 通过。D-036 TextGrid 全覆盖、D-037 stride 严格验证和
+  D-038 连续相同 phone occurrence 仍为已决定待实施。
+- `s0101a.wav`（623.115875 s）真实运行 1,370.879 s 后仍在 Chunker 前向，峰值 RSS
+  约 5.48 GiB，由主 agent 安全中止；未分配 trellis、未进入 Stage 2、未生成正式输出。
+  详细证据见 `ALPHA_RESOURCE_VALIDATION.md`。
+- 用户随后指定的 `english_natural.wav`（5.015 s、12 words）真实 E2E 通过：
+  11,546 trellis cells、281,411 beam work、42.215 s、峰值 RSS 约 2.09 GiB；输出与
+  给定 TextGrid 逐字节相同，SHA-256 为 `c8d8ef7b...a121f`。该 TextGrid 两层仍有
+  `[4.751, 4.773]` 的 22 ms gap，作为 D-036 尚未实施的 before 证据。
 - D-035 固定文档语言：根目录对外 `README.md` 保持中英双语；内部项目文档使用中文。
   中文化前英文文档由提交 `31becaf` 和
   `docs/archive/2026-08-22-english-docs.md` 保存。
@@ -104,6 +120,8 @@
 
 ## 当前工作
 
+- 实施 D-036--D-038，并为 Chunker 增加经审阅的长音频分块或可取消 wall-time 策略；
+  然后以相同 hash 的 `s0101a` 重测实际 cells/work，再运行修正后 exact-wheel E2E。
 - Stage 8 已应用并在本地复验 D-033 release fixture；仍需实施 `0.1.0a1` 元数据和
   D-034 要求的窄推理契约。
 - approved fixture 仍存在仓库本地路径可移植性问题，记录为 `TBD-E2E-002`；

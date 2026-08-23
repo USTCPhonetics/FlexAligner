@@ -18,6 +18,8 @@ from typing import Any, Protocol
 import numpy as np
 from numpy.typing import NDArray
 
+from ..errors import ResourceLimitError
+
 FloatArray = NDArray[np.floating[Any]]
 IntArray = NDArray[np.integer[Any]]
 FrameSegment = tuple[str, int, int]
@@ -74,6 +76,37 @@ class RedecodeStats:
     fixed_states: int
     dropped_short_sil: int
     dropped_short_sph: int
+
+
+@dataclass(slots=True)
+class BeamWorkBudget:
+    """Request-scoped counter for actual beam candidate visits."""
+
+    limit: int | None = 200_000_000
+    used: int = 0
+
+    def __post_init__(self) -> None:
+        if self.limit is not None:
+            _validate_positive_integer("limit", self.limit)
+        if isinstance(self.used, bool) or not isinstance(self.used, int):
+            raise TypeError(f"used must be an integer, got {type(self.used).__name__}")
+        if self.used < 0:
+            raise ValueError(f"used must be non-negative, got {self.used}")
+        if self.limit is not None and self.used > self.limit:
+            raise ValueError(
+                f"used must not exceed limit, got used={self.used}, limit={self.limit}"
+            )
+
+    def consume(self, units: int) -> None:
+        """Charge candidate visits, failing before the configured limit is crossed."""
+
+        _validate_positive_integer("units", units)
+        if self.limit is not None and self.used + units > self.limit:
+            raise ResourceLimitError(
+                "Stage 2 beam work limit exceeded",
+                context={"used": self.used, "requested": units, "limit": self.limit},
+            )
+        self.used += units
 
 
 @dataclass(frozen=True, slots=True)
@@ -759,6 +792,7 @@ def align_beam_viterbi(
     sil_enter_cost: float = 0.0,
     sph_phone_id: int | None = None,
     sph_enter_cost: float = 0.0,
+    beam_work_budget: BeamWorkBudget | None = None,
 ) -> ViterbiAlignment:
     """Decode the best complete emitting-state path with a stable beam."""
 
@@ -785,6 +819,11 @@ def align_beam_viterbi(
         sph_phone_id=sph_phone_id,
         sph_enter_cost=sph_enter_cost,
     )
+    if beam_work_budget is not None and not isinstance(beam_work_budget, BeamWorkBudget):
+        raise TypeError(
+            "beam_work_budget must be a BeamWorkBudget or None, "
+            f"got {type(beam_work_budget).__name__}"
+        )
     frame_count, vocabulary_size = (int(logp.shape[0]), int(logp.shape[1]))
     log_stay = math.log(float(p_stay))
     log_move = math.log(1.0 - float(p_stay))
@@ -828,6 +867,8 @@ def align_beam_viterbi(
     all_backpointers: list[dict[tuple[int, int], tuple[int, int]]] = []
     current_scores: dict[tuple[int, int], float] = {}
     initial_backpointers: dict[tuple[int, int], tuple[int, int]] = {}
+    if beam_work_budget is not None:
+        beam_work_budget.consume(len(graph.start_states))
     for state_id in graph.start_states:
         phone_id = graph.states[state_id].edge.phone_id
         lock = (
@@ -848,6 +889,8 @@ def align_beam_viterbi(
         next_backpointers: dict[tuple[int, int], tuple[int, int]] = {}
         for (state_id, previous_lock), score in current_scores.items():
             state = graph.states[state_id]
+            if beam_work_budget is not None:
+                beam_work_budget.consume(1 + len(state.succs))
             previous_phone_id = state.edge.phone_id
             previous_is_silence = is_silence(previous_phone_id)
             previous_is_speech_gap = is_speech_gap(previous_phone_id)
@@ -906,6 +949,8 @@ def align_beam_viterbi(
     end_states = set(graph.end_states)
     best_key: tuple[int, int] | None = None
     best_score = NEGATIVE_INFINITY
+    if beam_work_budget is not None:
+        beam_work_budget.consume(len(current_scores))
     for key, score in current_scores.items():
         terminal_score = score + log_move
         if key[0] in end_states and terminal_score > best_score:
@@ -1259,6 +1304,7 @@ def redecode_with_pruned_fixed_sequence(
     sph_phone: str | None,
     sph_phone_id: int | None,
     config: Stage2DecodeConfig,
+    beam_work_budget: BeamWorkBudget | None = None,
 ) -> tuple[ViterbiAlignment, RedecodeStats]:
     """Prune short internal gaps and decode the remaining fixed sequence."""
 
@@ -1294,5 +1340,6 @@ def redecode_with_pruned_fixed_sequence(
         sil_enter_cost=0.0,
         sph_phone_id=sph_phone_id,
         sph_enter_cost=0.0,
+        beam_work_budget=beam_work_budget,
     )
     return second_pass_alignment, stats

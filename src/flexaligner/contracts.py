@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from numbers import Real
 from pathlib import Path
@@ -57,35 +57,44 @@ class ScoreKind(StringEnum):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ResourceLimits:
-    """Optional caller limits; approved package defaults remain TBD."""
+    """Caller-overridable v0.1 alpha resource insurance limits."""
 
-    max_audio_seconds: float | None = None
+    max_audio_seconds: float = 900.0
     max_transcript_words: int | None = None
     max_phone_tokens: int | None = None
-    max_trellis_cells: int | None = None
+    max_trellis_cells: int = 200_000_000
+    max_beam_work_units: int = 200_000_000
 
     def __post_init__(self) -> None:
         audio_limit: object = self.max_audio_seconds
-        if audio_limit is not None:
-            if isinstance(audio_limit, bool) or not isinstance(audio_limit, Real):
-                raise ConfigurationError(
-                    "max_audio_seconds must be a real number or None",
-                    context={"field": "max_audio_seconds", "value": str(audio_limit)},
-                )
-            if not math.isfinite(float(audio_limit)) or float(audio_limit) <= 0.0:
-                raise ConfigurationError(
-                    "max_audio_seconds must be positive and finite when provided",
-                    context={"field": "max_audio_seconds", "value": float(audio_limit)},
-                )
+        if isinstance(audio_limit, bool) or not isinstance(audio_limit, Real):
+            raise ConfigurationError(
+                "max_audio_seconds must be a real number",
+                context={"field": "max_audio_seconds", "value": str(audio_limit)},
+            )
+        if not math.isfinite(float(audio_limit)) or float(audio_limit) <= 0.0:
+            raise ConfigurationError(
+                "max_audio_seconds must be positive and finite",
+                context={"field": "max_audio_seconds", "value": float(audio_limit)},
+            )
         for name in (
             "max_transcript_words",
             "max_phone_tokens",
             "max_trellis_cells",
+            "max_beam_work_units",
         ):
             value = getattr(self, name)
+            optional = name in {"max_transcript_words", "max_phone_tokens"}
+            if value is None and not optional:
+                raise ConfigurationError(
+                    f"{name} must be an integer",
+                    context={"field": name, "value": None},
+                )
             if value is not None and (isinstance(value, bool) or not isinstance(value, int)):
                 raise ConfigurationError(
-                    f"{name} must be an integer or None",
+                    f"{name} must be an integer or None"
+                    if optional
+                    else f"{name} must be an integer",
                     context={"field": name, "value": str(value)},
                 )
             if value is not None and value <= 0:
@@ -158,7 +167,7 @@ class AlignmentOptions:
     pronunciation_mode: PronunciationMode = PronunciationMode.LEXICON_ONLY
     model_resolution: ModelResolution = ModelResolution.LOCAL_ONLY
     confidence_calibration: CalibrationMode = CalibrationMode.NONE
-    limits: ResourceLimits | None = None
+    limits: ResourceLimits = field(default_factory=ResourceLimits)
 
     def __post_init__(self) -> None:
         enum_fields = (
@@ -191,9 +200,9 @@ class AlignmentOptions:
                 "num_threads must be positive",
                 context={"field": "num_threads", "value": self.num_threads},
             )
-        if self.limits is not None and not isinstance(self.limits, ResourceLimits):
+        if not isinstance(self.limits, ResourceLimits):
             raise ConfigurationError(
-                "limits must be ResourceLimits or None",
+                "limits must be ResourceLimits",
                 context={"field": "limits"},
             )
 

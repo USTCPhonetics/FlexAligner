@@ -1,6 +1,6 @@
 # Stage 2 Beam-Viterbi 资源报告
 
-> 状态：Stage 4 独立不变量/资源审计完成
+> 状态：D-040 已实施并通过代码级与短自然语音 E2E；D-038 待实施，长音频性能待解决
 >
 > 日期：2026-08-11（Asia/Shanghai）
 >
@@ -47,6 +47,27 @@ successor ID。因此图规模包含 `S` 条 state record 和 `E` 条有向 succ
 字典容量和分配器开销依赖具体运行时。未来内存声明必须在已接受硬件上测量峰值 RSS，
 不能用猜测的对象大小相乘。
 
+## D-040 默认保险丝与计数口径
+
+D-040 已批准并实施 v0.1 Stage 2 alpha 初始默认保险丝：每个对齐请求累计最多
+200,000,000 次 beam candidate transition evaluations；beam width 保持 400。精确
+计数、跨 chunk/两遍共享和关闭式失败的代码级测试通过。指定 `s0101a` 真实运行未完成
+Chunker，因此没有实际 Stage 2 work 数据；详见 `ALPHA_RESOURCE_VALIDATION.md`。
+Stage 2 emitting states 的包级默认上限未由 D-040 固定。
+
+`beam candidate transition evaluation` 定义为：对一个活跃 beam key 实际准备计算的
+一次 stay 候选，或沿一条合法 successor arc 实际准备计算的一次 move 候选。计数规则：
+
+1. 第一遍图解码与固定序列第二遍解码都计入；
+2. 一个 API/CLI 请求的所有 chunk 共用同一个单调累计计数器，不得逐 chunk 或逐遍重置；
+3. 过滤掉且从未准备评分的非法候选不计入；已经准备读取 posterior/entry cost 并比较
+   score 的候选必须计入，不得因其随后未进入 top-`B` 而扣除；
+4. 精确累计到 200,000,000 允许完成；下一批候选会使总数超限时，必须在评分该批候选
+   前抛出 `ResourceLimitError`，并报告当前值、请求增量和上限；
+5. 该计数是防失控保险丝，不是 CPU 指令数、墙钟时间、内存上限或延迟 SLA。
+
+调用方显式更窄的正 work 限制可以收紧默认值，但不得用 `None` 无意关闭包级保险丝。
+
 ## 图与路径不变量
 
 独立门禁验证：
@@ -69,13 +90,15 @@ successor ID。因此图规模包含 `S` 条 state record 和 `E` 条有向 succ
 
 ## 验收边界
 
-配置值 `beam=400` 是继承的等价行为，**不是**经过实证确认的运行时、内存或对齐质量
-安全/充分上限。`TBD-ALG-005` 仍未解决，包括已批准的帧数、图规模、可达 key、
-transition work 和峰值 RSS 上限。
+配置值 `beam=400` 继续作为 D-040 接受的 v0.1 beam width，但它本身仍**不是**经过
+实证确认的运行时、内存或对齐质量安全/充分保证。D-040 的 200,000,000 累计
+transition work 是关闭式保险丝；尚未建立包级图状态、独立可达 key、backpointer
+字节或峰值 RSS 上限。
 
-本阶段只提供确定性小图正确性证据。安全默认值需要在已接受硬件和工作负载范围上
-测量耗时和峰值 RSS，并记录决定。本报告不得被用于声称 `beam=400` 可以安全限制
-长录音资源使用。
+本阶段既有记录提供修正前的确定性小图正确性证据；D-040 又新增并通过了精确边界、
+跨 chunk/两遍共享计数和超限无正式输出测试。D-038 occurrence 身份仍未实施。
+`s0101a` 实测没有完成 Chunker，因此没有进入 Stage 2，不能据此声称 900 s 输入成功
+或 200M 是经过长样本验证的性能门槛；详见 `ALPHA_RESOURCE_VALIDATION.md`。
 
 ## 验证记录
 
@@ -89,5 +112,5 @@ transition work 和峰值 RSS 上限。
 - 本测试模块没有 `skip` 或 `xfail` 标记。
 
 精确 DP 检查使用固定种子小型 DAG 并保留全部可达 key；不会导入或执行冻结的
-reference 实现。结果只证明已覆盖小状态空间内的确定性正确性，不解决上述资源
-验收边界。
+reference 实现。结果只证明已覆盖小状态空间内的确定性正确性，是 D-038/D-040 之前
+的历史证据，不构成后续决定的实施验收。
