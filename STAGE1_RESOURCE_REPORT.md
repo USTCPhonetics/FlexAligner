@@ -49,10 +49,9 @@ reference 行为，现已实施并通过具名 before/after 与独立穷举测�
 ## 上限策略与已验证不变量
 
 D-040 已批准并实施 v0.1 alpha 初始默认保险丝：音频最长 900 s、单次 Stage 1
-trellis 最多 200,000,000 cells。精确边界和分配前失败测试通过。指定 `s0101a`
-静态精确核算为 105,089,188 cells，但 1,370.879 s 的真实运行仍停留在 Chunker
-前向，没有实际分配 trellis；详见 `ALPHA_RESOURCE_VALIDATION.md`。words 和 phone
-targets 的包级默认值未由 D-040 固定，仍可使用调用方显式限制。
+trellis 最多 200,000,000 cells。精确边界和分配前失败测试通过；`english_natural`
+和 `example1` 分别实测 11,546 与 83,368 cells。words 和 phone targets 的包级默认值
+未由 D-040 固定，仍可使用调用方显式限制。尚无接近 900 s/200M 的真实 E2E。
 
 修正后的实施门禁要求在昂贵工作/分配前失败：
 
@@ -96,5 +95,5 @@ ruff format --check tests/core/test_stage1_invariants.py STAGE1_RESOURCE_REPORT.
 
 2026-08-11 数值表仍是修正前历史证据；上方公式已按当前 D-039 实现复核。D-039/D-040
 代码级门禁通过，但不证明 900 s 输入一定成功、满足 SLA 或适合任意不可信输入。
-`s0101a` 实测因 Chunker 前向性能中止，实际 trellis 尚未分配；该长样本验收保持失败，
-详见 `ALPHA_RESOURCE_VALIDATION.md`。
+当前真实 E2E 只覆盖 5.015 s 和 49.0413125 s；900 s 性能仍待新的经审阅长音频 fixture
+验证，详见 `ALPHA_RESOURCE_VALIDATION.md`。

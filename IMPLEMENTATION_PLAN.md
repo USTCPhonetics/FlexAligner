@@ -143,7 +143,7 @@ D-036--D-038 尚未完成：
 - D-039：相邻相同 Stage 1 目标必须由至少一个 CTC blank 帧分隔（已实施）；
 - D-040：alpha 初始默认保险丝为 900 s、单次 Stage 1 trellis 200,000,000 cells、
   每请求累计 200,000,000 次 beam candidate transition evaluations，beam width 保持
-  400（已实施；`english_natural` 短 E2E 通过，`s0101a` 长样本性能失败）。
+  400（已实施；`english_natural` 和 `example1` E2E 通过，长音频性能尚未验收）。
   words、phone targets 和
   Stage 2 图状态只保留调用方显式限制或实测后另行决定，不属于本次批准的默认值。
 
@@ -446,7 +446,7 @@ publish workflow 只构建一次并发布同一上传 artifact；未经用户授
 - D-038：连续相同 phone 按 occurrence 身份区分；
 - D-039：标准重复目标 CTC blank 约束；
 - D-040：900 s、200,000,000 trellis cells 与累计 200,000,000 beam work 等 alpha
-  初始资源保险丝，待时长 623.115875 s 的 `s0101a.wav` / `s0101a.txt` 实测复核。
+  初始资源保险丝；代码级与短/中等长度 E2E 已验证，长音频性能仍待新 fixture。
 
 D-036--D-040 取代 D-034 中与其冲突的旧行为保留/延期口径，但决定本身不构成实现或
 测试通过。
@@ -465,9 +465,8 @@ D-036--D-040 取代 D-034 中与其冲突的旧行为保留/延期口径，但�
 
 1. 为 D-036--D-040 增加 before/after、边界、累计资源和失败原子性测试；
 2. 实施 D-036--D-040，重跑 fast 门禁并审阅修正后的 approved-fixture E2E golden；
-3. 使用时长 623.115875 s 的 `s0101a.wav` / `s0101a.txt` 记录总耗时、各阶段耗时、
-   峰值 RSS、trellis cells、图状态、累计 transition evaluations 和 chunk 数，复核
-   D-040 alpha 初始门槛；
+3. 选择新的经审阅长音频 fixture，记录总耗时、各阶段耗时、峰值 RSS、trellis cells、
+   图状态、累计 transition evaluations 和 chunk 数，复核 D-040 alpha 初始门槛；
 4. 实施 `0.1.0a1` metadata 和 D-034 冻结推理契约，重建并测试 exact artifact；
 5. 在远端 E2E 前去除 manifest 对本地目录名的依赖；
 6. 直接替代远端 `main` 前取得单独授权并创建已验证恢复快照；

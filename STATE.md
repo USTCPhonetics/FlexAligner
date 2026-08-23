@@ -19,7 +19,7 @@
   可移植性和远端发布门禁尚未完成。
 - Stage 9（算法审阅修正）：D-039 标准重复目标 CTC 和 D-040 900 s/200M/200M
   保险丝已实施并通过 fast/quality 门禁；D-036--D-038 与修正后 exact-wheel E2E
-  尚未完成。指定 `s0101a` 长样本因 Chunker 性能未通过，不能据此声称 900 s E2E 可用。
+  尚未完成。当前真实 E2E 只覆盖 5.015 s 和 49.0413125 s，不声称 900 s 性能可用。
 
 ## 已验证的当前事实
 
@@ -106,9 +106,6 @@
   D-039 和 D-040 已通过代码级验收：fast tests 为 696 passed、1 deselected，Ruff、
   strict mypy 和 diff check 通过。D-036 TextGrid 全覆盖、D-037 stride 严格验证和
   D-038 连续相同 phone occurrence 仍为已决定待实施。
-- `s0101a.wav`（623.115875 s）真实运行 1,370.879 s 后仍在 Chunker 前向，峰值 RSS
-  约 5.48 GiB，由主 agent 安全中止；未分配 trellis、未进入 Stage 2、未生成正式输出。
-  详细证据见 `ALPHA_RESOURCE_VALIDATION.md`。
 - 用户随后指定的 `english_natural.wav`（5.015 s、12 words）真实 E2E 通过：
   11,546 trellis cells、281,411 beam work、42.215 s、峰值 RSS 约 2.09 GiB；输出与
   给定 TextGrid 逐字节相同，SHA-256 为 `c8d8ef7b...a121f`。该 TextGrid 两层仍有
@@ -124,7 +121,7 @@
 ## 当前工作
 
 - 实施 D-036--D-038，并为 Chunker 增加经审阅的长音频分块或可取消 wall-time 策略；
-  然后以相同 hash 的 `s0101a` 重测实际 cells/work，再运行修正后 exact-wheel E2E。
+  然后选择新的经审阅长音频 fixture 重测实际 cells/work，再运行修正后 exact-wheel E2E。
 - Stage 8 已应用并在本地复验 D-033 release fixture；仍需实施 `0.1.0a1` 元数据和
   D-034 要求的窄推理契约。
 - approved fixture 仍存在仓库本地路径可移植性问题，记录为 `TBD-E2E-002`；

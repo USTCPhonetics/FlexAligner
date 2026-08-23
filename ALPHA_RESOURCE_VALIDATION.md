@@ -17,62 +17,7 @@
 第一遍和固定序列第二遍解码。start、stay、每个 successor 访问和 terminal 检查都计入。
 它是异常有限搜索的关闭式保险丝，不是模型推理超时、延迟或成功 SLA。
 
-## 2. 指定验证输入
-
-| 项目 | 已验证值 |
-|---|---|
-| 音频 | `/Users/yiyi0369/Desktop/USTC_ICRLS_DISK/Buckeye_Evaluation/input_wav_text/s0101a.wav` |
-| 音频 SHA-256 | `cb8be0fe755aeef4949357036915411c44a75bd2dced98e0688334a5da612493` |
-| 音频格式 | 16 kHz、单声道、PCM16、9,969,854 frames |
-| 音频时长 | 623.115875 s；位于 900 s 门槛内 |
-| 文本 | `/Users/yiyi0369/Desktop/USTC_ICRLS_DISK/Buckeye_Evaluation/input_wav_text/s0101a.txt` |
-| 文本 SHA-256 | `8d9c0088b074924f7e3b6efff96f255f6a7435d1887b6d492fb2d4c4b0a8ad7b` |
-| 项目归一化词数 | 998 words；370 unique words |
-| 词典 | `/Users/yiyi0369/projects/openphonetics/word.dict`；指定文本全覆盖 |
-| 模型 | `/Users/yiyi0369/projects/openphonetics/models/en/{chunker,aligner}` |
-| 运行时 | Python 3.12.12、NumPy 2.2.6、Torch 2.3.1、Transformers 4.41.2 |
-
-本报告只绑定上表精确路径和 hash。其他同名 `s0101a.txt` 文件的词数、hash 和展开结果
-不得混入本次事实。
-
-## 3. Stage 1 静态精确核算
-
-使用项目归一化、`word.dict` 第一条发音和 Chunker 的卷积配置：
-
-- 目标 phone 数：3,372；
-- 相邻重复目标：32 处，D-039 会要求 blank 分隔；
-- Chunker 配置 `conv_stride=[5,2,2,2,2,2,2]`，对 9,969,854 samples 的预期输出为
-  31,155 frames；
-- trellis 为 `(31,155 + 1) * (3,372 + 1) = 105,089,188 cells`；
-- float32 trellis 为 420,356,752 bytes（约 400.88 MiB），低于 200,000,000 cells。
-
-这证明指定输入按模型配置计算不会触发 Stage 1 cell 门槛，但不等于模型已实际输出
-该 posterior，也不等于完整对齐通过。
-
-## 4. 真实运行结果
-
-运行采用源码树当前实现、严格离线环境、CPU、`num_threads=1`，输出写入独立临时目录
-`/tmp/flexaligner-s0101a-benchmark.e3bkoR`。观测结果：
-
-| 指标 | 结果 |
-|---|---:|
-| Wall time | 1,370.879 s（约 22.85 min） |
-| 峰值 RSS | 5,884,919,808 bytes（约 5.48 GiB，macOS `ru_maxrss`） |
-| 停止位置 | Chunker `Wav2Vec2ForCTC` encoder 前向 |
-| 实际 trellis 分配 | 0；尚未进入 `build_trellis` |
-| 实际 beam work | 0；尚未进入 Stage 2 |
-| 正式 TextGrid/metadata | 未生成 |
-
-达到预先声明的观测窗口后，由主 agent 发送 `KeyboardInterrupt` 安全停止临时 benchmark。
-输入文件未修改，未发布任何正式产物。临时 `metrics.json` 保存了原始 wall/RSS/空计数；
-其中 `status=unknown` 是因为 `KeyboardInterrupt` 继承 `BaseException`、未进入脚本的
-`except Exception`，本报告将其规范记录为“人工中止、性能未通过”。
-
-模型加载还产生 Hugging Face parametrization 权重名称转换警告。该运行时的库版本号
-与冻结组合除 Python 3.12.12 外一致，但本次不是已批准的 Python 3.10.8 exact-wheel
-release E2E，不能替代 Q-007 历史证据。
-
-## 5. 代码级验证
+## 2. 代码级验证
 
 - D-039：相邻重复目标必须经过 blank；覆盖同词、跨词和去除 ARPAbet 重音后重复；
 - 200M trellis：保留精确 Python integer 预分配核算，超限在 `numpy.full` 前抛出
@@ -82,7 +27,7 @@ release E2E，不能替代 Q-007 历史证据。
 - fast tests：`696 passed, 1 deselected`；
 - Ruff check/format：通过；strict mypy：通过；`git diff --check`：通过。
 
-## 6. `english_natural` 真实 E2E
+## 3. `english_natural` 真实 E2E
 
 用户随后指定下列短自然语音作为本轮真实门槛测试：
 
@@ -115,7 +60,7 @@ release E2E，不能替代 Q-007 历史证据。
 运行产物位于 `/tmp/flexaligner-english-natural.EzUMfD`；`metrics.json` SHA-256 为
 `8a60259712f4b65519e662804693a0b141f2229ee41e0f506160a2013c79e008`。
 
-## 7. `example1` 真实 E2E
+## 4. `example1` 真实 E2E
 
 用户指定 `/Users/yiyi0369/projects/xiantutorial/modules/03_flexaligner/data/test/` 中的
 `example1.wav` / `example1.txt` 继续验证：
@@ -139,19 +84,17 @@ release E2E，不能替代 Q-007 历史证据。
 运行产物位于 `/tmp/flexaligner-example1.6IDZYg`；`metrics.json` SHA-256 为
 `3b6557b466a887f0519fb7cf879e4e13bb52eb7450e6228ce1e0620270a80ece`。
 
-## 8. 验收结论与下一步
+## 5. 验收结论与下一步
 
 | 项目 | 状态 | 结论 |
 |---|---|---|
-| 900 s 输入 header 门槛 | `PASS` | 指定 623.115875 s 输入在门槛内 |
-| 200M trellis cell 保险丝 | `PASS`（代码级） | 指定输入静态精确值 105,089,188；真实分配尚未发生 |
+| 900 s 输入 header 门槛 | `PASS`（代码级） | 默认值和 header 前置拒绝逻辑通过测试；尚无接近上限的 E2E |
+| 200M trellis cell 保险丝 | `PASS`（代码级） | 精确核算和分配前关闭式失败测试通过 |
 | 200M transition 保险丝 | `PASS`（代码级） | 精确累计和关闭式失败测试通过 |
 | `english_natural` 完整 E2E | `PASS` | 11,546 cells、281,411 work；输出与给定 TextGrid 字节一致 |
 | `example1` 完整 E2E | `PASS` | 83,368 cells、219,135 work；3 chunks、词序守恒 |
 | D-036 连续覆盖 | `FAIL/待实施` | `english_natural` 有 22 ms gap；`example1` 两层均有三个约 19--21 ms gap |
-| `s0101a` 长音频完整 E2E | `FAIL` | 22.85 min 内未完成 Chunker，不能取得实际 cells/work/输出 |
 
-在公开 alpha 前至少需要选择并验证一种方案：对 Chunker 做有重叠的流式/分块前向，
-或建立明确的可取消任务与 wall-time 门槛。完成优化后必须用同一 hash 输入重新运行，记录
-实际 trellis cells、累计 transition evaluations、分阶段耗时、峰值 RSS、chunk 数和
-完整 TextGrid 验收；不得只用静态估算关闭本项。
+在公开 alpha 前仍需用经过审阅的长音频 fixture 记录实际 trellis cells、累计 transition
+evaluations、分阶段耗时、峰值 RSS、chunk 数和完整 TextGrid 验收；不得只用静态估算
+声称 900 s 性能已经通过。

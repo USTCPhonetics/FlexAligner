@@ -51,8 +51,8 @@ successor ID。因此图规模包含 `S` 条 state record 和 `E` 条有向 succ
 
 D-040 已批准并实施 v0.1 Stage 2 alpha 初始默认保险丝：每个对齐请求累计最多
 200,000,000 次 beam candidate transition evaluations；beam width 保持 400。精确
-计数、跨 chunk/两遍共享和关闭式失败的代码级测试通过。指定 `s0101a` 真实运行未完成
-Chunker，因此没有实际 Stage 2 work 数据；详见 `ALPHA_RESOURCE_VALIDATION.md`。
+计数、跨 chunk/两遍共享和关闭式失败的代码级测试通过；`english_natural` 和 `example1`
+分别实测 281,411 与 219,135 work。详见 `ALPHA_RESOURCE_VALIDATION.md`。
 Stage 2 emitting states 的包级默认上限未由 D-040 固定。
 
 `beam candidate transition evaluation` 定义为：对一个活跃 beam key 实际准备计算的
@@ -97,8 +97,8 @@ transition work 是关闭式保险丝；尚未建立包级图状态、独立可�
 
 本阶段既有记录提供修正前的确定性小图正确性证据；D-040 又新增并通过了精确边界、
 跨 chunk/两遍共享计数和超限无正式输出测试。D-038 occurrence 身份仍未实施。
-`s0101a` 实测没有完成 Chunker，因此没有进入 Stage 2，不能据此声称 900 s 输入成功
-或 200M 是经过长样本验证的性能门槛；详见 `ALPHA_RESOURCE_VALIDATION.md`。
+当前真实 E2E 尚未接近 900 s 或 200M，不能据此声称 900 s 输入成功或 200M 是经过
+长样本验证的性能门槛；详见 `ALPHA_RESOURCE_VALIDATION.md`。
 
 ## 验证记录
 

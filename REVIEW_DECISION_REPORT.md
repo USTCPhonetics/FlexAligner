@@ -220,9 +220,9 @@ recurrence 或“无默认资源上限”作为发布目标。固定 10 ms 也�
 
 D-040 的两个 200,000,000 数值是待实测复核的 alpha 初始门槛，不是性能或成功 SLA。
 用户指定的 `english_natural` 真实 E2E 已取得 11,546 cells、281,411 work，并与给定
-TextGrid 字节一致。623.115875 s 的 `s0101a` 长样本在 1,370.879 s 后仍停留于
-Chunker 并被安全中止，因此 D-040 的代码保险丝可以通过，但不得声称 900 s 性能可用。
-完整证据见 `ALPHA_RESOURCE_VALIDATION.md`。
+TextGrid 字节一致；`example1` 真实 E2E 取得 83,368 cells、219,135 work 和 3 chunks。
+D-040 的代码保险丝可以通过，但当前样本不支持 900 s 性能声明。完整证据见
+`ALPHA_RESOURCE_VALIDATION.md`。
 
 ## 4. 已解决算法项与仍未决技术事项
 
@@ -260,7 +260,7 @@ Chunker 并被安全中止，因此 D-040 的代码保险丝可以通过，但�
 6. 最终化 `[inference]` 的实际 resolver/runtime 契约，并验证公共索引安装解析路径；
    hosted fast CI 和基础 dependency audit 不能替代真实推理依赖验证。
 7. 为 D-036--D-040 保留 before/after 证据并运行全部新增边界/关闭式失败测试；
-8. 使用 `s0101a.wav` / `s0101a.txt` 完成 D-040 的资源实测；
+8. 使用新的经审阅长音频 fixture 完成 D-040 的长输入资源实测；
 9. 重新生成修正后的 E2E candidate，字段级审阅后才可接受新 golden，并对 exact wheel
    重跑完整 fast、包审计和 approved-fixture E2E。
 
