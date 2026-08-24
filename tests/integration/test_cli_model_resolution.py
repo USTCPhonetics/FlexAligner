@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 import flexaligner.cli as cli
-from flexaligner import LocalModelBundle, ModelValidationError
+from flexaligner import Language, LocalModelBundle, ModelValidationError
 
 
 class _InteractiveInput(io.StringIO):
@@ -118,6 +118,50 @@ def test_models_fetch_yes_defaults_to_mirror_and_prints_json(
     payload = json.loads(streams.out)
     assert payload["revision"] == cli.DEFAULT_MODEL_REVISION
     assert payload["bundle_release"] == "v0.2.0a1"
+
+
+def test_models_fetch_mandarin_uses_language_specific_resolver(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    expected = LocalModelBundle(
+        chunker_dir=tmp_path / "snapshot/zh/chunker",
+        aligner_dir=tmp_path / "snapshot/zh/aligner",
+        manifest_path=tmp_path / "snapshot/model_manifest.json",
+    )
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr(cli, "find_cached_models", lambda **kwargs: None)
+
+    def download(**kwargs: object) -> LocalModelBundle:
+        calls.append(dict(kwargs))
+        return expected
+
+    monkeypatch.setattr(cli, "download_models", download)
+    status = cli.main(
+        [
+            "models",
+            "fetch",
+            "--language",
+            "zh",
+            "--yes",
+            "--model-cache-dir",
+            str(tmp_path / "cache"),
+        ]
+    )
+    streams = capsys.readouterr()
+    assert status == 0
+    assert streams.err == ""
+    assert calls == [
+        {
+            "language": Language.ZH,
+            "cache_dir": tmp_path / "cache",
+            "source": "mirror",
+            "force_download": False,
+        }
+    ]
+    payload = json.loads(streams.out)
+    assert payload["language"] == "zh"
 
 
 def test_invalid_cache_without_yes_fails_closed_and_never_downloads(

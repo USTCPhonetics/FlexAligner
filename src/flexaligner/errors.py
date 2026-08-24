@@ -21,6 +21,8 @@ class ErrorCode(str, Enum):
     MODEL_CACHE_MISS = "model_cache_miss"
     MODEL_DOWNLOAD_ERROR = "model_download_error"
     PRONUNCIATION_GENERATION_ERROR = "pronunciation_generation_error"
+    LANGUAGE_MISMATCH = "language_mismatch"
+    OPTIONAL_DEPENDENCY_MISSING = "optional_dependency_missing"
     RESOURCE_LIMIT_EXCEEDED = "resource_limit_exceeded"
     ALIGNMENT_FAILED = "alignment_failed"
     ALIGNMENT_END_UNREACHABLE = "alignment_end_unreachable"
@@ -116,6 +118,18 @@ class ModelDownloadError(FlexAlignerError):
 
 class PronunciationGenerationError(FlexAlignerError):
     default_code = ErrorCode.PRONUNCIATION_GENERATION_ERROR
+
+
+class LanguageMismatchError(FlexAlignerError):
+    """Raised when text, lexicon, or models contradict the selected language."""
+
+    default_code = ErrorCode.LANGUAGE_MISMATCH
+
+
+class OptionalDependencyError(FlexAlignerError):
+    """Raised when an explicitly requested incremental capability is not installed."""
+
+    default_code = ErrorCode.OPTIONAL_DEPENDENCY_MISSING
 
 
 class ResourceLimitError(FlexAlignerError):

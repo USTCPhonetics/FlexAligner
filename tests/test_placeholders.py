@@ -70,7 +70,6 @@ def test_default_alignment_requires_explicit_lexicon_before_input_io(
 @pytest.mark.parametrize(
     ("field_name", "future_names", "capability_id"),
     [
-        ("language", ("zh",), "language.zh"),
         ("device", ("gpu", "cuda"), "device.gpu"),
         (
             "model_resolution",
@@ -95,32 +94,6 @@ def test_future_alignment_options_fail_before_core_or_input_io(
     defaults = public_api.AlignmentOptions()
     future_value = _member(getattr(defaults, field_name), *future_names)
     options = replace(defaults, **{field_name: future_value})
-
-    _assert_feature_error(
-        public_api,
-        capability_id,
-        lambda: engine.align(request, options=options),
-    )
-    assert not request.output.path.exists()
-
-
-@pytest.mark.parametrize(
-    ("future_names", "capability_id"),
-    [
-        (("multi_format", "any_format"), "audio.multi_format"),
-        (("auto_resample", "resample"), "audio.auto_resample"),
-    ],
-)
-def test_future_audio_policies_fail_before_audio_io(
-    public_api: ModuleType,
-    lazy_engine_and_request: tuple[Any, Any],
-    future_names: tuple[str, ...],
-    capability_id: str,
-) -> None:
-    engine, request = lazy_engine_and_request
-    defaults = public_api.AlignmentOptions()
-    policy = _member(defaults.audio_policy, *future_names)
-    options = replace(defaults, audio_policy=policy)
 
     _assert_feature_error(
         public_api,

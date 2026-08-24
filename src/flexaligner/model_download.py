@@ -10,7 +10,7 @@ from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from .contracts import LocalModelBundle
+from .contracts import Language, LocalModelBundle
 from .errors import ModelCacheMissError, ModelDownloadError, ModelValidationError
 
 DEFAULT_MODEL_REPO = "USTCPhonetics/FlexAligner"
@@ -36,6 +36,29 @@ _ENGLISH_MODEL_FILES = tuple(
     for filename in _MODEL_FILENAMES
 )
 _ALLOW_PATTERNS = (MODEL_MANIFEST, *_ENGLISH_MODEL_FILES)
+
+
+def _language_code(language: Language | str) -> str:
+    code = language.value if isinstance(language, Language) else str(language)
+    if code not in {Language.EN.value, Language.ZH.value}:
+        raise ModelDownloadError(
+            "Unsupported model language",
+            context={"language": code},
+        )
+    return code
+
+
+def _model_files(language: Language | str) -> tuple[str, ...]:
+    code = _language_code(language)
+    return tuple(
+        f"{code}/{role}/{filename}"
+        for role in ("chunker", "aligner")
+        for filename in _MODEL_FILENAMES
+    )
+
+
+def _allow_patterns(language: Language | str) -> tuple[str, ...]:
+    return (MODEL_MANIFEST, *_model_files(language))
 
 
 def default_model_cache_dir(environ: Mapping[str, str] | None = None) -> Path:
@@ -69,6 +92,15 @@ def endpoint_for_source(source: str) -> str:
 def find_cached_english_models(*, cache_dir: Path | None = None) -> LocalModelBundle | None:
     """Resolve and validate the pinned English bundle without network access."""
 
+    return find_cached_models(language=Language.EN, cache_dir=cache_dir)
+
+
+def find_cached_models(
+    *, language: Language | str, cache_dir: Path | None = None
+) -> LocalModelBundle | None:
+    """Resolve and validate one pinned language bundle without network access."""
+
+    code = _language_code(language)
     selected_cache = default_model_cache_dir() if cache_dir is None else cache_dir.expanduser()
     try:
         snapshot = _snapshot_download(
@@ -76,7 +108,7 @@ def find_cached_english_models(*, cache_dir: Path | None = None) -> LocalModelBu
             revision=DEFAULT_MODEL_REVISION,
             cache_dir=str(selected_cache),
             local_files_only=True,
-            allow_patterns=list(_ALLOW_PATTERNS),
+            allow_patterns=list(_allow_patterns(code)),
             token=False,
         )
     except Exception as error:
@@ -89,7 +121,7 @@ def find_cached_english_models(*, cache_dir: Path | None = None) -> LocalModelBu
                 "exception_type": type(error).__name__,
             },
         ) from error
-    return validate_english_snapshot(Path(snapshot))
+    return validate_model_snapshot(Path(snapshot), language=code)
 
 
 def download_english_models(
@@ -105,6 +137,24 @@ def download_english_models(
     download behavior.
     """
 
+    return download_models(
+        language=Language.EN,
+        cache_dir=cache_dir,
+        source=source,
+        force_download=force_download,
+    )
+
+
+def download_models(
+    *,
+    language: Language | str,
+    cache_dir: Path | None = None,
+    source: str = "mirror",
+    force_download: bool = False,
+) -> LocalModelBundle:
+    """Download and validate one pinned language bundle."""
+
+    code = _language_code(language)
     selected_cache = default_model_cache_dir() if cache_dir is None else cache_dir.expanduser()
     endpoint = endpoint_for_source(source)
     try:
@@ -113,7 +163,7 @@ def download_english_models(
             revision=DEFAULT_MODEL_REVISION,
             cache_dir=str(selected_cache),
             local_files_only=False,
-            allow_patterns=list(_ALLOW_PATTERNS),
+            allow_patterns=list(_allow_patterns(code)),
             token=False,
             endpoint=endpoint,
             force_download=force_download,
@@ -127,24 +177,35 @@ def download_english_models(
                 "exception_type": type(error).__name__,
                 "repo_id": DEFAULT_MODEL_REPO,
                 "revision": DEFAULT_MODEL_REVISION,
+                "language": code,
             },
         ) from error
-    return validate_english_snapshot(Path(snapshot))
+    return validate_model_snapshot(Path(snapshot), language=code)
 
 
 def require_cached_english_models(*, cache_dir: Path | None = None) -> LocalModelBundle:
     """Return the pinned cached bundle or a typed, actionable cache-miss error."""
 
+    return require_cached_models(language=Language.EN, cache_dir=cache_dir)
+
+
+def require_cached_models(
+    *, language: Language | str, cache_dir: Path | None = None
+) -> LocalModelBundle:
+    """Return one pinned cached language bundle or a typed cache-miss error."""
+
+    code = _language_code(language)
     selected_cache = default_model_cache_dir() if cache_dir is None else cache_dir.expanduser()
-    cached = find_cached_english_models(cache_dir=selected_cache)
+    cached = find_cached_models(language=code, cache_dir=selected_cache)
     if cached is None:
         raise ModelCacheMissError(
-            "The pinned English models are not present in the selected cache",
+            f"The pinned {code} models are not present in the selected cache",
             context={
                 "cache_dir": str(selected_cache),
                 "repo_id": DEFAULT_MODEL_REPO,
                 "revision": DEFAULT_MODEL_REVISION,
-                "suggested_command": "flexaligner models fetch",
+                "language": code,
+                "suggested_command": f"flexaligner models fetch --language {code}",
             },
         )
     return cached
@@ -153,6 +214,13 @@ def require_cached_english_models(*, cache_dir: Path | None = None) -> LocalMode
 def validate_english_snapshot(snapshot: Path) -> LocalModelBundle:
     """Validate the English subset of a Hub snapshot against its signed-off manifest."""
 
+    return validate_model_snapshot(snapshot, language=Language.EN)
+
+
+def validate_model_snapshot(snapshot: Path, *, language: Language | str) -> LocalModelBundle:
+    """Validate one language subset of a Hub snapshot against the built-in manifest."""
+
+    code = _language_code(language)
     if not snapshot.is_dir():
         raise ModelValidationError(
             "Model snapshot is not a directory",
@@ -182,11 +250,20 @@ def validate_english_snapshot(snapshot: Path) -> LocalModelBundle:
         )
 
     languages = manifest.get("languages")
-    english = languages.get("en") if isinstance(languages, dict) else None
-    if not isinstance(english, dict):
-        raise ModelValidationError("Model manifest has no English bundle")
-    if english.get("chunker_path") != "en/chunker" or english.get("aligner_path") != "en/aligner":
-        raise ModelValidationError("Model manifest has unexpected English model paths")
+    selected_language = languages.get(code) if isinstance(languages, dict) else None
+    if not isinstance(selected_language, dict):
+        raise ModelValidationError(
+            "Model manifest has no requested language bundle",
+            context={"language": code},
+        )
+    if (
+        selected_language.get("chunker_path") != f"{code}/chunker"
+        or selected_language.get("aligner_path") != f"{code}/aligner"
+    ):
+        raise ModelValidationError(
+            "Model manifest has unexpected language model paths",
+            context={"language": code},
+        )
 
     files = manifest.get("files")
     if not isinstance(files, list):
@@ -199,7 +276,7 @@ def validate_english_snapshot(snapshot: Path) -> LocalModelBundle:
                 context={"index": index},
             )
         raw_path = raw_entry.get("path")
-        if not isinstance(raw_path, str) or not raw_path.startswith("en/"):
+        if not isinstance(raw_path, str) or not raw_path.startswith(f"{code}/"):
             continue
         manifest_relative = PurePosixPath(raw_path)
         if (
@@ -230,20 +307,25 @@ def validate_english_snapshot(snapshot: Path) -> LocalModelBundle:
             )
         expected[raw_path] = (size, digest)
 
-    if set(expected) != set(_ENGLISH_MODEL_FILES):
+    expected_files = set(_model_files(code))
+    if set(expected) != expected_files:
         raise ModelValidationError(
-            "English model manifest does not contain the exact built-in file set",
-            context={"actual_count": len(expected)},
+            "Language model manifest does not contain the exact built-in file set",
+            context={"actual_count": len(expected), "language": code},
         )
     actual = {
         path.relative_to(snapshot).as_posix()
-        for path in (snapshot / "en").rglob("*")
+        for path in (snapshot / code).rglob("*")
         if path.is_file()
     }
     if actual != set(expected):
         raise ModelValidationError(
-            "English model snapshot file set does not match the manifest",
-            context={"actual_count": len(actual), "expected_count": len(expected)},
+            "Language model snapshot file set does not match the manifest",
+            context={
+                "actual_count": len(actual),
+                "expected_count": len(expected),
+                "language": code,
+            },
         )
     for relative, (expected_size, expected_digest) in sorted(expected.items()):
         path = snapshot / relative
@@ -260,8 +342,8 @@ def validate_english_snapshot(snapshot: Path) -> LocalModelBundle:
                 context={"path": relative, "actual": actual_digest, "expected": expected_digest},
             )
     return LocalModelBundle(
-        chunker_dir=snapshot / "en" / "chunker",
-        aligner_dir=snapshot / "en" / "aligner",
+        chunker_dir=snapshot / code / "chunker",
+        aligner_dir=snapshot / code / "aligner",
         manifest_path=manifest_path,
     )
 
@@ -314,8 +396,12 @@ __all__ = [
     "OFFICIAL_ENDPOINT",
     "default_model_cache_dir",
     "download_english_models",
+    "download_models",
     "endpoint_for_source",
     "find_cached_english_models",
+    "find_cached_models",
     "require_cached_english_models",
+    "require_cached_models",
     "validate_english_snapshot",
+    "validate_model_snapshot",
 ]

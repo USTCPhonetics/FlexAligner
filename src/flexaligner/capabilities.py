@@ -30,6 +30,8 @@ class CapabilityId(str, Enum):
     CHINESE_SEGMENTATION = "text.zh_segmentation"
     DEFAULT_G2P = "pronunciation.g2p.default"
     LOCAL_ENGLISH_G2P = "pronunciation.g2p.en.local"
+    LOCAL_MANDARIN_G2P = "pronunciation.g2p.zh.local"
+    AUDIO_TRANSCODE = "audio.transcode"
     CONFIDENCE_CALIBRATION = "confidence.calibration"
 
 
@@ -87,7 +89,7 @@ _CAPABILITIES = (
     Capability(
         id=CapabilityId.PYTHON_API,
         status=CapabilityStatus.AVAILABLE,
-        summary="Import-safe Python API for strict local English CPU alignment.",
+        summary="Import-safe Python API for local English and optional Mandarin CPU alignment.",
     ),
     Capability(
         id=CapabilityId.CLI,
@@ -106,9 +108,8 @@ _CAPABILITIES = (
     ),
     Capability(
         id=CapabilityId.MANDARIN,
-        status=CapabilityStatus.PLACEHOLDER,
-        summary="Mandarin language profile and tokenizer.",
-        reason="Mandarin is outside the first implementation milestone.",
+        status=CapabilityStatus.AVAILABLE,
+        summary="Mandarin CPU single-file alignment with the optional zh language pack.",
     ),
     Capability(
         id=CapabilityId.GPU,
@@ -141,31 +142,38 @@ _CAPABILITIES = (
     ),
     Capability(
         id=CapabilityId.MULTI_FORMAT_AUDIO,
-        status=CapabilityStatus.PLACEHOLDER,
-        summary="Audio formats beyond strict PCM16 WAV.",
-        reason="Only the strict WAV contract is planned for the first core.",
+        status=CapabilityStatus.AVAILABLE,
+        summary="Explicit multi-format decoding through the optional audio extra.",
     ),
     Capability(
         id=CapabilityId.AUTO_RESAMPLE,
-        status=CapabilityStatus.PLACEHOLDER,
-        summary="Automatic audio resampling.",
-        reason="Implicit audio conversion is not implemented.",
+        status=CapabilityStatus.AVAILABLE,
+        summary="Explicitly selected conversion to 16 kHz mono through the audio extra.",
     ),
     Capability(
         id=CapabilityId.CHINESE_SEGMENTATION,
-        status=CapabilityStatus.PLACEHOLDER,
-        summary="Chinese transcript segmentation.",
-        reason="Only English whitespace tokenization is in the first core scope.",
+        status=CapabilityStatus.AVAILABLE,
+        summary="Deterministic jieba segmentation through the optional zh extra.",
     ),
     Capability(
         id=CapabilityId.DEFAULT_G2P,
         status=CapabilityStatus.AVAILABLE,
-        summary="CLI-default local English OOV G2P with explicit warnings.",
+        summary="CLI-default local language-specific OOV G2P with explicit warnings.",
     ),
     Capability(
         id=CapabilityId.LOCAL_ENGLISH_G2P,
         status=CapabilityStatus.AVAILABLE,
         summary="Fully local English OOV G2P backed by a pinned neural checkpoint.",
+    ),
+    Capability(
+        id=CapabilityId.LOCAL_MANDARIN_G2P,
+        status=CapabilityStatus.AVAILABLE,
+        summary="Local pypinyin-based Mandarin OOV G2P through the optional zh extra.",
+    ),
+    Capability(
+        id=CapabilityId.AUDIO_TRANSCODE,
+        status=CapabilityStatus.AVAILABLE,
+        summary="Explicit PCM16 WAV conversion through the optional audio extra.",
     ),
     Capability(
         id=CapabilityId.CONFIDENCE_CALIBRATION,

@@ -7,14 +7,14 @@ from collections.abc import Mapping, Sequence
 from typing import Protocol
 
 from .adapters.lexicon_file import PronouncingLexicon, TokenVocabulary
-from .contracts import PronunciationMode, PronunciationNotice
+from .contracts import Language, PronunciationMode, PronunciationNotice
 from .errors import PronunciationGenerationError
 
 _STRESS_SUFFIX = re.compile(r"[012]$")
 _RESERVED = {"sil", "sph", "spn", "null"}
 
 
-class EnglishG2PPort(Protocol):
+class G2PPort(Protocol):
     engine_id: str
     engine_version: str
 
@@ -32,9 +32,10 @@ def resolve_effective_lexicon(
     words: Sequence[str],
     lexicon: PronouncingLexicon,
     mode: PronunciationMode,
-    g2p: EnglishG2PPort | None,
+    g2p: G2PPort | None,
     chunker_vocabulary: TokenVocabulary,
     aligner_vocabulary: TokenVocabulary,
+    language: Language = Language.EN,
 ) -> tuple[PronouncingLexicon, tuple[PronunciationNotice, ...]]:
     """Fill only true OOVs in memory and preserve every explicit lexicon entry."""
 
@@ -42,7 +43,7 @@ def resolve_effective_lexicon(
     if not missing or mode is PronunciationMode.LEXICON_ONLY:
         return lexicon, ()
     if g2p is None:
-        raise PronunciationGenerationError("English G2P backend is unavailable")
+        raise PronunciationGenerationError(f"{_language_name(language)} G2P backend is unavailable")
 
     generated: dict[str, tuple[str, ...]] = {}
     for word in missing:
@@ -51,6 +52,7 @@ def resolve_effective_lexicon(
             word=word,
             pronunciation=pronunciation,
             engine_id=g2p.engine_id,
+            language=language,
             chunker_vocabulary=chunker_vocabulary.token_to_id,
             aligner_vocabulary=aligner_vocabulary.token_to_id,
         )
@@ -78,12 +80,13 @@ def _validate_generated_pronunciation(
     word: str,
     pronunciation: tuple[str, ...],
     engine_id: str,
+    language: Language,
     chunker_vocabulary: Mapping[str, int],
     aligner_vocabulary: Mapping[str, int],
 ) -> None:
     if not isinstance(pronunciation, tuple) or not pronunciation:
         raise PronunciationGenerationError(
-            "English G2P generated an empty or invalid pronunciation",
+            f"{_language_name(language)} G2P generated an empty or invalid pronunciation",
             context={"engine": engine_id, "word": word},
         )
     for phone_index, phone in enumerate(pronunciation):
@@ -95,20 +98,28 @@ def _validate_generated_pronunciation(
         }
         if not isinstance(phone, str) or not phone or phone.lower() in _RESERVED:
             raise PronunciationGenerationError(
-                "English G2P generated an invalid or reserved phone",
+                f"{_language_name(language)} G2P generated an invalid or reserved phone",
                 context=context,
             )
         if phone not in aligner_vocabulary:
             raise PronunciationGenerationError(
-                "English G2P phone is not in the Aligner vocabulary",
+                f"{_language_name(language)} G2P phone is not in the Aligner vocabulary",
                 context=context,
             )
-        chunker_phone = _STRESS_SUFFIX.sub("", phone)
+        chunker_phone = _STRESS_SUFFIX.sub("", phone) if language is Language.EN else phone
         if chunker_phone not in chunker_vocabulary:
             raise PronunciationGenerationError(
-                "English G2P phone is not in the Chunker vocabulary after stress removal",
+                f"{_language_name(language)} G2P phone is not in the Chunker vocabulary"
+                + (" after stress removal" if language is Language.EN else ""),
                 context={**context, "chunker_phone": chunker_phone},
             )
 
 
-__all__ = ["EnglishG2PPort", "oov_words", "resolve_effective_lexicon"]
+def _language_name(language: Language) -> str:
+    return "English" if language is Language.EN else "Mandarin"
+
+
+EnglishG2PPort = G2PPort
+
+
+__all__ = ["EnglishG2PPort", "G2PPort", "oov_words", "resolve_effective_lexicon"]

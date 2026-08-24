@@ -87,6 +87,7 @@ class FakeCtcSession:
         fail_infer: bool,
         unreachable: bool,
         chunk_vocabulary: Mapping[str, int] | None = None,
+        align_vocabulary: Mapping[str, int] | None = None,
         raw_infer_failure: Exception | None = None,
     ) -> None:
         self.kind = kind
@@ -94,13 +95,14 @@ class FakeCtcSession:
         self.fail_infer = fail_infer
         self.unreachable = unreachable
         self.chunk_vocabulary = chunk_vocabulary
+        self.align_vocabulary = align_vocabulary
         self.raw_infer_failure = raw_infer_failure
 
     @property
     def vocabulary(self) -> Mapping[str, int]:
         if self.kind == "chunk":
             return self.chunk_vocabulary or {"<pad>": 0, "AH": 1, "B": 2}
-        return {"AH": 0, "B": 1, "sil": 2, "sph": 3}
+        return self.align_vocabulary or {"AH": 0, "B": 1, "sil": 2, "sph": 3}
 
     @property
     def model_vocab_size(self) -> int:
@@ -122,16 +124,17 @@ class FakeCtcSession:
         if self.fail_infer:
             raise AlignmentError(f"injected {self.kind} inference failure")
         if self.kind == "chunk":
-            logits = np.full((6, 3), -12.0, dtype=np.float32)
+            logits = np.full((6, len(self.vocabulary)), -12.0, dtype=np.float32)
             logits[:, 0] = 0.0
             logits[1, 1] = 8.0
             logits[4, 2] = 8.0
         elif self.unreachable:
-            logits = np.asarray([[8.0, -12.0, -12.0, -12.0]], dtype=np.float32)
+            logits = np.full((1, len(self.vocabulary)), -12.0, dtype=np.float32)
+            logits[0, 0] = 8.0
         else:
             frame_count = max(2, round((float(audio.size) / 16_000.0) / 0.01))
             split = frame_count // 2
-            logits = np.full((frame_count, 4), -12.0, dtype=np.float32)
+            logits = np.full((frame_count, len(self.vocabulary)), -12.0, dtype=np.float32)
             logits[:split, 0] = 8.0
             logits[split:, 1] = 8.0
         log_probs = _log_softmax(logits)
@@ -150,12 +153,14 @@ class FakeInferenceFactory:
         fail_infer: str | None = None,
         unreachable: bool = False,
         chunk_vocabulary: Mapping[str, int] | None = None,
+        align_vocabulary: Mapping[str, int] | None = None,
         raw_infer_failure: Exception | None = None,
     ) -> None:
         self.fail_enter = fail_enter
         self.fail_infer = fail_infer
         self.unreachable = unreachable
         self.chunk_vocabulary = chunk_vocabulary
+        self.align_vocabulary = align_vocabulary
         self.raw_infer_failure = raw_infer_failure
         self.trace: list[str] = []
         self.active: str | None = None
@@ -194,6 +199,7 @@ class FakeInferenceFactory:
                 fail_infer=self.fail_infer == kind,
                 unreachable=self.unreachable and kind == "align",
                 chunk_vocabulary=self.chunk_vocabulary,
+                align_vocabulary=self.align_vocabulary,
                 raw_infer_failure=self.raw_infer_failure,
             )
         finally:

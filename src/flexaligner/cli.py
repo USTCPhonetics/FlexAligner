@@ -16,6 +16,7 @@ from .capabilities import CapabilityId, get_capabilities
 from .contracts import (
     AlignmentOptions,
     AlignmentRequest,
+    AudioPolicy,
     Device,
     Language,
     LocalModelBundle,
@@ -36,7 +37,9 @@ from .model_download import (
     OFFICIAL_ENDPOINT,
     default_model_cache_dir,
     download_english_models,
+    download_models,
     find_cached_english_models,
+    find_cached_models,
 )
 
 PLACEHOLDER_EXIT_STATUS = 3
@@ -56,7 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
     capability_parser.add_argument("--json", action="store_true", dest="as_json")
 
     align_parser = subparsers.add_parser(
-        "align", help="Align one English 16 kHz mono PCM16 WAV with local or cached models."
+        "align", help="Align one English or Mandarin file with local or cached models."
     )
     align_parser.add_argument("--audio", type=Path, required=True)
     transcript_group = align_parser.add_mutually_exclusive_group(required=True)
@@ -81,10 +84,16 @@ def build_parser() -> argparse.ArgumentParser:
     align_parser.add_argument("--utterance-id")
     align_parser.add_argument("--num-threads", type=int, default=1)
     align_parser.add_argument(
+        "--audio-policy",
+        choices=[item.value for item in AudioPolicy],
+        default=AudioPolicy.STRICT_PCM16_WAV.value,
+        help="Keep strict WAV input (default) or explicitly enable the optional audio extra.",
+    )
+    align_parser.add_argument(
         "--pronunciation-mode",
         choices=[item.value for item in PronunciationMode],
         default=PronunciationMode.G2P.value,
-        help="Use local English G2P for OOVs (default) or require strict lexicon coverage.",
+        help="Use the selected language's local G2P for OOVs or require strict lexicon coverage.",
     )
     align_parser.add_argument(
         "--language",
@@ -103,7 +112,12 @@ def build_parser() -> argparse.ArgumentParser:
     models_parser = subparsers.add_parser("models", help="Model cache management.")
     model_subparsers = models_parser.add_subparsers(dest="models_command")
     fetch_parser = model_subparsers.add_parser(
-        "fetch", help="Fetch and validate the pinned public English model bundle."
+        "fetch", help="Fetch and validate one pinned public language model bundle."
+    )
+    fetch_parser.add_argument(
+        "--language",
+        choices=[item.value for item in Language],
+        default=Language.EN.value,
     )
     fetch_parser.add_argument("--model-cache-dir", type=Path)
     fetch_parser.add_argument(
@@ -116,6 +130,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Authorize download without an interactive prompt.",
     )
+
+    audio_parser = subparsers.add_parser("audio", help="Optional explicit audio conversion.")
+    audio_subparsers = audio_parser.add_subparsers(dest="audio_command")
+    convert_parser = audio_subparsers.add_parser(
+        "convert", help="Convert one audio file to 16 kHz mono PCM16 WAV."
+    )
+    convert_parser.add_argument("input", type=Path)
+    convert_parser.add_argument("output", type=Path)
+    convert_parser.add_argument("--sample-rate", type=int, default=16_000)
     return parser
 
 
@@ -135,6 +158,7 @@ def _run_align(args: argparse.Namespace) -> None:
         language=Language(args.language),
         device=Device(args.device),
         num_threads=args.num_threads,
+        audio_policy=AudioPolicy(args.audio_policy),
         pronunciation_mode=PronunciationMode(args.pronunciation_mode),
     )
     require_supported_options(options)
@@ -196,14 +220,17 @@ def _resolve_cli_models(args: argparse.Namespace) -> LocalModelBundle:
         cache_dir=args.model_cache_dir,
         source=args.model_source,
         assume_yes=args.yes,
+        language=Language(args.language),
     )
 
 
 def _run_models_fetch(args: argparse.Namespace) -> None:
+    language = Language(args.language)
     models = _resolve_or_download_models(
         cache_dir=args.model_cache_dir,
         source=args.model_source,
         assume_yes=args.yes,
+        language=language,
     )
     print(
         json.dumps(
@@ -214,6 +241,7 @@ def _run_models_fetch(args: argparse.Namespace) -> None:
                 "manifest": str(models.manifest_path),
                 "repo_id": DEFAULT_MODEL_REPO,
                 "revision": DEFAULT_MODEL_REVISION,
+                "language": language.value,
             },
             ensure_ascii=False,
             sort_keys=True,
@@ -222,16 +250,21 @@ def _run_models_fetch(args: argparse.Namespace) -> None:
 
 
 def _resolve_or_download_models(
-    *, cache_dir: Path | None, source: str | None, assume_yes: bool
+    *,
+    cache_dir: Path | None,
+    source: str | None,
+    assume_yes: bool,
+    language: Language = Language.EN,
 ) -> LocalModelBundle:
     selected_cache = default_model_cache_dir() if cache_dir is None else cache_dir.expanduser()
     try:
-        cached = find_cached_english_models(cache_dir=selected_cache)
+        cached = _find_cached_models(language=language, cache_dir=selected_cache)
     except ModelValidationError:
         if not assume_yes:
             raise
         selected_source = _default_model_source() if source is None else source
-        return download_english_models(
+        return _download_models(
+            language=language,
             cache_dir=selected_cache,
             source=selected_source,
             force_download=True,
@@ -241,20 +274,24 @@ def _resolve_or_download_models(
 
     selected_source = _default_model_source() if source is None else source
     if assume_yes:
-        return download_english_models(cache_dir=selected_cache, source=selected_source)
+        return _download_models(
+            language=language,
+            cache_dir=selected_cache,
+            source=selected_source,
+        )
     if not sys.stdin.isatty():
-        raise _cache_miss(selected_cache)
+        raise _cache_miss(selected_cache, language=language)
     if not _prompt_yes_no(
-        f"Default English models were not found. Download about 2.4 GiB from "
+        f"Default {language.value} models were not found. Download about 2.4 GiB from "
         f"{DEFAULT_MODEL_REPO}@{DEFAULT_MODEL_RELEASE}? [y/N] "
     ):
-        raise _cache_miss(selected_cache)
+        raise _cache_miss(selected_cache, language=language)
 
     if cache_dir is None:
         entered_cache = _prompt_line(f"Cache directory [{selected_cache}]: ")
         if entered_cache:
             selected_cache = Path(entered_cache).expanduser()
-            cached = find_cached_english_models(cache_dir=selected_cache)
+            cached = _find_cached_models(language=language, cache_dir=selected_cache)
             if cached is not None:
                 return cached
     if source is None:
@@ -276,7 +313,40 @@ def _resolve_or_download_models(
         f"({DEFAULT_MODEL_REVISION}) from {endpoint} into {selected_cache}",
         file=sys.stderr,
     )
-    return download_english_models(cache_dir=selected_cache, source=selected_source)
+    return _download_models(
+        language=language,
+        cache_dir=selected_cache,
+        source=selected_source,
+    )
+
+
+def _find_cached_models(*, language: Language, cache_dir: Path) -> LocalModelBundle | None:
+    if language is Language.EN:
+        return find_cached_english_models(cache_dir=cache_dir)
+    return find_cached_models(language=language, cache_dir=cache_dir)
+
+
+def _download_models(
+    *,
+    language: Language,
+    cache_dir: Path,
+    source: str,
+    force_download: bool = False,
+) -> LocalModelBundle:
+    if language is Language.EN:
+        if not force_download:
+            return download_english_models(cache_dir=cache_dir, source=source)
+        return download_english_models(
+            cache_dir=cache_dir,
+            source=source,
+            force_download=force_download,
+        )
+    return download_models(
+        language=language,
+        cache_dir=cache_dir,
+        source=source,
+        force_download=force_download,
+    )
 
 
 def _default_model_source() -> str:
@@ -295,14 +365,18 @@ def _prompt_line(prompt: str) -> str:
     return sys.stdin.readline().strip()
 
 
-def _cache_miss(cache_dir: Path) -> ModelCacheMissError:
+def _cache_miss(cache_dir: Path, *, language: Language = Language.EN) -> ModelCacheMissError:
+    suggested_command = "flexaligner models fetch --yes"
+    if language is Language.ZH:
+        suggested_command += " --language zh"
     return ModelCacheMissError(
-        "Default English models are not cached and no download was authorized",
+        f"Default {language.value} models are not cached and no download was authorized",
         context={
             "cache_dir": str(cache_dir),
             "repo_id": DEFAULT_MODEL_REPO,
             "revision": DEFAULT_MODEL_REVISION,
-            "suggested_command": "flexaligner models fetch --yes",
+            "language": language.value,
+            "suggested_command": suggested_command,
         },
     )
 
@@ -323,6 +397,30 @@ def _dispatch(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None
         return
     if args.command == "serve":
         report.require(CapabilityId.WEB)
+        return
+    if args.command == "audio":
+        if args.audio_command != "convert":
+            parser.error("audio requires the convert subcommand")
+        report.require(CapabilityId.AUDIO_TRANSCODE)
+        from .adapters.audio_av import convert_to_pcm16_wav
+
+        converted = convert_to_pcm16_wav(
+            args.input,
+            args.output,
+            sample_rate=args.sample_rate,
+        )
+        print(
+            json.dumps(
+                {
+                    "audio_duration_s": converted.duration_s,
+                    "output_path": str(args.output),
+                    "sample_rate": converted.sample_rate,
+                    "schema_version": "1",
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
         return
     if args.command == "models" and args.models_command == "fetch":
         report.require(CapabilityId.AUTO_MODEL_DOWNLOAD)

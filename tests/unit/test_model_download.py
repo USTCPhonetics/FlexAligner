@@ -11,7 +11,9 @@ import flexaligner.model_download as model_download
 from flexaligner import ModelDownloadError, ModelValidationError
 
 
-def _make_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+def _make_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, language: str = "en"
+) -> Path:
     snapshot = tmp_path / "snapshot"
     entries: list[dict[str, object]] = []
     for role in ("chunker", "aligner"):
@@ -23,7 +25,7 @@ def _make_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
             "tokenizer_config.json",
             "vocab.json",
         ):
-            relative = f"en/{role}/{filename}"
+            relative = f"{language}/{role}/{filename}"
             path = snapshot / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             payload = f"{role}:{filename}".encode()
@@ -39,9 +41,9 @@ def _make_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         "schema_version": 1,
         "bundle_version": "0.2.0a1",
         "languages": {
-            "en": {
-                "chunker_path": "en/chunker",
-                "aligner_path": "en/aligner",
+            language: {
+                "chunker_path": f"{language}/chunker",
+                "aligner_path": f"{language}/aligner",
             }
         },
         "files": entries,
@@ -126,6 +128,28 @@ def test_cache_lookup_is_strictly_local_and_anonymous(
     assert captured["token"] is False
     assert captured["revision"] == model_download.DEFAULT_MODEL_REVISION
     assert captured["allow_patterns"] == list(model_download._ALLOW_PATTERNS)
+
+
+def test_mandarin_cache_lookup_uses_exact_zh_subset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    snapshot = _make_snapshot(tmp_path, monkeypatch, language="zh")
+    captured: dict[str, Any] = {}
+
+    def fake_snapshot_download(**kwargs: object) -> str:
+        captured.update(kwargs)
+        return str(snapshot)
+
+    monkeypatch.setattr(model_download, "_snapshot_download", fake_snapshot_download)
+    bundle = model_download.find_cached_models(language="zh", cache_dir=tmp_path / "cache")
+    assert bundle is not None
+    assert bundle.chunker_dir == snapshot / "zh/chunker"
+    assert bundle.aligner_dir == snapshot / "zh/aligner"
+    assert captured["allow_patterns"] == list(model_download._allow_patterns("zh"))
+    assert all(
+        path == "model_manifest.json" or str(path).startswith("zh/")
+        for path in captured["allow_patterns"]
+    )
 
 
 def test_cache_miss_returns_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -11,11 +11,14 @@ import flexaligner.adapters.hf_local as hf_local
 import flexaligner.cli as cli
 from flexaligner import (
     AlignmentOptions,
+    AudioPolicy,
     Device,
     EngineClosedError,
     FeatureNotAvailableError,
     FlexAligner,
     Language,
+    LanguageMismatchError,
+    PronunciationMode,
 )
 from tests.integration._support import FakeInferenceFactory, make_integration_fixture
 
@@ -38,6 +41,105 @@ def test_public_engine_lazily_runs_real_pipeline_and_closes_factory(
     assert factory.trace.count("factory.close") == 1
     with pytest.raises(EngineClosedError):
         engine.align(fixture.request)
+
+
+def test_public_engine_explicit_audio_policy_uses_optional_decoder(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = make_integration_fixture(tmp_path, metadata=False)
+    factory = FakeInferenceFactory()
+    monkeypatch.setattr(hf_local, "LocalHuggingFaceInferenceFactory", lambda: factory)
+    with FlexAligner(
+        models=fixture.models,
+        lexicon_path=fixture.lexicon_path,
+        options=AlignmentOptions(audio_policy=AudioPolicy.AUTO_RESAMPLE),
+    ) as engine:
+        result = engine.align(fixture.request)
+    assert result.output_path.is_file()
+    assert factory.trace[:2] == ["chunk.load", "chunk.infer"]
+
+
+def test_public_engine_runs_mandarin_sil_only_profile(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = make_integration_fixture(tmp_path, metadata=False)
+    fixture.lexicon_path.write_text("一 i\n无 u\n", encoding="utf-8")
+    chunk_vocabulary = {"<pad>": 0, "i": 1, "u": 2, "ix": 3, "iy": 4, "iz": 5}
+    align_vocabulary = {"i": 0, "u": 1, "sil": 2, "ix": 3, "iy": 4, "iz": 5}
+    (fixture.models.chunker_dir / "vocab.json").write_text(
+        json.dumps(chunk_vocabulary), encoding="utf-8"
+    )
+    (fixture.models.aligner_dir / "vocab.json").write_text(
+        json.dumps(align_vocabulary), encoding="utf-8"
+    )
+    request = replace(fixture.request, transcript="一 无")
+    factory = FakeInferenceFactory(
+        chunk_vocabulary=chunk_vocabulary,
+        align_vocabulary=align_vocabulary,
+    )
+    monkeypatch.setattr(hf_local, "LocalHuggingFaceInferenceFactory", lambda: factory)
+    options = AlignmentOptions(
+        language=Language.ZH,
+        pronunciation_mode=PronunciationMode.LEXICON_ONLY,
+    )
+
+    with FlexAligner(
+        models=fixture.models,
+        lexicon_path=fixture.lexicon_path,
+        options=options,
+    ) as engine:
+        result = engine.align(request)
+
+    assert result.normalized_words == ("一", "无")
+    assert result.provenance.language is Language.ZH
+    assert result.provenance.algorithm_profile == "zh-sil-v1"
+    assert "sph" not in {interval.label for interval in result.phones}
+    assert result.output_path.is_file()
+
+
+def test_mandarin_rejects_english_lexicon_before_model_io(tmp_path: Path) -> None:
+    fixture = make_integration_fixture(tmp_path, metadata=False)
+    request = replace(fixture.request, transcript="中文")
+    engine = FlexAligner(
+        models=fixture.models,
+        lexicon_path=fixture.lexicon_path,
+        options=AlignmentOptions(
+            language=Language.ZH,
+            pronunciation_mode=PronunciationMode.LEXICON_ONLY,
+        ),
+    )
+    with pytest.raises(LanguageMismatchError) as caught:
+        engine.align(request)
+    assert caught.value.context["component"] == "lexicon"
+    assert not request.output.path.exists()
+
+
+def test_mandarin_rejects_english_models_before_inference_factory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = make_integration_fixture(tmp_path, metadata=False)
+    fixture.lexicon_path.write_text("中文 zh ong u en\n", encoding="utf-8")
+    request = replace(fixture.request, transcript="中文")
+
+    def forbidden_factory() -> FakeInferenceFactory:
+        raise AssertionError("language mismatch constructed inference factory")
+
+    monkeypatch.setattr(hf_local, "LocalHuggingFaceInferenceFactory", forbidden_factory)
+    engine = FlexAligner(
+        models=fixture.models,
+        lexicon_path=fixture.lexicon_path,
+        options=AlignmentOptions(
+            language=Language.ZH,
+            pronunciation_mode=PronunciationMode.LEXICON_ONLY,
+        ),
+    )
+    with pytest.raises(LanguageMismatchError) as caught:
+        engine.align(request)
+    assert caught.value.context["component"] == "chunker model"
+    assert not request.output.path.exists()
 
 
 def test_future_option_still_fails_before_pipeline_construction(
@@ -208,22 +310,17 @@ def test_cli_lexicon_mode_keeps_oov_failure_strict(
     assert not fixture.request.output.path.exists()
 
 
-def test_cli_placeholder_guard_precedes_missing_text_file_read(
+def test_cli_mandarin_language_mismatch_precedes_missing_model_io(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    def forbidden_reader(path: Path) -> str:
-        raise AssertionError(f"placeholder read text file: {path}")
-
-    monkeypatch.setattr(cli, "read_utf8_text", forbidden_reader)
     status = cli.main(
         [
             "align",
             "--audio",
             str(tmp_path / "missing.wav"),
-            "--text-file",
-            str(tmp_path / "missing.txt"),
+            "--text",
+            "english only",
             "--lexicon",
             str(tmp_path / "missing.dict"),
             "--chunker-model",
@@ -240,5 +337,5 @@ def test_cli_placeholder_guard_precedes_missing_text_file_read(
     assert status != 0
     assert streams.out == ""
     payload = json.loads(streams.err)
-    assert payload["code"] == "feature_not_available"
-    assert payload["context"]["capability"] == "language.zh"
+    assert payload["code"] == "language_mismatch"
+    assert payload["context"]["component"] == "transcript"

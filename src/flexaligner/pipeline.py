@@ -1,4 +1,4 @@
-"""English CPU single-file alignment orchestration.
+"""English and Mandarin CPU single-file alignment orchestration.
 
 The pipeline keeps file/model adapters outside the NumPy cores and deliberately
 loads the Chunker and Aligner in two non-overlapping context managers.
@@ -30,6 +30,7 @@ from .contracts import (
     AlignmentOptions,
     AlignmentRequest,
     AlignmentResult,
+    AudioPolicy,
     ChunkResult,
     Device,
     Language,
@@ -78,8 +79,13 @@ from .errors import (
     ResourceLimitError,
     UnreachableAlignmentError,
 )
+from .language_validation import (
+    validate_lexicon_language,
+    validate_model_language,
+    validate_transcript_language,
+)
 from .ports import CtcPosterior, LocalInferenceFactoryPort
-from .pronunciation import oov_words, resolve_effective_lexicon
+from .pronunciation import G2PPort, oov_words, resolve_effective_lexicon
 from .textgrid import (
     Interval,
     IntervalTier,
@@ -101,7 +107,7 @@ SPEECH_GAP_ENTER_COST = -3.0
 
 
 class AlignmentPipeline:
-    """Run the implemented local English CPU alignment path."""
+    """Run the implemented local English or Mandarin CPU alignment path."""
 
     def __init__(
         self,
@@ -128,28 +134,17 @@ class AlignmentPipeline:
             request.output.chunk_metadata_path,
         )
 
-        words = normalize_transcript(request.transcript)
+        validate_transcript_language(request.transcript, options.language)
+        if options.language is Language.EN:
+            words = normalize_transcript(request.transcript)
+        else:
+            from .adapters.zh_local import segment_mandarin
+
+            words = segment_mandarin(request.transcript)
         _reject_reserved_words(words)
         _check_transcript_limit(words, options)
         lexicon = load_lexicon(lexicon_path)
-        pronunciation_notices: tuple[PronunciationNotice, ...] = ()
-        if options.pronunciation_mode is PronunciationMode.G2P and oov_words(words, lexicon):
-            chunker_dir = validate_local_model_dir(models.chunker_dir, "chunker model")
-            aligner_dir = validate_local_model_dir(models.aligner_dir, "aligner model")
-            chunk_vocabulary = load_dense_token_vocab(chunker_dir / CHUNK_VOCAB_FILENAME)
-            aligner_vocabulary = load_dense_token_vocab(aligner_dir / CHUNK_VOCAB_FILENAME)
-            from .adapters.g2p_en_local import LocalEnglishG2P
-
-            lexicon, pronunciation_notices = resolve_effective_lexicon(
-                words=words,
-                lexicon=lexicon,
-                mode=options.pronunciation_mode,
-                g2p=LocalEnglishG2P(),
-                chunker_vocabulary=chunk_vocabulary,
-                aligner_vocabulary=aligner_vocabulary,
-            )
-        validate_transcript_lexicon(words, lexicon)
-        audio = load_strict_pcm16_wav(request.audio_path, options.limits)
+        validate_lexicon_language(lexicon, options.language)
 
         chunker_dir = validate_local_model_dir(models.chunker_dir, "chunker model")
         aligner_dir = validate_local_model_dir(models.aligner_dir, "aligner model")
@@ -159,6 +154,43 @@ class AlignmentPipeline:
                 context={"path": str(models.manifest_path)},
             )
         chunk_vocabulary = load_dense_token_vocab(chunker_dir / CHUNK_VOCAB_FILENAME)
+        aligner_vocabulary = load_dense_token_vocab(aligner_dir / CHUNK_VOCAB_FILENAME)
+        validate_model_language(
+            (("chunker model", chunk_vocabulary), ("aligner model", aligner_vocabulary)),
+            options.language,
+        )
+        pronunciation_notices: tuple[PronunciationNotice, ...] = ()
+        if options.pronunciation_mode is PronunciationMode.G2P and oov_words(words, lexicon):
+            g2p: G2PPort
+            if options.language is Language.EN:
+                from .adapters.g2p_en_local import LocalEnglishG2P
+
+                g2p = LocalEnglishG2P()
+            else:
+                from .adapters.zh_local import LocalMandarinG2P
+
+                g2p = LocalMandarinG2P()
+
+            lexicon, pronunciation_notices = resolve_effective_lexicon(
+                words=words,
+                lexicon=lexicon,
+                mode=options.pronunciation_mode,
+                g2p=g2p,
+                chunker_vocabulary=chunk_vocabulary,
+                aligner_vocabulary=aligner_vocabulary,
+                language=options.language,
+            )
+        validate_transcript_lexicon(words, lexicon)
+        if options.audio_policy is AudioPolicy.STRICT_PCM16_WAV:
+            audio = load_strict_pcm16_wav(request.audio_path, options.limits)
+        else:
+            from .adapters.audio_av import load_audio_with_av
+
+            audio = load_audio_with_av(
+                request.audio_path,
+                options.limits,
+                require_wav_container=options.audio_policy is AudioPolicy.AUTO_RESAMPLE,
+            )
         utterance_id = request.utterance_id or request.audio_path.stem or "utterance"
 
         try:
@@ -326,7 +358,13 @@ class AlignmentPipeline:
                 session.model_vocab_size,
             )
             config = Stage2DecodeConfig()
-            _validate_special_phones(vocabulary, session.model_vocab_size, config)
+            enable_sph = options.language is Language.EN
+            _validate_special_phones(
+                vocabulary,
+                session.model_vocab_size,
+                config,
+                enable_sph=enable_sph,
+            )
             beam_work_budget = BeamWorkBudget(limit=options.limits.max_beam_work_units)
 
             local_alignments: list[LocalAlignment] = []
@@ -351,6 +389,7 @@ class AlignmentPipeline:
                         context=f"local chunk_id={chunk.chunk_id}",
                         beam_work_budget=beam_work_budget,
                         max_graph_states=options.limits.max_stage2_graph_states,
+                        enable_sph=enable_sph,
                     )
                 )
             return local_alignments
@@ -393,8 +432,8 @@ def _validate_pipeline_contracts(
         raise ConfigurationError("lexicon_path must be a pathlib.Path")
     if not isinstance(options, AlignmentOptions):
         raise ConfigurationError("options must be AlignmentOptions")
-    if options.language is not Language.EN or options.device is not Device.CPU:
-        raise ConfigurationError("Pipeline accepts only the guarded English CPU profile")
+    if options.language not in {Language.EN, Language.ZH} or options.device is not Device.CPU:
+        raise ConfigurationError("Pipeline accepts only the guarded English/Mandarin CPU profiles")
     if not isinstance(request.audio_path, Path):
         raise ConfigurationError("request.audio_path must be a pathlib.Path")
     if not isinstance(request.transcript, str):
@@ -641,8 +680,13 @@ def _validate_special_phones(
     vocabulary: TokenVocabulary,
     model_vocab_size: int,
     config: Stage2DecodeConfig,
+    *,
+    enable_sph: bool,
 ) -> None:
-    for role, phone in (("sil_phone", config.sil_phone), ("sph_phone", config.sph_phone)):
+    required = [("sil_phone", config.sil_phone)]
+    if enable_sph:
+        required.append(("sph_phone", config.sph_phone))
+    for role, phone in required:
         if phone not in vocabulary.token_to_id:
             raise ModelCompatibilityError(
                 f"{role}={phone!r} is not in the Aligner vocabulary.",
@@ -666,9 +710,11 @@ def _stage2_from_posterior(
     context: str,
     beam_work_budget: BeamWorkBudget,
     max_graph_states: int,
+    enable_sph: bool,
 ) -> LocalAlignment:
     silence_id = vocabulary[config.sil_phone]
-    speech_gap_id = vocabulary[config.sph_phone]
+    sph_phone = config.sph_phone if enable_sph else None
+    speech_gap_id = vocabulary[config.sph_phone] if enable_sph else None
     graph, entry_bias = build_phone_graph_optional_sil_sph(
         words=words,
         lexicon=lexicon,
@@ -678,10 +724,10 @@ def _stage2_from_posterior(
         optional_sil_at_start=None,
         optional_sil_at_end=None,
         sil_cost=SILENCE_COST,
-        sph_phone=config.sph_phone,
-        optional_sph_between_words=True,
-        optional_sph_at_start=None,
-        optional_sph_at_end=None,
+        sph_phone=sph_phone,
+        optional_sph_between_words=enable_sph,
+        optional_sph_at_start=enable_sph,
+        optional_sph_at_end=enable_sph,
         sph_cost=SPEECH_GAP_COST,
         sph_word_label=config.sph_word_label,
         max_graph_states=max_graph_states,
@@ -711,7 +757,7 @@ def _stage2_from_posterior(
             logp=posterior.log_probs,
             sil_phone=config.sil_phone,
             sil_phone_id=silence_id,
-            sph_phone=config.sph_phone,
+            sph_phone=sph_phone,
             sph_phone_id=speech_gap_id,
             config=config,
             beam_work_budget=beam_work_budget,

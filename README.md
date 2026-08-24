@@ -42,18 +42,18 @@ FlexAligner decomposes forced alignment into two stages:
 * **🎯 Word and Phone Boundaries:** Produces Praat TextGrid files with continuous
   `words` and `phones` tiers while preserving the input word order.
 * **🔒 Local and Reproducible:** Explicit model paths remain fully local. When
-  model paths are omitted, the CLI validates the pinned English bundle in the
-  Hugging Face cache and asks before downloading it. English OOV pronunciations
-  use a bundled local G2P checkpoint and are always reported as CLI warnings.
+  model paths are omitted, the CLI validates the selected pinned language bundle
+  in the Hugging Face cache and asks before downloading it. Language-specific OOV
+  pronunciations are generated locally and always reported as CLI warnings.
 * **📦 Python Package and CLI:** Provides a typed Python API and a command-line
   interface for single-file alignment.
 
-The first public preview focuses on **English, CPU, and single-file alignment**.
-Mandarin, GPU, batch processing, Web services, multi-format decoding,
-resampling, and confidence calibration remain reserved interfaces. Local English
-OOV G2P is implemented in the current `0.2.0a1` source tree.
-Validated English model retrieval and local English OOV G2P are published in
-`flexaligner==0.2.0a1`.
+The published `0.2.0a1` preview focuses on **English, CPU, and single-file
+alignment**. The current development tree additionally implements Mandarin CPU
+single-file alignment, `jieba` segmentation, local Mandarin OOV G2P, and an
+optional audio conversion frontend. These additions are not yet a new PyPI
+release. GPU, batch processing, Web services, and confidence calibration remain
+reserved interfaces.
 
 ---
 
@@ -76,13 +76,13 @@ FlexAligner 将强制对齐分为两个阶段：
 * **🎯 词与音素边界：** 输出 Praat TextGrid，`words` 和 `phones` 两层连续覆盖完整
   音频时间轴，同时保持输入词序。
 * **🔒 本地与可复现：** 显式模型路径始终只在本地使用。未指定模型路径时，CLI 会先
-  校验 Hugging Face 默认缓存中的固定英语模型；缓存缺失时必须获得用户确认才会下载。
-  英语 OOV 发音由包内固定的本地 G2P checkpoint 生成，CLI 每次都会明确输出 warning。
+  校验 Hugging Face 默认缓存中所选语言的固定模型；缓存缺失时必须获得用户确认才会
+  下载。不同语言的 OOV 发音均在本地生成，CLI 每次都会明确输出 warning。
 * **📦 Python 包与 CLI：** 提供带类型定义的 Python API 和单文件命令行接口。
 
-首个公开预览版聚焦于**英语、CPU、单文件对齐**。普通话、GPU、批处理、Web 服务、
-多格式解码、自动重采样和置信度校准目前仍仅保留接口。经校验的英语模型获取和本地
-英语 OOV G2P 已随 `flexaligner==0.2.0a1` 发布。
+已经发布的 `0.2.0a1` 聚焦于**英语、CPU、单文件对齐**。当前开发分支进一步实现了
+普通话 CPU 单文件对齐、`jieba` 分词、本地普通话 OOV G2P，以及可选音频转换前端；
+这些新增能力尚未形成新的 PyPI 版本。GPU、批处理、Web 服务和置信度校准仍为预留接口。
 
 ---
 
@@ -128,17 +128,29 @@ cd FlexAligner
 python -m pip install -e ".[inference]"
 ```
 
-The package does not include acoustic-model weights. The current `0.2.0a1`
-source tree can retrieve the pinned public English bundle into the standard
-Hugging Face cache after explicit confirmation. A pronunciation dictionary is
-still required; the CLI uses local G2P only for words missing from that dictionary.
+The minimal package does not install Mandarin segmentation/G2P or audio
+conversion dependencies. Add only the incremental capabilities you need:
+
+```bash
+# Mandarin alignment: inference stack + jieba + pypinyin
+python -m pip install -e ".[inference,zh]"
+
+# Add explicit decoding, resampling and PCM16 WAV conversion
+python -m pip install -e ".[inference,zh,audio]"
+```
+
+The package does not include acoustic-model weights. The CLI can retrieve the
+selected pinned `en` or `zh` bundle into the standard Hugging Face cache after
+explicit confirmation. A pronunciation dictionary is still required; local G2P
+is used only for words missing from that dictionary.
 
 基础包支持 Python 3.10–3.14。首个 alpha 的推理依赖固定为 Torch 2.3.1 和
 Transformers 4.41.2，仅支持在 Python 3.10–3.12 上安装；真实模型发布验证目前仅覆盖
 Linux x86_64 与 Python 3.10.8。Python 3.13–3.14 暂时只承诺基础包和接口可用。
-wheel 不包含声学模型权重。当前 `0.2.0a1` 源码可在用户明确确认后，把固定英语模型
-下载到标准 Hugging Face 缓存；发音词典仍必须由用户提供。
-CLI 只对词典中缺失的英语词调用本地 G2P，已有词典条目始终优先。
+wheel 不包含声学模型权重。最小安装也不包含 `jieba`、`pypinyin` 或 PyAV；普通话
+能力使用 `[zh]` extra，转码与重采样使用 `[audio]` extra。CLI 可在用户明确确认后，
+把固定的 `en` 或 `zh` 模型下载到标准 Hugging Face 缓存。发音词典仍必须由用户提供；
+本地 G2P 只处理词典 OOV，已有词典条目始终优先。
 
 ## 💻 Usage
 
@@ -167,11 +179,12 @@ flexaligner models fetch
 flexaligner models fetch --yes --model-source mirror
 flexaligner models fetch --yes --model-source official \
   --model-cache-dir /data/huggingface/hub
+flexaligner models fetch --language zh --yes --model-source official
 ```
 
 The downloader pins release `v0.2.0a1` to the immutable commit
-`f9ca09d445e5e8981e43eca6a2f5421526ddc59e`, requests only the twelve English
-model files, disables implicit token use, and validates the built-in manifest
+`f9ca09d445e5e8981e43eca6a2f5421526ddc59e`, requests only the twelve files for
+the selected language, disables implicit token use, and validates the built-in manifest
 hash plus every file size and SHA-256. It never falls back from one endpoint to
 another. A non-interactive cache miss fails with `model_cache_miss` unless
 `--yes` explicitly authorizes downloading. An incomplete or hash-invalid cache
@@ -189,6 +202,33 @@ G2P engine version. Use `--pronunciation-mode lexicon` for strict dictionary-onl
 behavior; an OOV then fails before inference. The bundled English G2P performs
 no network access and supports normalized ASCII English words only.
 
+Mandarin alignment uses `--language zh`. The `[zh]` extra segments unspaced text
+with `jieba`; user-supplied whitespace remains a hard segmentation boundary.
+The current Mandarin model uses `sil` and has no `sph` output category, so the
+Mandarin Stage 2 graph never creates optional `sph` states:
+
+```bash
+flexaligner align \
+  --language zh \
+  --audio mandarin.wav \
+  --text-file mandarin.txt \
+  --lexicon mandarin.dict \
+  --output mandarin.TextGrid
+```
+
+The Mandarin G2P fallback uses local, tone-free initial/final phones compatible
+with the current model vocabulary. Polyphonic-word quality is not claimed;
+provide an explicit dictionary entry whenever pronunciation matters.
+
+The optional `[audio]` extra provides explicit conversion and opt-in alignment
+policies while the default remains strict PCM16 WAV:
+
+```bash
+flexaligner audio convert input.flac canonical.wav
+flexaligner align ... --audio-policy auto-resample   # WAV input only
+flexaligner align ... --audio-policy multi-format    # explicit PyAV decoding
+```
+
 未指定两项模型参数时，CLI 会先检查默认 Hugging Face 缓存。交互终端发现缓存缺失后，
 依次询问是否下载、缓存目录（直接回车使用默认目录）和下载来源（默认使用国内可访问的
 `hf-mirror.com`，也可选择 `official`）。非交互环境不会自行下载，必须提前执行
@@ -202,6 +242,16 @@ CLI 默认使用 `--pronunciation-mode g2p`。显式词典条目不会被覆盖�
 G2P 生成的 OOV 发音都会在 stderr 输出一条结构化 `WARNING`，包含词、出现位置、音素
 和引擎版本。需要严格词典模式时使用 `--pronunciation-mode lexicon`，此时 OOV 会在
 推理前失败。包内英语 G2P 不联网，当前只接受规范化后的 ASCII 英语词。
+
+普通话使用 `--language zh`。`[zh]` extra 通过 `jieba` 对无空格文本分词，用户已有的
+空格边界不会被跨越；本地 `pypinyin` G2P 只为词典 OOV 生成与当前模型兼容的无声调
+initial/final，并输出结构化 warning。多音字质量不作保证，重要发音应写入用户词典。
+当前普通话模型包含 `sil`、不包含 `sph`，因此普通话 Stage 2 不构建任何可选 `sph`
+状态。若文本、词典或模型与 `--language` 明显不匹配，程序会在推理前返回
+`language_mismatch`。
+
+`[audio]` extra 提供显式 `audio convert`、`auto-resample` 和 `multi-format` 能力；
+默认输入契约仍是严格的 16 kHz 单声道 PCM16 WAV，不会静默转换。
 
 Literal transcript text may be passed with `--text` instead of `--text-file`.
 `--num-threads` configures Torch's process-global CPU thread count for the
@@ -251,17 +301,19 @@ print(result.output_sha256)
 
 ### Input Requirements / 输入要求
 
-* Audio must be uncompressed 16 kHz mono PCM16 WAV.
-* The transcript must be UTF-8. CLI G2P mode may fill English dictionary OOVs
-  with warnings; strict mode and the Python default require full coverage.
+* Audio must be uncompressed 16 kHz mono PCM16 WAV unless an optional audio
+  policy is explicitly selected.
+* The transcript and dictionary must be UTF-8 and match `--language`. CLI G2P
+  mode may fill dictionary OOVs with warnings; strict mode and the Python default
+  require full coverage.
 * Models must resolve to validated local directories before inference; the
   dictionary must be available locally.
 * Output paths use no-clobber semantics: an existing output file is not
   overwritten.
 
-* 音频必须是未压缩的 16 kHz、单声道、PCM16 WAV。
-* 文本必须为 UTF-8。CLI G2P 模式可在 warning 后填补英语词典 OOV；严格模式和 Python
-  API 默认模式仍要求词典完整覆盖。
+* 除非显式选择 `[audio]` 提供的策略，音频必须是未压缩的 16 kHz 单声道 PCM16 WAV。
+* 文本和词典必须为 UTF-8，并与 `--language` 一致。CLI G2P 模式可在 warning 后填补
+  词典 OOV；严格模式和 Python API 默认模式仍要求词典完整覆盖。
 * 推理开始前模型必须解析为已校验的本地目录；词典必须提前保存在本地。
 * 输出采用不覆盖已有文件的策略；若目标文件已存在，程序不会将其覆盖。
 * `--num-threads` 会设置 Torch 的进程全局 CPU 线程数，并非仅对单个 aligner 实例生效。
@@ -273,9 +325,11 @@ print(result.output_sha256)
   TextGrid output.
 - [x] **Continuous TextGrid Coverage:** `words` and `phones` tiers use `NULL`
   intervals to cover the complete timeline.
-- [ ] **Mandarin Alignment:** Model, segmentation, and release validation.
+- [x] **Mandarin Development Path:** Current models, `jieba` segmentation,
+  lexicon-first local G2P, `sil`-only Stage 2, and real-sample validation.
 - [ ] **GPU and Batch Processing:** Accelerated and high-throughput workflows.
-- [ ] **Audio Frontend:** Multi-format decoding and automatic resampling.
+- [x] **Optional Audio Frontend:** Explicit PyAV decoding, resampling and
+  canonical PCM16 WAV conversion in the development tree.
 - [x] **Validated English Model Retrieval:** Pinned cache lookup, confirmed
   download, mirror/official selection, and manifest/hash verification.
 - [x] **Local English OOV G2P:** Lexicon-first ARPAbet fallback with structured

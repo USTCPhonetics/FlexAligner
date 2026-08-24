@@ -163,7 +163,7 @@ class AlignmentRequest:
 class AlignmentOptions:
     language: Language = Language.EN
     device: Device = Device.CPU
-    algorithm_profile: str = "en-reference-v1"
+    algorithm_profile: str = "auto"
     num_threads: int = 1
     audio_policy: AudioPolicy = AudioPolicy.STRICT_PCM16_WAV
     pronunciation_mode: PronunciationMode = PronunciationMode.LEXICON_ONLY

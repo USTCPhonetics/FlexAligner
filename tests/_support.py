@@ -14,19 +14,21 @@ AVAILABLE_IDS = {
     "capabilities.discovery",
     "alignment.single_file.en.cpu",
     "models.auto_download",
+    "language.zh",
+    "text.zh_segmentation",
+    "pronunciation.g2p.zh.local",
+    "audio.multi_format",
+    "audio.auto_resample",
+    "audio.transcode",
     "pronunciation.g2p.default",
     "pronunciation.g2p.en.local",
 }
 
 PLACEHOLDER_IDS = {
-    "language.zh",
     "device.gpu",
     "alignment.batch",
     "integration.web",
     "models.auto_resolution.python",
-    "audio.multi_format",
-    "audio.auto_resample",
-    "text.zh_segmentation",
     "confidence.calibration",
 }
 

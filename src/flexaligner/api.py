@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import replace
 from pathlib import Path
 from types import TracebackType
 
@@ -31,6 +32,7 @@ def require_supported_options(options: AlignmentOptions) -> None:
     report = get_capabilities()
     if options.language is Language.ZH:
         report.require(CapabilityId.MANDARIN)
+        report.require(CapabilityId.CHINESE_SEGMENTATION)
     if options.device is not Device.CPU:
         report.require(CapabilityId.GPU)
     if options.audio_policy is AudioPolicy.MULTI_FORMAT:
@@ -38,20 +40,29 @@ def require_supported_options(options: AlignmentOptions) -> None:
     if options.audio_policy is AudioPolicy.AUTO_RESAMPLE:
         report.require(CapabilityId.AUTO_RESAMPLE)
     if options.pronunciation_mode is PronunciationMode.G2P:
-        report.require(CapabilityId.LOCAL_ENGLISH_G2P)
+        report.require(
+            CapabilityId.LOCAL_ENGLISH_G2P
+            if options.language is Language.EN
+            else CapabilityId.LOCAL_MANDARIN_G2P
+        )
     if options.model_resolution is ModelResolution.AUTO_DOWNLOAD:
         report.require(CapabilityId.PYTHON_AUTO_MODEL_RESOLUTION)
     if options.confidence_calibration is CalibrationMode.CALIBRATED:
         report.require(CapabilityId.CONFIDENCE_CALIBRATION)
-    if options.algorithm_profile != "en-reference-v1":
+    expected_profile = "en-reference-v1" if options.language is Language.EN else "zh-sil-v1"
+    if options.algorithm_profile not in {"auto", expected_profile}:
         raise ConfigurationError(
-            "Only algorithm_profile='en-reference-v1' is implemented",
-            context={"algorithm_profile": options.algorithm_profile},
+            "algorithm_profile does not match the selected language",
+            context={
+                "algorithm_profile": options.algorithm_profile,
+                "expected": expected_profile,
+                "language": options.language.value,
+            },
         )
 
 
 class FlexAligner:
-    """Import-safe, lazy facade for one English CPU alignment engine.
+    """Import-safe, lazy facade for one English or Mandarin CPU alignment engine.
 
     Construction and capability discovery do not inspect paths, load models,
     import inference dependencies, or consume batch iterables.
@@ -88,7 +99,7 @@ class FlexAligner:
         *,
         options: AlignmentOptions | None = None,
     ) -> AlignmentResult:
-        """Align one strict local English/CPU request."""
+        """Align one local English/CPU or Mandarin/CPU request."""
 
         self._ensure_open()
         if not isinstance(request, AlignmentRequest):
@@ -96,10 +107,21 @@ class FlexAligner:
         if options is not None and not isinstance(options, AlignmentOptions):
             raise ConfigurationError("options must be AlignmentOptions or None")
         selected_options = self._options if options is None else options
+        if selected_options.algorithm_profile == "auto":
+            selected_options = replace(
+                selected_options,
+                algorithm_profile=(
+                    "en-reference-v1" if selected_options.language is Language.EN else "zh-sil-v1"
+                ),
+            )
         require_supported_options(selected_options)
-        self.capabilities().require(CapabilityId.SINGLE_FILE_EN_CPU)
+        self.capabilities().require(
+            CapabilityId.SINGLE_FILE_EN_CPU
+            if selected_options.language is Language.EN
+            else CapabilityId.MANDARIN
+        )
         if self._lexicon_path is None:
-            raise ConfigurationError("lexicon_path is required for English alignment")
+            raise ConfigurationError("lexicon_path is required for alignment")
         if self._pipeline is None:
             from .pipeline import AlignmentPipeline
 
