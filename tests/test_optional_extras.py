@@ -16,7 +16,11 @@ def test_incremental_language_and_audio_dependencies_are_not_in_minimal_install(
         project = tomllib.load(stream)["project"]
     base = tuple(project["dependencies"])
     extras = project["optional-dependencies"]
-    assert all(not dependency.startswith(("jieba", "pypinyin", "av")) for dependency in base)
+    assert all(
+        not dependency.startswith(("flexaligner-g2p-en", "jieba", "pypinyin", "av"))
+        for dependency in base
+    )
+    assert extras["en"] == ["flexaligner-g2p-en==0.3.0a1"]
     assert extras["zh"] == ["jieba==0.42.1", "pypinyin==0.55.0"]
     assert extras["audio"] == ["av==16.0.1"]
 
@@ -28,7 +32,7 @@ def test_top_level_import_does_not_import_incremental_dependencies() -> None:
             "-I",
             "-c",
             "import sys, flexaligner; "
-            "assert not {'jieba', 'pypinyin', 'av'}.intersection(sys.modules)",
+            "assert not {'flexaligner_g2p_en', 'jieba', 'pypinyin', 'av'}.intersection(sys.modules)",
         ],
         check=False,
         capture_output=True,

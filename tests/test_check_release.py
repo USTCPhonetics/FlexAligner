@@ -11,6 +11,12 @@ from tests._support import REPO_ROOT
 
 def _write_pyproject(path: Path, version: str) -> None:
     path.write_text(f'[project]\nname = "flexaligner"\nversion = "{version}"\n', encoding="utf-8")
+    language_pack = path.parent / "packages" / "flexaligner-g2p-en"
+    language_pack.mkdir(parents=True)
+    (language_pack / "pyproject.toml").write_text(
+        f'[project]\nname = "flexaligner-g2p-en"\nversion = "{version}"\n',
+        encoding="utf-8",
+    )
 
 
 def _run_guard(pyproject: Path, *arguments: str) -> subprocess.CompletedProcess[str]:

@@ -128,10 +128,16 @@ cd FlexAligner
 python -m pip install -e ".[inference]"
 ```
 
-The minimal package does not install Mandarin segmentation/G2P or audio
-conversion dependencies. Add only the incremental capabilities you need:
+The minimal package does not contain the English G2P checkpoint and does not
+install Mandarin segmentation/G2P or audio conversion dependencies. Add only
+the incremental capabilities you need. Until `0.3.0a1` is published, install
+the English language pack from the same checkout before selecting `[en]`:
 
 ```bash
+# English local OOV G2P: separately packaged checkpoint
+python -m pip install -e packages/flexaligner-g2p-en
+python -m pip install -e ".[inference,en]"
+
 # Mandarin alignment: inference stack + jieba + pypinyin
 python -m pip install -e ".[inference,zh]"
 
@@ -147,10 +153,12 @@ is used only for words missing from that dictionary.
 基础包支持 Python 3.10–3.14。首个 alpha 的推理依赖固定为 Torch 2.3.1 和
 Transformers 4.41.2，仅支持在 Python 3.10–3.12 上安装；真实模型发布验证目前仅覆盖
 Linux x86_64 与 Python 3.10.8。Python 3.13–3.14 暂时只承诺基础包和接口可用。
-wheel 不包含声学模型权重。最小安装也不包含 `jieba`、`pypinyin` 或 PyAV；普通话
-能力使用 `[zh]` extra，转码与重采样使用 `[audio]` extra。CLI 可在用户明确确认后，
-把固定的 `en` 或 `zh` 模型下载到标准 Hugging Face 缓存。发音词典仍必须由用户提供；
-本地 G2P 只处理词典 OOV，已有词典条目始终优先。
+wheel 不包含声学模型权重。最小安装也不包含英语 G2P checkpoint、`jieba`、
+`pypinyin` 或 PyAV；英语本地 G2P 使用 `[en]` extra 和独立
+`flexaligner-g2p-en` distribution，普通话能力使用 `[zh]` extra，转码与重采样使用
+`[audio]` extra。CLI 可在用户明确确认后，把固定的 `en` 或 `zh` 模型下载到标准
+Hugging Face 缓存。发音词典仍必须由用户提供；本地 G2P 只处理词典 OOV，已有词典
+条目始终优先。
 
 ## 💻 Usage
 
@@ -199,8 +207,10 @@ The CLI defaults to `--pronunciation-mode g2p`. Explicit dictionary entries are
 never replaced or written back. Each generated OOV pronunciation emits one
 structured `WARNING` on stderr with the word, occurrence indices, phones, and
 G2P engine version. Use `--pronunciation-mode lexicon` for strict dictionary-only
-behavior; an OOV then fails before inference. The bundled English G2P performs
-no network access and supports normalized ASCII English words only.
+behavior; an OOV then fails before inference. English OOV generation requires
+the `[en]` extra. Its separately packaged checkpoint performs no network access
+and supports normalized ASCII English words only. If the extra is absent, only
+an actual English OOV request fails with `optional_dependency_missing`.
 
 Mandarin alignment uses `--language zh`. The `[zh]` extra segments unspaced text
 with `jieba`; user-supplied whitespace remains a hard segmentation boundary.
@@ -241,7 +251,10 @@ size 与 SHA-256 校验后才能使用。
 CLI 默认使用 `--pronunciation-mode g2p`。显式词典条目不会被覆盖或写回文件；每个由
 G2P 生成的 OOV 发音都会在 stderr 输出一条结构化 `WARNING`，包含词、出现位置、音素
 和引擎版本。需要严格词典模式时使用 `--pronunciation-mode lexicon`，此时 OOV 会在
-推理前失败。包内英语 G2P 不联网，当前只接受规范化后的 ASCII 英语词。
+推理前失败。英语 OOV 生成需要 `[en]` extra；checkpoint 位于独立的
+`flexaligner-g2p-en` distribution，不联网，当前只接受规范化后的 ASCII 英语词。
+未安装 `[en]` 时，只有真实发生英语 OOV G2P 请求才返回
+`optional_dependency_missing`；完整词典对齐不受影响。
 
 普通话使用 `--language zh`。`[zh]` extra 通过 `jieba` 对无空格文本分词，用户已有的
 空格边界不会被跨越；本地 `pypinyin` G2P 只为词典 OOV 生成与当前模型兼容的无声调
@@ -365,7 +378,8 @@ If you use FlexAligner in your research, please cite:
 
 FlexAligner is released under the [MIT License](LICENSE). Please refer to the
 repository's `LICENSE` file for the authoritative license and copyright notice.
-The bundled English G2P checkpoint is derived from `g2p-en` 2.1.0 and remains
-under Apache-2.0; its license and provenance notice are included in the wheel.
+The optional `flexaligner-g2p-en` distribution contains the checkpoint derived
+from `g2p-en` 2.1.0 under Apache-2.0, together with its license and provenance
+notice. The minimal MIT-licensed `flexaligner` wheel does not contain that asset.
 
 <div align="center"><sub>Built by USTCPhonetics.</sub></div>

@@ -179,7 +179,12 @@ jobs:
         run: |
           cd "$FLEXALIGNER_SOURCE_ROOT"
           "$FLEXALIGNER_VENV_ROOT/bin/python" -m build --no-isolation --wheel
-      - name: Locate exactly one wheel
+          "$FLEXALIGNER_VENV_ROOT/bin/python" -m build \
+            --no-isolation \
+            --wheel \
+            --outdir dist \
+            packages/flexaligner-g2p-en
+      - name: Locate the exact main and English-language-pack wheels
         shell: bash
         run: |
           cd "$FLEXALIGNER_SOURCE_ROOT"
@@ -187,13 +192,18 @@ jobs:
           import os
           from pathlib import Path
 
-          wheels = sorted(Path("dist").glob("*.whl"))
-          if len(wheels) != 1:
-              raise RuntimeError(f"Expected exactly one E2E wheel, got: {wheels}")
+          main_wheels = sorted(Path("dist").glob("flexaligner-[0-9]*.whl"))
+          language_wheels = sorted(Path("dist").glob("flexaligner_g2p_en-*.whl"))
+          if len(main_wheels) != 1 or len(language_wheels) != 1:
+              raise RuntimeError(
+                  f"Expected one main and one English G2P wheel, got: "
+                  f"main={main_wheels}, language={language_wheels}"
+              )
           with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as handle:
-              handle.write(f"FLEXALIGNER_E2E_WHEEL={wheels[0].resolve()}\n")
+              handle.write(f"FLEXALIGNER_E2E_WHEEL={main_wheels[0].resolve()}\n")
+              handle.write(f"FLEXALIGNER_E2E_EN_PACK_WHEEL={language_wheels[0].resolve()}\n")
           PY
-      - name: Install the exact wheel with inference dependencies offline
+      - name: Install the exact wheels with inference dependencies offline
         shell: bash
         run: |
           cd "$FLEXALIGNER_SOURCE_ROOT"
@@ -201,7 +211,8 @@ jobs:
             --no-index \
             --find-links "$FLEXALIGNER_E2E_WHEELHOUSE" \
             --force-reinstall \
-            "${FLEXALIGNER_E2E_WHEEL}[inference]"
+            "${FLEXALIGNER_E2E_WHEEL}[inference]" \
+            "${FLEXALIGNER_E2E_EN_PACK_WHEEL}"
           "$FLEXALIGNER_VENV_ROOT/bin/python" -m pip check
       - name: Require and verify all frozen local model assets
         shell: bash

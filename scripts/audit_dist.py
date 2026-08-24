@@ -26,10 +26,6 @@ DENIED_SUFFIXES = {
     ".textgrid",
     ".wav",
 }
-G2P_CHECKPOINT_SUFFIX = "flexaligner/_vendor/g2p_en/checkpoint20.npz"
-G2P_CHECKPOINT_SHA256 = "b8af35e4596d8dd5836dfd3fe9b2ba4f97b9c311efe8879544cbcfcbd566d8c6"
-G2P_LICENSE_SUFFIX = "flexaligner/_vendor/g2p_en/LICENSE.g2p-en.txt"
-G2P_NOTICE_SUFFIX = "flexaligner/_vendor/g2p_en/NOTICE.md"
 DENIED_PARTS = {
     ".git",
     ".mypy_cache",
@@ -60,9 +56,7 @@ def validate_member_names(names: list[str], *, archive: Path, wheel: bool) -> No
         lower_parts = {part.lower() for part in path.parts}
         if lower_parts & DENIED_PARTS:
             raise RuntimeError(f"Denied directory in {archive}: {raw_name!r}")
-        if path.suffix.lower() in DENIED_SUFFIXES and not normalized.endswith(
-            G2P_CHECKPOINT_SUFFIX
-        ):
+        if path.suffix.lower() in DENIED_SUFFIXES:
             raise RuntimeError(f"Denied file type in {archive}: {raw_name!r}")
         if wheel and "tests" in lower_parts:
             raise RuntimeError(f"Tests must not be included in the wheel: {raw_name!r}")
@@ -72,24 +66,10 @@ def contains_suffix(names: list[str], suffix: str) -> bool:
     return any(name.replace("\\", "/").endswith(suffix) for name in names)
 
 
-def require_g2p_assets(names: list[str], *, archive: Path) -> None:
-    required = (G2P_CHECKPOINT_SUFFIX, G2P_LICENSE_SUFFIX, G2P_NOTICE_SUFFIX)
-    missing = [suffix for suffix in required if not contains_suffix(names, suffix)]
-    if missing:
-        raise RuntimeError(f"Distribution is missing local English G2P assets: {missing}")
-
-
 def audit_wheel(path: Path, *, expected_name: str, expected_version: str) -> None:
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
         validate_member_names(names, archive=path, wheel=True)
-        require_g2p_assets(names, archive=path)
-        checkpoint_name = next(
-            name for name in names if name.replace("\\", "/").endswith(G2P_CHECKPOINT_SUFFIX)
-        )
-        checkpoint_digest = hashlib.sha256(archive.read(checkpoint_name)).hexdigest()
-        if checkpoint_digest != G2P_CHECKPOINT_SHA256:
-            raise RuntimeError("Wheel contains an unaudited local English G2P checkpoint")
         metadata_names = [name for name in names if name.endswith(".dist-info/METADATA")]
         if len(metadata_names) != 1:
             raise RuntimeError(f"Expected exactly one wheel METADATA file: {metadata_names}")
@@ -105,6 +85,8 @@ def audit_wheel(path: Path, *, expected_name: str, expected_version: str) -> Non
         )
     if metadata.get("License-Expression") != "MIT":
         raise RuntimeError("Wheel must contain the audited SPDX License-Expression: MIT")
+    if "flexaligner-g2p-en==0.3.0a1; extra == 'en'" not in metadata.get_all("Requires-Dist", []):
+        raise RuntimeError("Main wheel must expose the exact English language pack via [en]")
     if not contains_suffix(names, "flexaligner/__init__.py"):
         raise RuntimeError("Wheel does not contain flexaligner/__init__.py")
     if not contains_suffix(names, "flexaligner/py.typed"):
@@ -113,23 +95,15 @@ def audit_wheel(path: Path, *, expected_name: str, expected_version: str) -> Non
         )
     if not any(".dist-info/licenses/LICENSE" in name for name in names):
         raise RuntimeError("Wheel does not contain the declared LICENSE file")
+    forbidden = ("checkpoint20.npz", "flexaligner_g2p_en", "LICENSE.g2p-en", "g2p_en/NOTICE")
+    leaked = [name for name in names if any(marker in name for marker in forbidden)]
+    if leaked:
+        raise RuntimeError(f"Base wheel leaks optional English G2P assets: {leaked}")
 
 
 def audit_sdist(path: Path) -> None:
     with tarfile.open(path, mode="r:gz") as archive:
         names = archive.getnames()
-        require_g2p_assets(names, archive=path)
-        checkpoint_member = next(
-            member
-            for member in archive.getmembers()
-            if member.name.replace("\\", "/").endswith(G2P_CHECKPOINT_SUFFIX)
-        )
-        checkpoint_file = archive.extractfile(checkpoint_member)
-        if checkpoint_file is None:
-            raise RuntimeError("Unable to read the local English G2P checkpoint from sdist")
-        checkpoint_digest = hashlib.sha256(checkpoint_file.read()).hexdigest()
-        if checkpoint_digest != G2P_CHECKPOINT_SHA256:
-            raise RuntimeError("sdist contains an unaudited local English G2P checkpoint")
     validate_member_names(names, archive=path, wheel=False)
     required = (
         "LICENSE",
@@ -151,8 +125,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    wheels = sorted(args.dist_dir.glob("*.whl"))
-    sdists = sorted(args.dist_dir.glob("*.tar.gz"))
+    wheels = sorted(args.dist_dir.glob("flexaligner-[0-9]*.whl"))
+    sdists = sorted(args.dist_dir.glob("flexaligner-[0-9]*.tar.gz"))
     if len(wheels) != 1 or len(sdists) != 1:
         raise RuntimeError(f"Expected one wheel and one sdist; wheels={wheels}, sdists={sdists}")
 

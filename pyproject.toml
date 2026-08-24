@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "flexaligner"
-version = "0.3.0.dev0"
+version = "0.3.0a1"
 description = "Two-stage forced alignment for long-form real-world speech."
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.10,<3.15"
@@ -34,6 +34,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+en = [
+  "flexaligner-g2p-en==0.3.0a1",
+]
 inference = [
   "torch==2.3.1",
   "transformers==4.41.2",
@@ -95,6 +98,7 @@ include = [
   "pyproject.toml",
 ]
 exclude = [
+  "/packages/**",
   "/reference/**",
   "/tests/**",
 ]
@@ -116,7 +120,7 @@ strict = true
 warn_unreachable = true
 # Runtime and package code is checked strictly. Tests intentionally exercise
 # dynamic ModuleType/reflection behavior and are enforced by Ruff + pytest.
-files = ["src", "scripts"]
+files = ["src", "scripts", "packages/flexaligner-g2p-en/src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -135,7 +139,7 @@ markers = [
 branch = true
 parallel = true
 patch = ["subprocess"]
-source = ["flexaligner"]
+source = ["flexaligner", "flexaligner_g2p_en"]
 
 [tool.coverage.report]
 show_missing = true

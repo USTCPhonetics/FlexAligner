@@ -47,6 +47,9 @@ def test_fast_ci_has_read_only_permissions_and_no_privileged_trigger() -> None:
     assert '-m "not model_e2e"' in source
     assert "python -m build --no-isolation --sdist --wheel" in source
     assert 'python -m pip install --only-binary=numpy --group test -e ".[zh,audio]"' in source
+    assert "python -m pip install -e packages/flexaligner-g2p-en" in source
+    assert "python scripts/audit_language_pack.py dist" in source
+    assert "--cov=flexaligner_g2p_en" in source
     assert "python -m pip install --only-binary=:all: --force-reinstall dist/*.whl" in source
 
 

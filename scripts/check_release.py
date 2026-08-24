@@ -36,6 +36,17 @@ def main() -> None:
             f"The public-alpha workflow accepts only canonical X.Y.ZaN versions; got {version!r}."
         )
     expected_tag = f"v{version}"
+    language_pack_pyproject = args.pyproject.parent / "packages/flexaligner-g2p-en/pyproject.toml"
+    with language_pack_pyproject.open("rb") as handle:
+        language_pack = tomllib.load(handle)["project"]
+    if (
+        language_pack.get("name") != "flexaligner-g2p-en"
+        or str(language_pack.get("version")) != version
+    ):
+        raise RuntimeError(
+            "English G2P language-pack name/version must match the main release: "
+            f"main={version!r}, language_pack={language_pack!r}"
+        )
     if args.tag is not None and args.tag != expected_tag:
         raise RuntimeError(f"Tag/version mismatch: tag={args.tag!r}, expected={expected_tag!r}")
     mode = "version-only" if args.version_only else f"tag={args.tag}"

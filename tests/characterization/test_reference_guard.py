@@ -89,6 +89,7 @@ def test_wheel_and_sdist_build_configuration_excludes_reference() -> None:
     sdist = _toml_section(pyproject, "tool.hatch.build.targets.sdist")
 
     assert 'packages = ["src/flexaligner"]' in wheel
+    assert '"/packages/**"' in sdist
     assert "reference" not in wheel
     assert '"/reference/**"' in sdist
 
