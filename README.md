@@ -261,7 +261,7 @@ If you use FlexAligner in your research, please cite / 如果您在研究中使�
 
 ## ©️ Copyright & License / 版权与许可证
 
-Copyright (c) 2026 WANG Yiming
+Copyright (c) 2026 USTCPhonetics
 
 FlexAligner is released under the [MIT License](LICENSE). The optional
 `flexaligner-g2p-en` distribution contains a checkpoint derived from
