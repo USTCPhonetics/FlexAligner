@@ -48,12 +48,10 @@ FlexAligner decomposes forced alignment into two stages:
 * **📦 Python Package and CLI:** Provides a typed Python API and a command-line
   interface for single-file alignment.
 
-The published `0.2.0a1` preview focuses on **English, CPU, and single-file
-alignment**. The current development tree additionally implements Mandarin CPU
-single-file alignment, `jieba` segmentation, local Mandarin OOV G2P, and an
-optional audio conversion frontend. These additions are not yet a new PyPI
-release. GPU, batch processing, Web services, and confidence calibration remain
-reserved interfaces.
+The `0.3.0a1` preview provides **English and Mandarin CPU single-file
+alignment**, optional local OOV G2P language packs, `jieba` segmentation for
+Mandarin, and an optional audio conversion frontend. GPU, batch processing, Web
+services, and confidence calibration remain reserved interfaces.
 
 ---
 
@@ -80,9 +78,9 @@ FlexAligner 将强制对齐分为两个阶段：
   下载。不同语言的 OOV 发音均在本地生成，CLI 每次都会明确输出 warning。
 * **📦 Python 包与 CLI：** 提供带类型定义的 Python API 和单文件命令行接口。
 
-已经发布的 `0.2.0a1` 聚焦于**英语、CPU、单文件对齐**。当前开发分支进一步实现了
-普通话 CPU 单文件对齐、`jieba` 分词、本地普通话 OOV G2P，以及可选音频转换前端；
-这些新增能力尚未形成新的 PyPI 版本。GPU、批处理、Web 服务和置信度校准仍为预留接口。
+`0.3.0a1` 预览版提供**英语与普通话 CPU 单文件对齐**、可选的本地 OOV G2P 语言包、
+普通话 `jieba` 分词，以及可选音频转换前端。GPU、批处理、Web 服务和置信度校准仍为
+预留接口。
 
 ---
 
@@ -105,10 +103,11 @@ extra pins Torch 2.3.1 and Transformers 4.41.2 and is installable on Python
 3.10–3.12. Real-model release evidence currently covers only Linux x86_64 with
 Python 3.10.8; Python 3.13–3.14 are core-only.
 
-Install the current public preview:
+Install the `0.3.0a1` preview with English local OOV G2P and the frozen
+inference stack:
 
 ```bash
-python -m pip install "flexaligner[inference]==0.2.0a1"
+python -m pip install "flexaligner[inference,en]==0.3.0a1"
 ```
 
 For a CPU-only Linux environment, install the frozen Torch build from its CPU
@@ -116,7 +115,7 @@ index first:
 
 ```bash
 python -m pip install torch==2.3.1 --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "flexaligner[inference]==0.2.0a1"
+python -m pip install "flexaligner[inference,en]==0.3.0a1"
 ```
 
 To work from a reviewed source checkout:
@@ -130,8 +129,8 @@ python -m pip install -e ".[inference]"
 
 The minimal package does not contain the English G2P checkpoint and does not
 install Mandarin segmentation/G2P or audio conversion dependencies. Add only
-the incremental capabilities you need. Until `0.3.0a1` is published, install
-the English language pack from the same checkout before selecting `[en]`:
+the incremental capabilities you need. For a source checkout, install the
+English language pack before selecting `[en]`:
 
 ```bash
 # English local OOV G2P: separately packaged checkpoint
