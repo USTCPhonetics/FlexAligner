@@ -6,7 +6,7 @@
 
 [![Laboratory](https://img.shields.io/badge/Laboratory-USTC_Phonetics-red.svg)](http://phonetics.ustc.edu.cn/)
 [![PyPI](https://img.shields.io/pypi/v/flexaligner.svg)](https://pypi.org/project/flexaligner/)
-[![Python](https://img.shields.io/badge/Python-3.10--3.14-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.10--3.12-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/USTCPhonetics/FlexAligner/actions/workflows/ci.yml/badge.svg)](https://github.com/USTCPhonetics/FlexAligner/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Model](https://img.shields.io/badge/Model-Wav2Vec2.0-orange.svg)](https://huggingface.co/USTCPhonetics/FlexAligner)
@@ -28,15 +28,15 @@ background noise, laughter, hesitations, untranscribed events, or local
 transcription omissions. Conventional aligners may force these regions into
 nearby words and produce misleading boundaries.
 
-FlexAligner addresses this problem in two stages. It first uses CTC to find
-reliable, ordered transcript anchors, then applies a constrained pronunciation
-graph and two-pass Viterbi decoding inside the matched regions. The result is a
-Praat TextGrid with word and phone boundaries; uncovered time is represented
-explicitly as `NULL` rather than hidden inside neighboring labels.
+FlexAligner first locates reliable transcript regions and then estimates word
+and phone boundaries within them. The result is a Praat TextGrid; unmatched
+time is represented explicitly as `NULL` rather than hidden inside neighboring
+labels.
 
-The `0.3.0a1` public alpha supports **English and Mandarin, CPU, single-file
-alignment**. GPU inference, corpus/batch alignment, Web services, automatic
-language detection, and calibrated confidence scores are not yet available.
+The `0.3.0a1` public alpha aligns **English and Mandarin single recordings on
+CPU** and writes word- and phone-level Praat TextGrids. GPU inference,
+corpus/batch alignment, Web services, automatic language detection, and
+calibrated confidence scores are not part of the current alpha.
 
 ## 🌏 简介
 
@@ -44,12 +44,13 @@ language detection, and calibrated confidence scores are not yet available.
 并不完美一致的音频与转写。背景噪音、笑声、停顿、未转写声音事件或局部漏记，
 都可能使传统对齐器把不匹配时段强行挤入相邻词或音素。
 
-FlexAligner 先通过 CTC 寻找可靠且顺序一致的文本锚点，再在已匹配区域内构建受约束的
-发音图，使用两遍 Viterbi 解码估计词和音素边界。输出为 Praat TextGrid，未覆盖时段
-使用明确的 `NULL` 区间表示，而不是被隐藏在相邻标签中。
+FlexAligner 先定位可靠的文本对应区域，再在其中估计词和音素边界。
+输出为 Praat TextGrid，未匹配时段使用明确的 `NULL` 区间表示，
+而不是被隐藏在相邻标签中。
 
-`0.3.0a1` 公开 alpha 当前支持**英语和普通话、CPU、单文件对齐**。GPU 推理、语料库/
-批处理对齐、Web 服务、自动语言识别和经校准的置信度尚未提供。
+`0.3.0a1` 公开 alpha 当前可在 **CPU 上对齐英语和普通话单条录音**，
+输出词级和音素级 Praat TextGrid。GPU 推理、语料库/批处理对齐、
+Web 服务、自动语言识别和经校准的置信度不属于当前 alpha 范围。
 
 ### 🌟 Key Features / 核心优势
 
@@ -59,12 +60,12 @@ FlexAligner 先通过 CTC 寻找可靠且顺序一致的文本锚点，再在已
 - **🎯 Word and Phone Boundaries / 词与音素边界：** Continuous `words` and
   `phones` tiers cover the complete timeline, including leading, internal, and
   trailing `NULL` intervals. 两个 tier 连续覆盖完整时间轴。
-- **🌍 English and Mandarin / 英语与普通话：** Pinned acoustic models,
-  language-aware text handling, and local lexicon-first OOV G2P. 固定模型、语言相关的文本处理与
-  词典优先的本地 OOV 发音兜底。
-- **🔒 Local and Reproducible / 本地与可复现：** Acoustic models and G2P
-  resources are cached locally for repeatable offline inference. 声学模型和 G2P 资源缓存在
-  本地，可用于可复现的离线推理。
+- **🌍 English and Mandarin / 英语与普通话：** Language-specific models,
+  text processing, and local pronunciation support. 提供与语言匹配的模型、
+  文本处理和本地发音支持。
+- **🔒 Local and Reproducible / 本地与可复现：** Download models once and
+  reuse them locally, including for offline alignment. 模型下载一次后可在本地
+  重复使用，也可用于离线对齐。
 
 ---
 
@@ -72,24 +73,14 @@ FlexAligner 先通过 CTC 寻找可靠且顺序一致的文本锚点，再在已
 
 ### 1. Install / 安装
 
-The recommended installation includes **all currently supported language,
-inference, and audio components**. It supports Python 3.10–3.12.
+For most users, install all currently supported language, inference, and audio
+features with Python 3.10–3.12:
 
-推荐安装包含**当前全部语言、推理和音频增量能力**，支持 Python 3.10–3.12。
+大多数用户可在 Python 3.10–3.12 中直接安装当前全部语言、推理和音频功能：
 
 ```bash
 python -m pip install "flexaligner[inference,en,zh,audio]==0.3.0a1"
 ```
-
-<details>
-<summary><strong>CPU-only Linux installation / CPU-only Linux 安装</strong></summary>
-
-```bash
-python -m pip install torch==2.3.1 --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "flexaligner[inference,en,zh,audio]==0.3.0a1"
-```
-
-</details>
 
 ### 2. Prepare the input / 准备输入
 
@@ -106,7 +97,13 @@ installation also provides explicit conversion for other audio formats.
 默认音频必须是未压缩的 16 kHz 单声道 PCM16 WAV；推荐安装同时提供其他音频格式的
 显式转换能力。
 
-### 3. Fetch a model / 下载模型
+### 3. Get a model / 获取模型
+
+When an alignment model is not yet available locally, the interactive CLI can
+download it after asking for confirmation. You can also download a model in
+advance:
+
+本地尚无对齐模型时，交互式 CLI 会在取得确认后下载。也可事先主动下载：
 
 ```bash
 # English / 英语
@@ -116,10 +113,10 @@ flexaligner models fetch --language en
 flexaligner models fetch --language zh
 ```
 
-Models are downloaded to the local Hugging Face cache after confirmation. Both
-the official Hugging Face endpoint and `hf-mirror.com` are supported.
+The models are stored in the local Hugging Face cache. Both the official
+Hugging Face service and `hf-mirror.com` are supported.
 
-模型经用户确认后下载到本地 Hugging Face 缓存，支持 Hugging Face 官方端点和
+模型会保存在本地 Hugging Face 缓存中，支持 Hugging Face 官方服务和
 `hf-mirror.com`。
 
 ### 4. Align / 执行对齐
@@ -199,7 +196,7 @@ with FlexAligner(models=models, lexicon_path=Path("english.dict")) as aligner:
         )
     )
 
-print(result.output_sha256)
+print(result.output_path)
 ```
 
 ---
@@ -208,11 +205,9 @@ print(result.output_sha256)
 
 ```mermaid
 graph TD
-    Input[Audio + Transcript + Lexicon] --> B[Stage 1: CTC Chunking]
-    B -->|Reliable ordered anchors| C[Matched local chunks]
-    C --> D[Stage 2: Pronunciation Graph]
-    D --> E[Two-pass Viterbi Decoding]
-    E --> F[Words + Phones + NULL TextGrid]
+    Input[Audio + Transcript + Lexicon] --> B[CTC Transcript Matching]
+    B -->|Reliable transcript regions| C[Pronunciation-guided Alignment]
+    C --> D[Words + Phones + NULL TextGrid]
 ```
 
 1. **Macro-Segmentation / 宏观切分：** CTC finds reliable transcript anchors while
