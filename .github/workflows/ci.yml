@@ -121,16 +121,20 @@ jobs:
         run: |
           python -m pip install --upgrade pip==26.1.2
           python -m pip install --group package
-      - name: Build the main and English-language-pack distributions
+      - name: Build the main release distributions and audit-only English language pack
         run: |
           python -m build --no-isolation --sdist --wheel
-          python -m build --no-isolation --sdist --wheel --outdir dist packages/flexaligner-g2p-en
+          python -m build --no-isolation --sdist --wheel \
+            --outdir language-dist \
+            packages/flexaligner-g2p-en
       - name: Check metadata and package inventory
         run: |
           python -m twine check --strict dist/*
+          python -m twine check --strict language-dist/*
           check-wheel-contents dist/*.whl
+          check-wheel-contents language-dist/*.whl
           python scripts/audit_dist.py
-          python scripts/audit_language_pack.py dist
+          python scripts/audit_language_pack.py language-dist
           sha256sum dist/* > python-package-SHA256SUMS
       - name: Upload immutable distribution candidates
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

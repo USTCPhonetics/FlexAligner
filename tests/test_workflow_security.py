@@ -48,9 +48,10 @@ def test_fast_ci_has_read_only_permissions_and_no_privileged_trigger() -> None:
     assert "python -m build --no-isolation --sdist --wheel" in source
     assert 'python -m pip install --only-binary=numpy --group test -e ".[zh,audio]"' in source
     assert "python -m pip install -e packages/flexaligner-g2p-en" in source
-    assert "python scripts/audit_language_pack.py dist" in source
+    assert "python scripts/audit_language_pack.py language-dist" in source
     assert "--cov=flexaligner_g2p_en" in source
     assert "python -m pip install --only-binary=:all: --force-reinstall dist/*.whl" in source
+    assert "--outdir language-dist" in source
 
 
 def test_production_release_is_tag_only_and_oidc_is_confined_to_publish_jobs() -> None:
@@ -116,6 +117,7 @@ def test_model_e2e_is_offline_and_fails_closed_without_manifest() -> None:
     assert "--require-approved" in source
     assert "MODEL_E2E_BLOCKED" in source
     assert "-m model_e2e" in source
+    assert '"${FLEXALIGNER_E2E_WHEEL}[inference,zh]"' in source
     assert source.count("curl ") == 1
     assert "https://codeload.github.com/${{ github.repository }}/tar.gz/${{ github.sha }}" in source
     assert "--proto '=https'" in source

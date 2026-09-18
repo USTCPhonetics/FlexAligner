@@ -21,6 +21,7 @@ from .contracts import (
     PronunciationMode,
 )
 from .errors import ConfigurationError, EngineClosedError
+from .model_download import has_validated_system_dictionary
 from .ports import AlignmentPipelinePort
 
 
@@ -49,7 +50,7 @@ def require_supported_options(options: AlignmentOptions) -> None:
         report.require(CapabilityId.PYTHON_AUTO_MODEL_RESOLUTION)
     if options.confidence_calibration is CalibrationMode.CALIBRATED:
         report.require(CapabilityId.CONFIDENCE_CALIBRATION)
-    expected_profile = "en-reference-v1" if options.language is Language.EN else "zh-sil-v1"
+    expected_profile = "en-reference-v1" if options.language is Language.EN else "zh-online-core-v1"
     if options.algorithm_profile not in {"auto", expected_profile}:
         raise ConfigurationError(
             "algorithm_profile does not match the selected language",
@@ -111,7 +112,9 @@ class FlexAligner:
             selected_options = replace(
                 selected_options,
                 algorithm_profile=(
-                    "en-reference-v1" if selected_options.language is Language.EN else "zh-sil-v1"
+                    "en-reference-v1"
+                    if selected_options.language is Language.EN
+                    else "zh-online-core-v1"
                 ),
             )
         require_supported_options(selected_options)
@@ -120,8 +123,14 @@ class FlexAligner:
             if selected_options.language is Language.EN
             else CapabilityId.MANDARIN
         )
-        if self._lexicon_path is None:
-            raise ConfigurationError("lexicon_path is required for alignment")
+        if self._lexicon_path is None and not (
+            selected_options.language is Language.ZH
+            and has_validated_system_dictionary(self._models)
+        ):
+            raise ConfigurationError(
+                "lexicon_path is required unless a validated Mandarin model bundle supplies "
+                "dictionary_path"
+            )
         if self._pipeline is None:
             from .pipeline import AlignmentPipeline
 

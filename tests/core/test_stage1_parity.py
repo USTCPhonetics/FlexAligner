@@ -133,14 +133,38 @@ def test_chunk_lexicon_strips_stress_without_mutating_order(reference: SimpleNam
     container = SimpleNamespace(lex=raw)
 
     expected = reference.build_chunk_lexicon(container)
-    from_container = production.build_chunk_lexicon(container)
-    from_mapping = production.build_chunk_lexicon(raw)
+    vocabulary = {"G": 0, "OW": 1, "UW": 2, "B": 3, "IY": 4}
+    from_container = production.build_chunk_lexicon(container, vocabulary)
+    from_mapping = production.build_chunk_lexicon(raw, vocabulary)
 
     assert_reference_equivalent(expected, from_container)
     assert_reference_equivalent(expected, from_mapping)
     assert list(from_mapping) == ["go", "odd"]
     assert from_mapping["go"] == [["G", "OW"], ["G", "UW"]]
     assert raw["go"][0] == ["G", "OW1"]
+
+
+def test_chunk_lexicon_prefers_exact_tone_token_before_english_stress_fallback() -> None:
+    raw = {
+        "语调": [["v3", "iao1"]],
+        "english": [["G", "OW1"]],
+    }
+    vocabulary = {"v3": 0, "v": 1, "iao1": 2, "iao": 3, "G": 4, "OW": 5}
+
+    actual = production.build_chunk_lexicon(raw, vocabulary)
+
+    assert actual["语调"] == [["v3", "iao1"]]
+    assert actual["english"] == [["G", "OW"]]
+
+
+def test_chunk_lexicon_never_strips_mandarin_tone_as_english_stress() -> None:
+    with pytest.raises(KeyError, match="not compatible"):
+        production.build_chunk_lexicon({"调": [["iao1"]]}, {"iao": 0})
+
+
+def test_chunk_lexicon_rejects_phone_missing_from_exact_and_fallback_vocab() -> None:
+    with pytest.raises(KeyError, match="not compatible"):
+        production.build_chunk_lexicon({"bad": [["UNKNOWN1"]]}, {"OTHER": 0})
 
 
 def test_stage1_record_derived_properties_match_reference_meaning() -> None:

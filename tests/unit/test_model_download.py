@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -37,15 +38,28 @@ def _make_snapshot(
                     "sha256": hashlib.sha256(payload).hexdigest(),
                 }
             )
-    manifest = {
-        "schema_version": 1,
-        "bundle_version": "0.2.0a1",
-        "languages": {
-            language: {
-                "chunker_path": f"{language}/chunker",
-                "aligner_path": f"{language}/aligner",
+    dictionary_path: str | None = None
+    if language == "zh":
+        dictionary_path = "zh/word.dict"
+        dictionary = snapshot / dictionary_path
+        dictionary.write_text("日 r iz4\n", encoding="utf-8")
+        entries.append(
+            {
+                "path": dictionary_path,
+                "size": dictionary.stat().st_size,
+                "sha256": hashlib.sha256(dictionary.read_bytes()).hexdigest(),
             }
-        },
+        )
+    language_manifest: dict[str, object] = {
+        "chunker_path": f"{language}/chunker",
+        "aligner_path": f"{language}/aligner",
+    }
+    if dictionary_path is not None:
+        language_manifest["dictionary_path"] = dictionary_path
+    manifest = {
+        "schema_version": 2,
+        "bundle_version": "2026-09-18-zh-aishell1",
+        "languages": {language: language_manifest},
         "files": entries,
     }
     manifest_path = snapshot / "model_manifest.json"
@@ -82,6 +96,8 @@ def test_validate_snapshot_returns_local_bundle(
     assert bundle.chunker_dir == snapshot / "en/chunker"
     assert bundle.aligner_dir == snapshot / "en/aligner"
     assert bundle.manifest_path == snapshot / "model_manifest.json"
+    assert bundle.dictionary_path is None
+    assert model_download.has_validated_system_dictionary(bundle) is False
 
 
 def test_validate_snapshot_rejects_manifest_trust_root_mismatch(
@@ -145,10 +161,60 @@ def test_mandarin_cache_lookup_uses_exact_zh_subset(
     assert bundle is not None
     assert bundle.chunker_dir == snapshot / "zh/chunker"
     assert bundle.aligner_dir == snapshot / "zh/aligner"
+    assert bundle.dictionary_path == snapshot / "zh/word.dict"
+    assert model_download.has_validated_system_dictionary(bundle) is True
     assert captured["allow_patterns"] == list(model_download._allow_patterns("zh"))
     assert all(
         path == "model_manifest.json" or str(path).startswith("zh/")
         for path in captured["allow_patterns"]
+    )
+    assert "zh/word.dict" in captured["allow_patterns"]
+
+
+def test_validated_bundle_cannot_be_replaced_with_unvalidated_dictionary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    snapshot = _make_snapshot(tmp_path, monkeypatch, language="zh")
+    bundle = model_download.validate_model_snapshot(snapshot, language="zh")
+
+    with pytest.raises(TypeError, match="snapshot validation"):
+        replace(bundle, dictionary_path=tmp_path / "arbitrary.dict")
+
+
+def test_mandarin_snapshot_requires_manifest_dictionary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    snapshot = _make_snapshot(tmp_path, monkeypatch, language="zh")
+    manifest_path = snapshot / "model_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["languages"]["zh"].pop("dictionary_path")
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    monkeypatch.setattr(
+        model_download,
+        "MODEL_MANIFEST_SHA256",
+        hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+    )
+
+    with pytest.raises(ModelValidationError, match="dictionary path"):
+        model_download.validate_model_snapshot(snapshot, language="zh")
+
+
+def test_mandarin_snapshot_rejects_dictionary_hash_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    snapshot = _make_snapshot(tmp_path, monkeypatch, language="zh")
+    (snapshot / "zh/word.dict").write_text("日 r ix4\n", encoding="utf-8")
+
+    with pytest.raises(ModelValidationError, match=r"size|SHA-256"):
+        model_download.validate_model_snapshot(snapshot, language="zh")
+
+
+def test_pinned_model_contract_matches_0_4_release() -> None:
+    assert model_download.DEFAULT_MODEL_RELEASE == "v0.4.0a1"
+    assert model_download.DEFAULT_MODEL_REVISION == "6720609c167c8ddcd09ea4cb9223aeb569150df8"
+    assert (
+        model_download.MODEL_MANIFEST_SHA256
+        == "7ab9057cba1b51fb91ab434f893d4915358729bcc411e3aceca9e0b67883df36"
     )
 
 

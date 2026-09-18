@@ -9,6 +9,8 @@ import pytest
 
 import flexaligner.adapters.hf_local as hf_local
 import flexaligner.cli as cli
+import flexaligner.model_download as model_download
+import flexaligner.pipeline as pipeline
 from flexaligner import (
     AlignmentOptions,
     AudioPolicy,
@@ -18,9 +20,24 @@ from flexaligner import (
     FlexAligner,
     Language,
     LanguageMismatchError,
+    LocalModelBundle,
     PronunciationMode,
 )
 from tests.integration._support import FakeInferenceFactory, make_integration_fixture
+
+
+def _validated_bundle_with_dictionary(
+    models: LocalModelBundle,
+    dictionary_path: Path,
+) -> LocalModelBundle:
+    manifest_path = dictionary_path.parent / "model_manifest.json"
+    manifest_path.write_text("{}\n", encoding="utf-8")
+    return model_download._validated_bundle(
+        chunker_dir=models.chunker_dir,
+        aligner_dir=models.aligner_dir,
+        manifest_path=manifest_path,
+        dictionary_path=dictionary_path,
+    )
 
 
 def test_public_engine_lazily_runs_real_pipeline_and_closes_factory(
@@ -60,14 +77,30 @@ def test_public_engine_explicit_audio_policy_uses_optional_decoder(
     assert factory.trace[:2] == ["chunk.load", "chunk.infer"]
 
 
-def test_public_engine_runs_mandarin_sil_only_profile(
+def test_public_engine_runs_mandarin_online_core_profile_with_sph_enabled(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fixture = make_integration_fixture(tmp_path, metadata=False)
-    fixture.lexicon_path.write_text("一 i\n无 u\n", encoding="utf-8")
-    chunk_vocabulary = {"<pad>": 0, "i": 1, "u": 2, "ix": 3, "iy": 4, "iz": 5}
-    align_vocabulary = {"i": 0, "u": 1, "sil": 2, "ix": 3, "iy": 4, "iz": 5}
+    fixture.lexicon_path.write_text("一 i1\n无 u2\n", encoding="utf-8")
+    models = _validated_bundle_with_dictionary(fixture.models, fixture.lexicon_path)
+    chunk_vocabulary = {
+        "<pad>": 0,
+        "i1": 1,
+        "u2": 2,
+        "ix1": 3,
+        "iy2": 4,
+        "iz4": 5,
+    }
+    align_vocabulary = {
+        "i1": 0,
+        "u2": 1,
+        "sil": 2,
+        "ix1": 3,
+        "iy2": 4,
+        "iz4": 5,
+        "sph": 6,
+    }
     (fixture.models.chunker_dir / "vocab.json").write_text(
         json.dumps(chunk_vocabulary), encoding="utf-8"
     )
@@ -80,23 +113,121 @@ def test_public_engine_runs_mandarin_sil_only_profile(
         align_vocabulary=align_vocabulary,
     )
     monkeypatch.setattr(hf_local, "LocalHuggingFaceInferenceFactory", lambda: factory)
+    observed_enable_sph: list[bool] = []
+    original_stage2 = pipeline._stage2_from_posterior
+
+    def recording_stage2(**kwargs: Any) -> Any:
+        observed_enable_sph.append(bool(kwargs["enable_sph"]))
+        return original_stage2(**kwargs)
+
+    monkeypatch.setattr(pipeline, "_stage2_from_posterior", recording_stage2)
     options = AlignmentOptions(
         language=Language.ZH,
         pronunciation_mode=PronunciationMode.LEXICON_ONLY,
     )
 
     with FlexAligner(
-        models=fixture.models,
-        lexicon_path=fixture.lexicon_path,
+        models=models,
         options=options,
     ) as engine:
         result = engine.align(request)
 
     assert result.normalized_words == ("一", "无")
     assert result.provenance.language is Language.ZH
-    assert result.provenance.algorithm_profile == "zh-sil-v1"
+    assert result.provenance.algorithm_profile == "zh-online-core-v1"
+    assert observed_enable_sph == [True]
     assert "sph" not in {interval.label for interval in result.phones}
     assert result.output_path.is_file()
+
+
+def test_mandarin_user_dictionary_overrides_bundle_and_metadata_records_sources(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = make_integration_fixture(tmp_path, metadata=True)
+    system_path = tmp_path / "system.dict"
+    user_path = tmp_path / "user.dict"
+    system_path.write_text("一 i1\n无 u2\n", encoding="utf-8")
+    user_path.write_text("一 i1\n", encoding="utf-8")
+    models = _validated_bundle_with_dictionary(fixture.models, system_path)
+    chunk_vocabulary = {"<pad>": 0, "i1": 1, "u2": 2, "ix1": 3, "iz4": 4}
+    align_vocabulary = {
+        "i1": 0,
+        "u2": 1,
+        "sil": 2,
+        "sph": 3,
+        "ix1": 4,
+        "iz4": 5,
+    }
+    for model_dir, vocabulary in (
+        (models.chunker_dir, chunk_vocabulary),
+        (models.aligner_dir, align_vocabulary),
+    ):
+        (model_dir / "vocab.json").write_text(json.dumps(vocabulary), encoding="utf-8")
+    factory = FakeInferenceFactory(
+        chunk_vocabulary=chunk_vocabulary,
+        align_vocabulary=align_vocabulary,
+    )
+    monkeypatch.setattr(hf_local, "LocalHuggingFaceInferenceFactory", lambda: factory)
+    request = replace(fixture.request, transcript="一 无")
+
+    with FlexAligner(
+        models=models,
+        lexicon_path=user_path,
+        options=AlignmentOptions(
+            language=Language.ZH,
+            pronunciation_mode=PronunciationMode.LEXICON_ONLY,
+        ),
+    ) as engine:
+        engine.align(request)
+
+    assert request.output.chunk_metadata_path is not None
+    metadata = json.loads(request.output.chunk_metadata_path.read_text(encoding="utf-8"))
+    assert [item["pronunciation_source"] for item in metadata["words"]] == [
+        "user",
+        "system",
+    ]
+
+
+def test_unreferenced_system_dictionary_entry_cannot_block_stage1(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = make_integration_fixture(tmp_path, metadata=False)
+    system_path = tmp_path / "system.dict"
+    system_path.write_text("一 i1\n无 u2\n吹吹 ch ui5 ch ui5\n", encoding="utf-8")
+    models = _validated_bundle_with_dictionary(fixture.models, system_path)
+    chunk_vocabulary = {"<pad>": 0, "i1": 1, "u2": 2, "ix1": 3, "iz4": 4}
+    align_vocabulary = {
+        "i1": 0,
+        "u2": 1,
+        "sil": 2,
+        "sph": 3,
+        "ix1": 4,
+        "iz4": 5,
+    }
+    for model_dir, vocabulary in (
+        (models.chunker_dir, chunk_vocabulary),
+        (models.aligner_dir, align_vocabulary),
+    ):
+        (model_dir / "vocab.json").write_text(json.dumps(vocabulary), encoding="utf-8")
+    factory = FakeInferenceFactory(
+        chunk_vocabulary=chunk_vocabulary,
+        align_vocabulary=align_vocabulary,
+    )
+    monkeypatch.setattr(hf_local, "LocalHuggingFaceInferenceFactory", lambda: factory)
+    request = replace(fixture.request, transcript="一 无")
+
+    with FlexAligner(
+        models=models,
+        options=AlignmentOptions(
+            language=Language.ZH,
+            pronunciation_mode=PronunciationMode.LEXICON_ONLY,
+        ),
+    ) as engine:
+        result = engine.align(request)
+
+    assert result.normalized_words == ("一", "无")
 
 
 def test_mandarin_rejects_english_lexicon_before_model_io(tmp_path: Path) -> None:

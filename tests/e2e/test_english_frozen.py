@@ -36,7 +36,7 @@ MANIFEST_PATH = REPO_ROOT / "tests" / "fixtures" / "e2e" / "asset_manifest.json"
 REFERENCE_PATH = REPO_ROOT / "reference" / "align_single_cpu.py"
 REFERENCE_SHA256 = "9ed4e21e615718ddfd10930359f55769fb27a0d284599cce45a3fc755e835de1"
 EXPECTED_TEXTGRID_SHA256 = "d15265c207faa6c1d5b588aef645bb97e457868ec8f458112a54335c3ec2d32a"
-EXPECTED_METADATA_SHA256 = "e3bef373dad1b111de4c6f2f6c56f3f0675bde595b90065bb566b296328762d3"
+EXPECTED_METADATA_SHA256 = "a4733afd8325d5078c58c94380aed202306026b8c2a47ad2cede88bb8624130f"
 EXPECTED_WORDS = (
     "this",
     "synthetic",
@@ -292,10 +292,13 @@ def test_frozen_english_release_e2e_fixture_matches_reference(
     )
 
     metadata = json.loads(metadata_path.read_text(encoding="utf-8", errors="strict"))
-    assert metadata["schema_version"] == "1"
+    assert metadata["schema_version"] == "2"
     assert metadata["score_kind"] == ScoreKind.CHUNKER_EMISSION_GEOMETRIC_MEAN.value
     assert metadata["calibrated"] is False
     assert tuple(word["word"] for word in metadata["words"]) == EXPECTED_WORDS
+    assert tuple(word["pronunciation_source"] for word in metadata["words"]) == ("user",) * len(
+        EXPECTED_WORDS
+    )
     assert tuple(word["value"] for word in metadata["words"]) == tuple(
         score.value for score in result.raw_scores
     )

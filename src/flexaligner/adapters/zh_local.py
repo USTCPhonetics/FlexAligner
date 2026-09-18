@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import unicodedata
 from importlib import import_module
 from importlib.metadata import PackageNotFoundError, version
@@ -80,8 +81,11 @@ def segment_mandarin(text: str) -> tuple[str, ...]:
     return tuple(words)
 
 
+_MODEL_PHONE = re.compile(r"^[a-z]+[1-5]?$")
+
+
 class LocalMandarinG2P:
-    """Tone-free initial/final G2P compatible with the current Mandarin bundle."""
+    """Tone-bearing initial/final G2P for the schema-2 Mandarin bundle."""
 
     engine_id = "pypinyin-local-initial-final"
 
@@ -119,10 +123,11 @@ class LocalMandarinG2P:
         )
         finals = self._pinyin(
             word,
-            style=self._style.FINALS,
+            style=self._style.FINALS_TONE3,
             heteronym=False,
             strict=True,
             errors="default",
+            neutral_tone_with_five=True,
         )
         if len(initials) != len(finals) or len(initials) != len(word):
             raise PronunciationGenerationError(
@@ -159,17 +164,18 @@ class LocalMandarinG2P:
                         "character_index": character_index,
                     },
                 )
-            if final == "i":
+            tone = final[-1] if final and final[-1] in "12345" else ""
+            final_base = final[:-1] if tone else final
+            if final_base == "i":
                 if initial in {"zh", "ch", "sh"}:
-                    final = "ix"
+                    final_base = "ix"
                 elif initial in {"z", "c", "s"}:
-                    final = "iy"
+                    final_base = "iy"
                 elif initial == "r":
-                    final = "iz"
+                    final_base = "iz"
+            final = final_base + tone
             syllable = tuple(phone for phone in (initial, final) if phone)
-            if not syllable or any(
-                not phone.isascii() or not phone.islower() for phone in syllable
-            ):
+            if not syllable or any(_MODEL_PHONE.fullmatch(phone) is None for phone in syllable):
                 raise PronunciationGenerationError(
                     "Mandarin G2P could not map a character to the model phone set",
                     context={

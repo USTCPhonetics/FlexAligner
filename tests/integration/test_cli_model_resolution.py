@@ -117,7 +117,7 @@ def test_models_fetch_yes_defaults_to_mirror_and_prints_json(
     assert calls == [{"cache_dir": tmp_path / "cache", "source": "mirror"}]
     payload = json.loads(streams.out)
     assert payload["revision"] == cli.DEFAULT_MODEL_REVISION
-    assert payload["bundle_release"] == "v0.2.0a1"
+    assert payload["bundle_release"] == "v0.4.0a1"
 
 
 def test_models_fetch_mandarin_uses_language_specific_resolver(

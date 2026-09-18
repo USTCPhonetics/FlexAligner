@@ -67,6 +67,34 @@ def test_default_alignment_requires_explicit_lexicon_before_input_io(
     assert not request.output.path.exists()
 
 
+def test_arbitrary_mandarin_dictionary_cannot_satisfy_lexicon_contract(
+    public_api: ModuleType,
+    tmp_path: Path,
+) -> None:
+    dictionary = tmp_path / "zh.dict"
+    dictionary.write_text("中 zh ong1\n", encoding="utf-8")
+    models = public_api.LocalModelBundle(
+        chunker_dir=tmp_path / "missing-chunker",
+        aligner_dir=tmp_path / "missing-aligner",
+        dictionary_path=dictionary,
+    )
+    request = public_api.AlignmentRequest(
+        audio_path=tmp_path / "missing.wav",
+        transcript="中",
+        output=public_api.TextGridOutput(path=tmp_path / "result.TextGrid"),
+    )
+    engine = public_api.FlexAligner(
+        models=models,
+        options=public_api.AlignmentOptions(
+            language=public_api.Language.ZH,
+            pronunciation_mode=public_api.PronunciationMode.LEXICON_ONLY,
+        ),
+    )
+
+    with pytest.raises(public_api.ConfigurationError, match="validated Mandarin model bundle"):
+        engine.align(request)
+
+
 @pytest.mark.parametrize(
     ("field_name", "future_names", "capability_id"),
     [

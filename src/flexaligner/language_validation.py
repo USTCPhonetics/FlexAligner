@@ -10,6 +10,7 @@ from .contracts import Language
 from .errors import LanguageMismatchError, ModelCompatibilityError
 
 _ENGLISH_PHONE = re.compile(r"^[A-Z]+[012]?$")
+_MANDARIN_TONE_PHONE = re.compile(r"^[a-z]+[1-5]$")
 
 
 def contains_han(text: str) -> bool:
@@ -54,7 +55,10 @@ def validate_lexicon_language(lexicon: PronouncingLexicon, language: Language) -
 
 def infer_model_language(vocabulary: Mapping[str, int]) -> Language | None:
     tokens = set(vocabulary)
-    if {"ix", "iy", "iz"}.issubset(tokens) and "sph" not in tokens:
+    if any(
+        _MANDARIN_TONE_PHONE.fullmatch(token) and token[:-1] in {"ix", "iy", "iz"}
+        for token in tokens
+    ):
         return Language.ZH
     lexical_tokens = {
         token for token in tokens if not token.startswith("<") and token not in {"|", " "}

@@ -33,7 +33,7 @@ and phone boundaries within them. The result is a Praat TextGrid; unmatched
 time is represented explicitly as `NULL` rather than hidden inside neighboring
 labels.
 
-The `0.3.0a1` public alpha aligns **English and Mandarin single recordings on
+The `0.4.0a1` public alpha aligns **English and Mandarin single recordings on
 CPU** and writes word- and phone-level Praat TextGrids. GPU inference,
 corpus/batch alignment, Web services, automatic language detection, and
 calibrated confidence scores are not part of the current alpha.
@@ -48,7 +48,7 @@ FlexAligner 先定位可靠的文本对应区域，再在其中估计词和音�
 输出为 Praat TextGrid，未匹配时段使用明确的 `NULL` 区间表示，
 而不是被隐藏在相邻标签中。
 
-`0.3.0a1` 公开 alpha 当前可在 **CPU 上对齐英语和普通话单条录音**，
+`0.4.0a1` 公开 alpha 当前可在 **CPU 上对齐英语和普通话单条录音**，
 输出词级和音素级 Praat TextGrid。GPU 推理、语料库/批处理对齐、
 Web 服务、自动语言识别和经校准的置信度不属于当前 alpha 范围。
 
@@ -79,16 +79,19 @@ features with Python 3.10–3.12:
 大多数用户可在 Python 3.10–3.12 中直接安装当前全部语言、推理和音频功能：
 
 ```bash
-python -m pip install "flexaligner[inference,en,zh,audio]==0.3.0a1"
+python -m pip install "flexaligner[inference,en,zh,audio]==0.4.0a1"
 ```
 
 ### 2. Prepare the input / 准备输入
 
-You need an audio file, a UTF-8 transcript, and a UTF-8 pronunciation
-dictionary. Each dictionary line has the form `WORD PHONE1 PHONE2 ...`; phones
-must match the selected alignment model.
+You need an audio file and a UTF-8 transcript. English also requires a UTF-8
+pronunciation dictionary. The validated Mandarin model bundle includes a
+reference dictionary; a custom dictionary is optional. Each dictionary line
+has the form `WORD PHONE1 PHONE2 ...`; phones must match the selected alignment
+model.
 
-需要准备音频、UTF-8 转写文本和 UTF-8 发音词典。词典每行格式为
+需要准备音频和 UTF-8 转写文本。英语还需要 UTF-8 发音词典；已验证的普通话
+模型 bundle 已附带参考词典，自定义词典可选。词典每行格式为
 `WORD PHONE1 PHONE2 ...`，音素必须与所选 Aligner 模型的词表一致。
 
 By default, audio must be an uncompressed 16 kHz mono PCM16 WAV. The recommended
@@ -131,17 +134,18 @@ flexaligner align \
   --output recording.TextGrid
 ```
 
-For Mandarin, use the same interface with `--language zh`, a Mandarin
-transcript, and a compatible Mandarin dictionary:
+For Mandarin, use the same interface with `--language zh`. The cached model
+bundle supplies the reference dictionary, so `--lexicon` is needed only for
+custom pronunciations:
 
-普通话使用相同接口，将语言切换为 `--language zh`，并提供普通话文本和兼容词典：
+普通话使用相同接口，将语言切换为 `--language zh`。缓存的模型 bundle
+会提供参考词典；只有需要自定义发音时才需要 `--lexicon`：
 
 ```bash
 flexaligner align \
   --language zh \
   --audio mandarin.wav \
   --text-file mandarin.txt \
-  --lexicon mandarin.dict \
   --output mandarin.TextGrid
 ```
 
@@ -151,13 +155,13 @@ flexaligner align \
 
 ### Pronunciation fallback / 发音兜底
 
-Dictionary entries take priority. Words not found in the dictionary can be
-handled by the local English or Mandarin G2P frontend, with a warning in the
-CLI. Important or ambiguous pronunciations should be specified in the
-dictionary.
+Custom dictionary entries take priority over the bundled Mandarin reference
+dictionary. Words found in neither dictionary can be handled by the local
+English or tone-bearing Mandarin G2P frontend, with a warning in the CLI.
+Important or ambiguous pronunciations should be specified explicitly.
 
-词典条目始终优先。词典未收录的词可由本地英语或普通话 G2P 前端处理，CLI 会同时
-给出警告。重要或存在歧义的发音应明确写入词典。
+自定义词典优先于普通话内置参考词典。两者都未收录的词可由本地英语或
+带调普通话 G2P 前端处理，CLI 会同时给出警告。重要或存在歧义的发音应明确写入词典。
 
 ### Audio conversion / 音频转换
 
@@ -227,7 +231,7 @@ graph TD
 - [x] **Model Retrieval:** local caching for English and Mandarin models
 - [x] **Local OOV G2P:** lexicon-first English and Mandarin pronunciation fallback
 - [x] **Audio Frontend:** explicit multi-format decoding, resampling, and conversion
-- [x] **PyPI Public Alpha:** `flexaligner==0.3.0a1`
+- [x] **PyPI Public Alpha:** `flexaligner==0.4.0a1`
 - [ ] **GPU and Corpus/Batch Processing**
 - [ ] **Web Service and Confidence Calibration**
 

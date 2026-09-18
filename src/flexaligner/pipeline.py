@@ -20,6 +20,7 @@ from .adapters.lexicon_file import (
     TokenVocabulary,
     load_dense_token_vocab,
     load_lexicon,
+    merge_lexicons,
     normalize_transcript,
     validate_aligner_vocabulary,
     validate_local_model_dir,
@@ -84,6 +85,7 @@ from .language_validation import (
     validate_model_language,
     validate_transcript_language,
 )
+from .model_download import has_validated_system_dictionary
 from .ports import CtcPosterior, LocalInferenceFactoryPort
 from .pronunciation import G2PPort, oov_words, resolve_effective_lexicon
 from .textgrid import (
@@ -122,7 +124,7 @@ class AlignmentPipeline:
         *,
         request: AlignmentRequest,
         models: LocalModelBundle,
-        lexicon_path: Path,
+        lexicon_path: Path | None,
         options: AlignmentOptions,
     ) -> AlignmentResult:
         """Align one request, or leave every official artifact absent."""
@@ -143,7 +145,22 @@ class AlignmentPipeline:
             words = segment_mandarin(request.transcript)
         _reject_reserved_words(words)
         _check_transcript_limit(words, options)
-        lexicon = load_lexicon(lexicon_path)
+        system_lexicon = (
+            load_lexicon(models.dictionary_path, source="system")
+            if has_validated_system_dictionary(models) and models.dictionary_path is not None
+            else None
+        )
+        user_lexicon = (
+            load_lexicon(lexicon_path, source="user") if lexicon_path is not None else None
+        )
+        if system_lexicon is not None and user_lexicon is not None:
+            lexicon = merge_lexicons(system_lexicon, user_lexicon)
+        elif system_lexicon is not None:
+            lexicon = system_lexicon
+        elif user_lexicon is not None:
+            lexicon = user_lexicon
+        else:
+            raise ConfigurationError("No lexicon source is available for alignment")
         validate_lexicon_language(lexicon, options.language)
 
         chunker_dir = validate_local_model_dir(models.chunker_dir, "chunker model")
@@ -234,7 +251,13 @@ class AlignmentPipeline:
             ) from error
 
         raw_scores = _scores_from_word_spans(word_spans)
-        metadata = _chunk_metadata(words, word_spans, raw_scores, pronunciation_notices)
+        metadata = _chunk_metadata(
+            words,
+            word_spans,
+            raw_scores,
+            pronunciation_notices,
+            lexicon,
+        )
         prepared_result = _public_result(
             request=request,
             options=options,
@@ -358,7 +381,7 @@ class AlignmentPipeline:
                 session.model_vocab_size,
             )
             config = Stage2DecodeConfig()
-            enable_sph = options.language is Language.EN
+            enable_sph = True
             _validate_special_phones(
                 vocabulary,
                 session.model_vocab_size,
@@ -421,19 +444,26 @@ class AlignmentPipeline:
 def _validate_pipeline_contracts(
     request: AlignmentRequest,
     models: LocalModelBundle,
-    lexicon_path: Path,
+    lexicon_path: Path | None,
     options: AlignmentOptions,
 ) -> None:
     if not isinstance(request, AlignmentRequest):
         raise ConfigurationError("request must be an AlignmentRequest")
     if not isinstance(models, LocalModelBundle):
         raise ConfigurationError("models must be a LocalModelBundle")
-    if not isinstance(lexicon_path, Path):
-        raise ConfigurationError("lexicon_path must be a pathlib.Path")
+    if lexicon_path is not None and not isinstance(lexicon_path, Path):
+        raise ConfigurationError("lexicon_path must be a pathlib.Path or None")
     if not isinstance(options, AlignmentOptions):
         raise ConfigurationError("options must be AlignmentOptions")
     if options.language not in {Language.EN, Language.ZH} or options.device is not Device.CPU:
         raise ConfigurationError("Pipeline accepts only the guarded English/Mandarin CPU profiles")
+    if lexicon_path is None and not (
+        options.language is Language.ZH and has_validated_system_dictionary(models)
+    ):
+        raise ConfigurationError(
+            "lexicon_path is required unless a validated Mandarin model bundle supplies "
+            "dictionary_path"
+        )
     if not isinstance(request.audio_path, Path):
         raise ConfigurationError("request.audio_path must be a pathlib.Path")
     if not isinstance(request.transcript, str):
@@ -574,7 +604,10 @@ def _stage1_from_posterior(
     utterance_id: str,
     options: AlignmentOptions,
 ) -> tuple[list[RuntimeChunk], list[WordSpan]]:
-    chunk_lexicon = build_chunk_lexicon(lexicon.entries)
+    transcript_lexicon = {
+        word: lexicon.entries[word] for word in dict.fromkeys(words) if word in lexicon.entries
+    }
+    chunk_lexicon = build_chunk_lexicon(transcript_lexicon, vocabulary)
     pronunciation = choose_greedy_pronunciations(
         words,
         chunk_lexicon,
@@ -850,6 +883,7 @@ def _chunk_metadata(
     word_spans: Sequence[WordSpan],
     scores: Sequence[Score],
     pronunciation_notices: Sequence[PronunciationNotice],
+    lexicon: PronouncingLexicon,
 ) -> dict[str, object]:
     if len(words) != len(word_spans) or len(words) != len(scores):
         raise AlignmentError("Chunk metadata inputs do not have one record per word")
@@ -868,7 +902,10 @@ def _chunk_metadata(
             for word_index, word in enumerate(words)
         ],
     }
-    if pronunciation_notices:
+    has_named_sources = any(
+        (lexicon.sources or {}).get(word, "lexicon") != "lexicon" for word in words
+    )
+    if pronunciation_notices or has_named_sources:
         payload["schema_version"] = "2"
         notice_by_index = {
             word_index: notice
@@ -882,7 +919,11 @@ def _chunk_metadata(
             if not isinstance(word_payload, dict):
                 raise AssertionError("metadata word entry must be a mapping")
             notice = notice_by_index.get(word_index)
-            word_payload["pronunciation_source"] = "g2p" if notice is not None else "lexicon"
+            word_payload["pronunciation_source"] = (
+                "g2p"
+                if notice is not None
+                else (lexicon.sources or {}).get(words[word_index], "lexicon")
+            )
             if notice is not None:
                 word_payload["generated_pronunciation"] = list(notice.pronunciation)
                 word_payload["g2p_engine"] = notice.engine_id

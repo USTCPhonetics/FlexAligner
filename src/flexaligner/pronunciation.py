@@ -59,8 +59,10 @@ def resolve_effective_lexicon(
         generated[word] = pronunciation
 
     merged = dict(lexicon.entries)
+    sources = dict(lexicon.sources or {})
     for word in missing:
         merged[word] = (generated[word],)
+        sources[word] = "g2p"
     notices = tuple(
         PronunciationNotice(
             code="oov_g2p_fallback",
@@ -72,7 +74,7 @@ def resolve_effective_lexicon(
         )
         for word in missing
     )
-    return PronouncingLexicon(entries=merged), notices
+    return PronouncingLexicon(entries=merged, sources=sources), notices
 
 
 def _validate_generated_pronunciation(

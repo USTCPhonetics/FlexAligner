@@ -111,6 +111,7 @@ class LocalModelBundle:
     chunker_dir: Path
     aligner_dir: Path
     manifest_path: Path | None = None
+    dictionary_path: Path | None = None
 
     def __post_init__(self) -> None:
         for name in ("chunker_dir", "aligner_dir"):
@@ -124,6 +125,11 @@ class LocalModelBundle:
             raise ConfigurationError(
                 "manifest_path must be a pathlib.Path or None",
                 context={"field": "manifest_path"},
+            )
+        if self.dictionary_path is not None and not isinstance(self.dictionary_path, Path):
+            raise ConfigurationError(
+                "dictionary_path must be a pathlib.Path or None",
+                context={"field": "dictionary_path"},
             )
 
 

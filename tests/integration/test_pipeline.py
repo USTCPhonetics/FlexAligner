@@ -176,10 +176,14 @@ def test_real_numpy_cores_produce_validated_outputs_and_public_result(tmp_path: 
     metadata_path = fixture.request.output.chunk_metadata_path
     assert metadata_path is not None
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    assert metadata["schema_version"] == "1"
+    assert metadata["schema_version"] == "2"
     assert metadata["score_kind"] == "chunker_emission_geometric_mean"
     assert metadata["calibrated"] is False
     assert [item["word"] for item in metadata["words"]] == ["alpha", "beta"]
+    assert [item["pronunciation_source"] for item in metadata["words"]] == [
+        "user",
+        "user",
+    ]
     assert [item["value"] for item in metadata["words"]] == pytest.approx(
         [score.value for score in result.raw_scores]
     )
@@ -226,7 +230,7 @@ def test_pipeline_uses_local_g2p_only_for_oov_and_records_provenance(
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     assert metadata["schema_version"] == "2"
     assert [item["pronunciation_source"] for item in metadata["words"]] == [
-        "lexicon",
+        "user",
         "g2p",
     ]
     assert metadata["pronunciation_warnings"] == [notice.to_dict()]

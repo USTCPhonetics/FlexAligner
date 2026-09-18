@@ -39,13 +39,17 @@ def main() -> None:
     language_pack_pyproject = args.pyproject.parent / "packages/flexaligner-g2p-en/pyproject.toml"
     with language_pack_pyproject.open("rb") as handle:
         language_pack = tomllib.load(handle)["project"]
+    language_pack_version = str(language_pack.get("version"))
+    expected_dependency = f"flexaligner-g2p-en=={language_pack_version}"
+    optional_dependencies = project.get("optional-dependencies", {})
+    english_extra = optional_dependencies.get("en", [])
     if (
         language_pack.get("name") != "flexaligner-g2p-en"
-        or str(language_pack.get("version")) != version
+        or expected_dependency not in english_extra
     ):
         raise RuntimeError(
-            "English G2P language-pack name/version must match the main release: "
-            f"main={version!r}, language_pack={language_pack!r}"
+            "English G2P language-pack source and the main [en] dependency disagree: "
+            f"main={version!r}, language_pack={language_pack!r}, en={english_extra!r}"
         )
     if args.tag is not None and args.tag != expected_tag:
         raise RuntimeError(f"Tag/version mismatch: tag={args.tag!r}, expected={expected_tag!r}")

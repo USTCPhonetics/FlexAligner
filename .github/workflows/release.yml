@@ -37,7 +37,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
 
   model-e2e:
-    name: Frozen English model E2E
+    name: Frozen English and Mandarin model E2E
     needs: ci
     uses: ./.github/workflows/model-e2e.yml
     with:

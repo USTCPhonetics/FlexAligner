@@ -159,19 +159,37 @@ def strip_arpabet_stress(phone: str) -> str:
     return phone
 
 
+def _is_stressed_arpabet_phone(phone: str) -> bool:
+    return len(phone) >= 2 and phone[:-1].isalpha() and phone[:-1].isupper() and phone[-1] in "012"
+
+
 def build_chunk_lexicon(
     raw_lexicon: LexiconMapping | _LexiconContainer,
+    chunk_vocabulary: Mapping[str, int],
 ) -> dict[str, list[list[str]]]:
-    """Create the stress-stripped Stage 1 lexicon without changing order."""
+    """Map pronunciations to exact Chunker tokens before English stress fallback."""
 
     source = raw_lexicon if isinstance(raw_lexicon, Mapping) else raw_lexicon.lex
-    return {
-        word: [
-            [strip_arpabet_stress(phone) for phone in pronunciation]
-            for pronunciation in pronunciations
-        ]
-        for word, pronunciations in source.items()
-    }
+    mapped_lexicon: dict[str, list[list[str]]] = {}
+    for word, pronunciations in source.items():
+        mapped_pronunciations: list[list[str]] = []
+        for pronunciation in pronunciations:
+            mapped: list[str] = []
+            for phone in pronunciation:
+                if phone in chunk_vocabulary:
+                    mapped.append(phone)
+                    continue
+                unstressed = strip_arpabet_stress(phone)
+                if _is_stressed_arpabet_phone(phone) and unstressed in chunk_vocabulary:
+                    mapped.append(unstressed)
+                    continue
+                raise KeyError(
+                    f"Phone {phone!r} for word {word!r} is not compatible "
+                    "with the chunk model vocabulary."
+                )
+            mapped_pronunciations.append(mapped)
+        mapped_lexicon[word] = mapped_pronunciations
+    return mapped_lexicon
 
 
 def choose_greedy_pronunciations(

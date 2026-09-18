@@ -65,7 +65,14 @@ def build_parser() -> argparse.ArgumentParser:
     transcript_group = align_parser.add_mutually_exclusive_group(required=True)
     transcript_group.add_argument("--text")
     transcript_group.add_argument("--text-file", type=Path)
-    align_parser.add_argument("--lexicon", type=Path, required=True)
+    align_parser.add_argument(
+        "--lexicon",
+        type=Path,
+        help=(
+            "Optional user lexicon. Mandarin cached bundles include a reference lexicon; "
+            "English and explicit local model directories still require this option."
+        ),
+    )
     align_parser.add_argument("--chunker-model", type=Path)
     align_parser.add_argument("--aligner-model", type=Path)
     align_parser.add_argument("--model-cache-dir", type=Path)
@@ -239,6 +246,9 @@ def _run_models_fetch(args: argparse.Namespace) -> None:
                 "bundle_release": DEFAULT_MODEL_RELEASE,
                 "chunker_model": str(models.chunker_dir),
                 "manifest": str(models.manifest_path),
+                "dictionary": (
+                    str(models.dictionary_path) if models.dictionary_path is not None else None
+                ),
                 "repo_id": DEFAULT_MODEL_REPO,
                 "revision": DEFAULT_MODEL_REVISION,
                 "language": language.value,

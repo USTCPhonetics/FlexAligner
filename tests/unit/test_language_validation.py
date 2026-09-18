@@ -27,7 +27,14 @@ def test_transcript_and_lexicon_language_mismatch_are_typed() -> None:
 
 def test_model_language_detection_distinguishes_current_phone_sets() -> None:
     english = {"<pad>": 0, "AH": 1, "sph": 2}
-    mandarin = {"<pad>": 0, "ix": 1, "iy": 2, "iz": 3, "sil": 4}
+    mandarin = {
+        "<pad>": 0,
+        "ix1": 1,
+        "iy2": 2,
+        "iz4": 3,
+        "sil": 4,
+        "sph": 5,
+    }
     assert infer_model_language(english) is Language.EN
     assert infer_model_language(mandarin) is Language.ZH
 

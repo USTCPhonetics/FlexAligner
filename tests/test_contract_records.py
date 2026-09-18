@@ -41,7 +41,12 @@ def test_public_records_are_frozen_keyword_only(public_api: ModuleType, record_n
 
 def test_required_record_field_names(public_api: ModuleType) -> None:
     expected = {
-        "LocalModelBundle": {"chunker_dir", "aligner_dir", "manifest_path"},
+        "LocalModelBundle": {
+            "chunker_dir",
+            "aligner_dir",
+            "manifest_path",
+            "dictionary_path",
+        },
         "TextGridOutput": {"path", "chunk_metadata_path"},
         "AlignmentRequest": {
             "audio_path",

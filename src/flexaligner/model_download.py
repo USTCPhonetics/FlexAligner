@@ -14,13 +14,14 @@ from .contracts import Language, LocalModelBundle
 from .errors import ModelCacheMissError, ModelDownloadError, ModelValidationError
 
 DEFAULT_MODEL_REPO = "USTCPhonetics/FlexAligner"
-DEFAULT_MODEL_RELEASE = "v0.2.0a1"
-DEFAULT_MODEL_REVISION = "f9ca09d445e5e8981e43eca6a2f5421526ddc59e"
+DEFAULT_MODEL_RELEASE = "v0.4.0a1"
+DEFAULT_MODEL_REVISION = "6720609c167c8ddcd09ea4cb9223aeb569150df8"
 DEFAULT_MODEL_LANGUAGE = "en"
 MIRROR_ENDPOINT = "https://hf-mirror.com"
 OFFICIAL_ENDPOINT = "https://huggingface.co"
 MODEL_MANIFEST = "model_manifest.json"
-MODEL_MANIFEST_SHA256 = "d26a82707d7ed5cd4b843046c4f9fec25b08bb6b9bfc25b67a047a835273ab7a"
+MODEL_MANIFEST_SHA256 = "7ab9057cba1b51fb91ab434f893d4915358729bcc411e3aceca9e0b67883df36"
+MODEL_BUNDLE_VERSION = "2026-09-18-zh-aishell1"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _MODEL_FILENAMES = (
     "config.json",
@@ -36,6 +37,72 @@ _ENGLISH_MODEL_FILES = tuple(
     for filename in _MODEL_FILENAMES
 )
 _ALLOW_PATTERNS = (MODEL_MANIFEST, *_ENGLISH_MODEL_FILES)
+
+
+_VALIDATION_TOKEN = object()
+
+
+class _ValidatedLocalModelBundle(LocalModelBundle):
+    """Internal identity tied to the exact paths checked by the validator."""
+
+    __slots__ = ("_validated_paths",)
+    _validated_paths: tuple[Path, Path, Path, Path | None]
+
+    def __init__(
+        self,
+        *,
+        chunker_dir: Path,
+        aligner_dir: Path,
+        manifest_path: Path,
+        dictionary_path: Path | None,
+        _validation_token: object | None = None,
+    ) -> None:
+        if _validation_token is not _VALIDATION_TOKEN:
+            raise TypeError("validated model bundles can only be created by snapshot validation")
+        super().__init__(
+            chunker_dir=chunker_dir,
+            aligner_dir=aligner_dir,
+            manifest_path=manifest_path,
+            dictionary_path=dictionary_path,
+        )
+        object.__setattr__(
+            self,
+            "_validated_paths",
+            (chunker_dir, aligner_dir, manifest_path, dictionary_path),
+        )
+
+
+def _validated_bundle(
+    *,
+    chunker_dir: Path,
+    aligner_dir: Path,
+    manifest_path: Path,
+    dictionary_path: Path | None,
+) -> LocalModelBundle:
+    return _ValidatedLocalModelBundle(
+        chunker_dir=chunker_dir,
+        aligner_dir=aligner_dir,
+        manifest_path=manifest_path,
+        dictionary_path=dictionary_path,
+        _validation_token=_VALIDATION_TOKEN,
+    )
+
+
+def has_validated_system_dictionary(models: LocalModelBundle) -> bool:
+    """Return whether ``models`` carries a validator-authenticated dictionary."""
+
+    return (
+        isinstance(models, _ValidatedLocalModelBundle)
+        and models.manifest_path is not None
+        and models.dictionary_path is not None
+        and models._validated_paths
+        == (
+            models.chunker_dir,
+            models.aligner_dir,
+            models.manifest_path,
+            models.dictionary_path,
+        )
+    )
 
 
 def _language_code(language: Language | str) -> str:
@@ -58,7 +125,9 @@ def _model_files(language: Language | str) -> tuple[str, ...]:
 
 
 def _allow_patterns(language: Language | str) -> tuple[str, ...]:
-    return (MODEL_MANIFEST, *_model_files(language))
+    code = _language_code(language)
+    dictionary = (f"{code}/word.dict",) if code == Language.ZH.value else ()
+    return (MODEL_MANIFEST, *_model_files(code), *dictionary)
 
 
 def default_model_cache_dir(environ: Mapping[str, str] | None = None) -> Path:
@@ -238,12 +307,12 @@ def validate_model_snapshot(snapshot: Path, *, language: Language | str) -> Loca
             },
         )
     manifest = _read_manifest(manifest_path)
-    if manifest.get("schema_version") != 1:
+    if manifest.get("schema_version") != 2:
         raise ModelValidationError(
             "Unsupported model manifest schema",
             context={"path": str(manifest_path), "schema_version": manifest.get("schema_version")},
         )
-    if manifest.get("bundle_version") != "0.2.0a1":
+    if manifest.get("bundle_version") != MODEL_BUNDLE_VERSION:
         raise ModelValidationError(
             "Unexpected model bundle version",
             context={"path": str(manifest_path), "bundle_version": manifest.get("bundle_version")},
@@ -263,6 +332,20 @@ def validate_model_snapshot(snapshot: Path, *, language: Language | str) -> Loca
         raise ModelValidationError(
             "Model manifest has unexpected language model paths",
             context={"language": code},
+        )
+    raw_dictionary_path = selected_language.get("dictionary_path")
+    expected_dictionary_path: str | None = None
+    if code == Language.ZH.value:
+        expected_dictionary_path = f"{code}/word.dict"
+        if raw_dictionary_path != expected_dictionary_path:
+            raise ModelValidationError(
+                "Mandarin model manifest has an unexpected dictionary path",
+                context={"language": code, "dictionary_path": raw_dictionary_path},
+            )
+    elif raw_dictionary_path is not None:
+        raise ModelValidationError(
+            "English model manifest must not declare a dictionary path",
+            context={"language": code, "dictionary_path": raw_dictionary_path},
         )
 
     files = manifest.get("files")
@@ -308,6 +391,8 @@ def validate_model_snapshot(snapshot: Path, *, language: Language | str) -> Loca
         expected[raw_path] = (size, digest)
 
     expected_files = set(_model_files(code))
+    if expected_dictionary_path is not None:
+        expected_files.add(expected_dictionary_path)
     if set(expected) != expected_files:
         raise ModelValidationError(
             "Language model manifest does not contain the exact built-in file set",
@@ -341,10 +426,13 @@ def validate_model_snapshot(snapshot: Path, *, language: Language | str) -> Loca
                 "Model file SHA-256 does not match the manifest",
                 context={"path": relative, "actual": actual_digest, "expected": expected_digest},
             )
-    return LocalModelBundle(
+    return _validated_bundle(
         chunker_dir=snapshot / code / "chunker",
         aligner_dir=snapshot / code / "aligner",
         manifest_path=manifest_path,
+        dictionary_path=(
+            snapshot / expected_dictionary_path if expected_dictionary_path is not None else None
+        ),
     )
 
 
@@ -400,6 +488,7 @@ __all__ = [
     "endpoint_for_source",
     "find_cached_english_models",
     "find_cached_models",
+    "has_validated_system_dictionary",
     "require_cached_english_models",
     "require_cached_models",
     "validate_english_snapshot",

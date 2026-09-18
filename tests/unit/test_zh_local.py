@@ -21,11 +21,12 @@ def test_jieba_segmentation_preserves_whitespace_boundaries_and_discards_punctua
 @pytest.mark.parametrize(
     ("word", "expected"),
     [
-        ("甚至", ("sh", "en", "zh", "ix")),
-        ("交易", ("j", "iao", "i")),
-        ("知识", ("zh", "ix", "sh", "ix")),
-        ("日子", ("r", "iz", "z", "iy")),
-        ("月鱼无一", ("ve", "v", "u", "i")),
+        ("甚至", ("sh", "en4", "zh", "ix4")),
+        ("交易", ("j", "iao1", "i4")),
+        ("知识", ("zh", "ix1", "sh", "ix2")),
+        ("日子", ("r", "iz4", "z", "iy5")),
+        ("月鱼无一", ("ve4", "v2", "u2", "i1")),
+        ("吗", ("m", "a5")),
     ],
 )
 def test_local_mandarin_g2p_matches_current_model_phone_conventions(
@@ -40,8 +41,8 @@ def test_mandarin_g2p_rejects_non_han_input() -> None:
 
 
 def test_mandarin_g2p_fills_oov_only_and_validates_both_vocabularies() -> None:
-    lexicon = PronouncingLexicon(entries={"甚至": (("sh", "en", "zh", "ix"),)})
-    phones = {"sh", "en", "zh", "ix", "j", "iao", "i"}
+    lexicon = PronouncingLexicon(entries={"甚至": (("sh", "en4", "zh", "ix4"),)})
+    phones = {"sh", "en4", "zh", "ix4", "j", "iao1", "i4"}
     vocabulary = TokenVocabulary(token_to_id={phone: index for index, phone in enumerate(phones)})
     effective, notices = resolve_effective_lexicon(
         words=("甚至", "交易"),
@@ -52,8 +53,8 @@ def test_mandarin_g2p_fills_oov_only_and_validates_both_vocabularies() -> None:
         aligner_vocabulary=vocabulary,
         language=Language.ZH,
     )
-    assert effective.get_prons("甚至") == (("sh", "en", "zh", "ix"),)
-    assert effective.get_prons("交易") == (("j", "iao", "i"),)
+    assert effective.get_prons("甚至") == (("sh", "en4", "zh", "ix4"),)
+    assert effective.get_prons("交易") == (("j", "iao1", "i4"),)
     assert len(notices) == 1
     assert notices[0].word == "交易"
     assert notices[0].code == "oov_g2p_fallback"

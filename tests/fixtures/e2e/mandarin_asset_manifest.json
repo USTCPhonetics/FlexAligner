@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "fixture_id": "flexaligner-mandarin-tone-synthetic-release-e2e-v1",
+  "status": "approved",
+  "root_env": "FLEXALIGNER_E2E_ASSET_ROOT",
+  "runtime": {
+    "python": "3.10.8",
+    "numpy": "2.2.6",
+    "torch": "2.3.1",
+    "transformers": "4.41.2"
+  },
+  "provenance": {
+    "model_repo": "USTCPhonetics/FlexAligner",
+    "model_revision": "6720609c167c8ddcd09ea4cb9223aeb569150df8",
+    "model_manifest_sha256": "7ab9057cba1b51fb91ab434f893d4915358729bcc411e3aceca9e0b67883df36",
+    "dictionary_role": "Pre-supplied AISHELL-1 reference lexicon; no ownership claim",
+    "audio_source": "macOS Tingting zh_CN synthetic voice",
+    "audio_text": ["日月无一", "日月星辰"],
+    "approved_on": "2026-09-18",
+    "scope": "release-e2e-fixture-only"
+  },
+  "files": [
+    {"path": "openphonetics/models/model_manifest.json", "sha256": "7ab9057cba1b51fb91ab434f893d4915358729bcc411e3aceca9e0b67883df36", "role": "zh_model_manifest"},
+    {"path": "openphonetics/models/zh/chunker/config.json", "sha256": "87c989b8caf1f1e40b1389916ed88b249156782e05675ae3085497cb125d1a16", "role": "zh_stage1_model_config"},
+    {"path": "openphonetics/models/zh/chunker/model.safetensors", "sha256": "562f72fa934393ad45147e021d4139acc90604f5e95496dcc57e6fe7f53f58a5", "role": "zh_stage1_model_weights"},
+    {"path": "openphonetics/models/zh/chunker/preprocessor_config.json", "sha256": "e881cb4d0aba9d543f1864fc339ad67169598c8d22b87e9f2690174ebb271129", "role": "zh_stage1_preprocessor"},
+    {"path": "openphonetics/models/zh/chunker/special_tokens_map.json", "sha256": "9046da57c270c8e74d0f38832b4adce269c9d914ef21d2a0925e7772152dd793", "role": "zh_stage1_special_tokens"},
+    {"path": "openphonetics/models/zh/chunker/tokenizer_config.json", "sha256": "cec9e433ac59e22ddcdbf1a848ae795a9592693cc3329cf4002a5b982a45d14a", "role": "zh_stage1_tokenizer_config"},
+    {"path": "openphonetics/models/zh/chunker/vocab.json", "sha256": "d6f04e0975899e7f66b16ffa6427214db8a905492ab06baa47ba862f1f72c12a", "role": "zh_stage1_vocabulary"},
+    {"path": "openphonetics/models/zh/aligner/config.json", "sha256": "68905d712d0418a4c4323684421ec451e1a8dbb438f72602eac555144f43be90", "role": "zh_stage2_model_config"},
+    {"path": "openphonetics/models/zh/aligner/model.safetensors", "sha256": "b1141fceffd80f38655ee8d23cc4bf06e1f4dfe664c528c1efad77b92dd4f235", "role": "zh_stage2_model_weights"},
+    {"path": "openphonetics/models/zh/aligner/preprocessor_config.json", "sha256": "e881cb4d0aba9d543f1864fc339ad67169598c8d22b87e9f2690174ebb271129", "role": "zh_stage2_preprocessor"},
+    {"path": "openphonetics/models/zh/aligner/special_tokens_map.json", "sha256": "9046da57c270c8e74d0f38832b4adce269c9d914ef21d2a0925e7772152dd793", "role": "zh_stage2_special_tokens"},
+    {"path": "openphonetics/models/zh/aligner/tokenizer_config.json", "sha256": "abc5a9170b6149d2c6bf3593de23bcfbc7ed799bdbf888ce78f20c1092aeae08", "role": "zh_stage2_tokenizer_config"},
+    {"path": "openphonetics/models/zh/aligner/vocab.json", "sha256": "cca23fd4413ba8030bbb8ca9db05889b77adea75eb4230686b572fc32bbca27c", "role": "zh_stage2_vocabulary"},
+    {"path": "openphonetics/models/zh/word.dict", "sha256": "ecbbbdf4f772d219fbdcbc1e6c3a9d1f521194203ce36e8e166c7a2213619796", "role": "zh_reference_dictionary"},
+    {"path": "openphonetics/examples/mandarin_tone_synthetic.wav", "sha256": "74102713951743c58e10ce9cdfbd55ed4beb84070d1e853e8fbfe7a6821f2ed7", "role": "zh_audio"},
+    {"path": "openphonetics/examples/mandarin_tone_synthetic.txt", "sha256": "e82f7c937dcfd334e37f3afbc23e4da78b922c2074fe6477105cc37201af7642", "role": "zh_transcript"},
+    {"path": "openphonetics/examples/mandarin_g2p_synthetic.wav", "sha256": "3cf9f4c9e5b7e6d356afa8c637edc70bcf3d4fa4d23859c0c0b44a1f6b675389", "role": "zh_g2p_audio"},
+    {"path": "openphonetics/examples/mandarin_g2p_synthetic.txt", "sha256": "6828bb4db36fce4948b2dcbaf265755d1dbb647e6f688f279da65a7f765408f0", "role": "zh_g2p_transcript"}
+  ]
+}

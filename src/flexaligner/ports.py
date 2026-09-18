@@ -97,7 +97,7 @@ class AlignmentPipelinePort(Protocol):
         *,
         request: AlignmentRequest,
         models: LocalModelBundle,
-        lexicon_path: Path,
+        lexicon_path: Path | None,
         options: AlignmentOptions,
     ) -> AlignmentResult:
         """Align one request or raise a typed FlexAligner error."""

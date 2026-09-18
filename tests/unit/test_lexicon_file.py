@@ -11,6 +11,7 @@ from flexaligner.adapters.lexicon_file import (
     TokenVocabulary,
     load_dense_token_vocab,
     load_lexicon,
+    merge_lexicons,
     normalize_transcript,
     normalize_word,
     read_utf8_text,
@@ -94,8 +95,37 @@ def test_load_lexicon_preserves_entry_and_all_pronunciation_order(tmp_path: Path
     assert lexicon.entries["word"] == (("W", "ER1", "D"), ("W", "AO2", "R", "D"))
     assert lexicon.get_prons("word") == lexicon.entries["word"]
     assert lexicon.lex is lexicon.entries
+    assert lexicon.sources == {"word": "lexicon", "café": "lexicon"}
     with pytest.raises(TypeError):
         cast(Any, lexicon.entries)["new"] = (("N",),)
+
+
+def test_user_lexicon_replaces_same_word_and_preserves_system_fallback(
+    tmp_path: Path,
+) -> None:
+    system_path = tmp_path / "system.dict"
+    user_path = tmp_path / "user.dict"
+    system_path.write_text("日 r iz4\n月 ve4\n", encoding="utf-8")
+    user_path.write_text("日 r iy4\n日 r ix4\n", encoding="utf-8")
+
+    effective = merge_lexicons(
+        load_lexicon(system_path, source="system"),
+        load_lexicon(user_path, source="user"),
+    )
+
+    assert effective.get_prons("日") == (("r", "iy4"), ("r", "ix4"))
+    assert effective.get_prons("月") == (("ve4",),)
+    assert effective.sources == {"日": "user", "月": "system"}
+
+
+def test_system_lexicon_preserves_unicode_symbol_headwords(tmp_path: Path) -> None:
+    path = tmp_path / "system.dict"
+    path.write_text("○ sil\n日 r iz4\n", encoding="utf-8")
+
+    lexicon = load_lexicon(path, source="system")
+
+    assert lexicon.get_prons("○") == (("sil",),)
+    assert lexicon.sources["○"] == "system"
 
 
 @pytest.mark.parametrize(

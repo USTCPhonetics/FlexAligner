@@ -9,12 +9,17 @@ import pytest
 from tests._support import REPO_ROOT
 
 
-def _write_pyproject(path: Path, version: str) -> None:
-    path.write_text(f'[project]\nname = "flexaligner"\nversion = "{version}"\n', encoding="utf-8")
+def _write_pyproject(path: Path, version: str, *, language_pack_version: str | None = None) -> None:
+    pack_version = version if language_pack_version is None else language_pack_version
+    path.write_text(
+        f'[project]\nname = "flexaligner"\nversion = "{version}"\n'
+        f'[project.optional-dependencies]\nen = ["flexaligner-g2p-en=={pack_version}"]\n',
+        encoding="utf-8",
+    )
     language_pack = path.parent / "packages" / "flexaligner-g2p-en"
     language_pack.mkdir(parents=True)
     (language_pack / "pyproject.toml").write_text(
-        f'[project]\nname = "flexaligner-g2p-en"\nversion = "{version}"\n',
+        f'[project]\nname = "flexaligner-g2p-en"\nversion = "{pack_version}"\n',
         encoding="utf-8",
     )
 
@@ -45,6 +50,15 @@ def test_release_guard_accepts_only_the_approved_alpha_boundary(
 
     assert result.returncode == 0, result.stderr
     assert "RELEASE_SOURCE_OK name=flexaligner version=0.1.0a1" in result.stdout
+
+
+def test_release_guard_accepts_unchanged_language_pack_version(tmp_path: Path) -> None:
+    pyproject = tmp_path / "pyproject.toml"
+    _write_pyproject(pyproject, "0.4.0a1", language_pack_version="0.3.0a1")
+
+    result = _run_guard(pyproject, "--tag", "v0.4.0a1")
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_release_guard_rejects_tag_version_mismatch(tmp_path: Path) -> None:

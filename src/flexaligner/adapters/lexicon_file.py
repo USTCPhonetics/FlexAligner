@@ -42,6 +42,7 @@ class PronouncingLexicon:
     """Ordered, immutable pronunciation entries used by both alignment stages."""
 
     entries: LexiconEntries
+    sources: Mapping[str, str] | None = None
 
     def __post_init__(self) -> None:
         frozen = {
@@ -49,6 +50,9 @@ class PronouncingLexicon:
             for word, pronunciations in self.entries.items()
         }
         object.__setattr__(self, "entries", MappingProxyType(frozen))
+        raw_sources = {} if self.sources is None else dict(self.sources)
+        sources = {word: raw_sources.get(word, "lexicon") for word in frozen}
+        object.__setattr__(self, "sources", MappingProxyType(sources))
 
     @property
     def lex(self) -> LexiconEntries:
@@ -146,8 +150,14 @@ def read_utf8_text(path: Path) -> str:
         ) from exc
 
 
-def load_lexicon(path: Path) -> PronouncingLexicon:
+def load_lexicon(path: Path, *, source: str = "lexicon") -> PronouncingLexicon:
     """Load a strict UTF-8 lexicon while preserving entry/pronunciation order."""
+
+    if source not in {"lexicon", "system", "user"}:
+        raise InputValidationError(
+            "Lexicon source must be lexicon, system, or user",
+            context={"source": source},
+        )
 
     _validate_path(path, role="lexicon", expected="file")
     try:
@@ -169,7 +179,7 @@ def load_lexicon(path: Path) -> PronouncingLexicon:
                 f"Invalid lexicon line {line_number} in {path}: {line!r}",
                 context={"path": str(path), "line_number": line_number},
             )
-        word = normalize_word(parts[0])
+        word = parts[0].strip().lower() if source == "system" else normalize_word(parts[0])
         if not word:
             raise InputValidationError(
                 "Lexicon word became empty after normalization",
@@ -193,8 +203,24 @@ def load_lexicon(path: Path) -> PronouncingLexicon:
             context={"path": str(path)},
         )
     return PronouncingLexicon(
-        entries={word: tuple(pronunciations) for word, pronunciations in entries.items()}
+        entries={word: tuple(pronunciations) for word, pronunciations in entries.items()},
+        sources={word: source for word in entries},
     )
+
+
+def merge_lexicons(
+    system: PronouncingLexicon,
+    user: PronouncingLexicon,
+) -> PronouncingLexicon:
+    """Return user-over-system entries, replacing each overridden candidate set."""
+
+    if not isinstance(system, PronouncingLexicon) or not isinstance(user, PronouncingLexicon):
+        raise InputValidationError("system and user must be PronouncingLexicon instances")
+    entries = dict(system.entries)
+    entries.update(user.entries)
+    sources = dict(system.sources or {})
+    sources.update(user.sources or {})
+    return PronouncingLexicon(entries=entries, sources=sources)
 
 
 def validate_transcript_lexicon(
