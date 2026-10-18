@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import wave
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from scripts import verify_gpu_batch as verifier
 
 from flexaligner.textgrid import Interval, IntervalTier, TextGridDocument, serialize_textgrid_long
+
+_verifier_path = Path(__file__).resolve().parents[1] / "scripts" / "verify_gpu_batch.py"
+_verifier_spec = importlib.util.spec_from_file_location("verify_gpu_batch", _verifier_path)
+if _verifier_spec is None or _verifier_spec.loader is None:
+    raise ImportError(f"Cannot load GPU batch verifier from {_verifier_path}")
+verifier = importlib.util.module_from_spec(_verifier_spec)
+_verifier_spec.loader.exec_module(verifier)
 
 
 def grid(path: Path, *, start: float = 0.2, label: str = "a", gap: bool = False) -> Path:
