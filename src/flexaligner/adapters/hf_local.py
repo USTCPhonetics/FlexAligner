@@ -25,6 +25,7 @@ from flexaligner.contracts import Device
 from flexaligner.errors import (
     AlignmentError,
     ConfigurationError,
+    EngineClosedError,
     ModelCompatibilityError,
     ModelValidationError,
     ResourceLimitError,
@@ -298,7 +299,32 @@ class LocalHuggingFaceInferenceFactory:
         self._requested_device: tuple[Device, int] | None = None
         self._batch_owner: int | None = None
         self._cache: dict[tuple[str, Path], _LocalCtcResource] = {}
+        self._closed = False
+        self._recovery_failure: str | None = None
         self.load_counts: dict[str, int] = {"chunker": 0, "aligner": 0}
+
+    def _require_usable(self) -> None:
+        """Check lifecycle under the state lock, without retaining error objects."""
+
+        if self._closed:
+            raise EngineClosedError("Local inference factory is closed.")
+        if self._recovery_failure is not None:
+            raise RuntimeRecoveryError(
+                "Inference runtime recovery failed; create a new engine before retrying.",
+                context={"reason": self._recovery_failure},
+            )
+
+    def close(self) -> None:
+        """Release idle resources; an active session retains exclusion until cleanup."""
+
+        with self._state_lock:
+            if self._closed:
+                return
+            self._closed = True
+            self._cache.clear()
+            if self._active_kind is None:
+                self._batch_owner = None
+        gc.collect()
 
     def configure_device(
         self,
@@ -308,6 +334,7 @@ class LocalHuggingFaceInferenceFactory:
         """Resolve one execution device before entering model sessions."""
 
         with self._state_lock:
+            self._require_usable()
             if self._active_kind is not None:
                 raise ModelValidationError("Cannot configure devices during an active session.")
             if not isinstance(device, Device) or type(device_index) is not int or device_index < 0:
@@ -354,6 +381,7 @@ class LocalHuggingFaceInferenceFactory:
         """Cache two CPU model bundles only within an exclusive batch."""
 
         with self._state_lock:
+            self._require_usable()
             if self._batch_owner is not None or self._active_kind is not None:
                 raise ModelValidationError(
                     "Batch and single-file inference contexts may not overlap."
@@ -398,6 +426,8 @@ class LocalHuggingFaceInferenceFactory:
         on_cuda = False
         restore_required = False
         try:
+            with self._state_lock:
+                self._require_usable()
             if type(num_threads) is not int or num_threads <= 0:
                 raise ModelValidationError(
                     "num_threads must be a positive integer.",
@@ -417,6 +447,7 @@ class LocalHuggingFaceInferenceFactory:
                 )
 
             with self._state_lock:
+                self._require_usable()
                 if self._active_kind is not None or (
                     self._batch_owner is not None and self._batch_owner != threading.get_ident()
                 ):
@@ -444,15 +475,23 @@ class LocalHuggingFaceInferenceFactory:
                         self.load_counts[kind] += 1
                     finally:
                         del torch_module, transformers_module
-                    if self._batch_owner is not None:
-                        # Bound host RAM to one validated bundle per stage.
-                        for previous_key in tuple(self._cache):
-                            if previous_key[0] == kind and previous_key != cache_key:
-                                del self._cache[previous_key]
-                        self._cache[cache_key] = resource
+                    with self._state_lock:
+                        self._require_usable()
+                        if self._batch_owner is not None:
+                            # Bound host RAM to one validated bundle per stage.
+                            for previous_key in tuple(self._cache):
+                                if previous_key[0] == kind and previous_key != cache_key:
+                                    del self._cache[previous_key]
+                            self._cache[cache_key] = resource
                 else:
                     cast(Any, resource.torch_module).set_num_threads(num_threads)
-            except (ModelValidationError, ModelCompatibilityError, AlignmentError):
+            except (
+                ModelValidationError,
+                ModelCompatibilityError,
+                AlignmentError,
+                EngineClosedError,
+                RuntimeRecoveryError,
+            ):
                 raise
             except Exception as exc:
                 raise ModelValidationError(
@@ -479,6 +518,7 @@ class LocalHuggingFaceInferenceFactory:
                     ) from exc
             session = _LocalCtcSession(resource, device_spec)
             with self._state_lock:
+                self._require_usable()
                 self._active_session = session
             yield session
         except BaseException as exc:
@@ -521,8 +561,13 @@ class LocalHuggingFaceInferenceFactory:
                     torch_for_cleanup = None
             if claimed:
                 with self._state_lock:
+                    if recovery_error is not None:
+                        self._recovery_failure = recovery_error.message
                     self._active_session = None
                     self._active_kind = None
+                    if self._closed:
+                        self._cache.clear()
+                        self._batch_owner = None
             if recovery_error is not None:
                 raise recovery_error from None
 

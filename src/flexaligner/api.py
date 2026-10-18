@@ -194,11 +194,17 @@ class FlexAligner:
         from .adapters.lexicon_file import (
             load_dense_token_vocab,
             load_lexicon,
+            merge_lexicons,
             validate_local_model_dir,
         )
         from .language_validation import validate_lexicon_language, validate_model_language
 
         try:
+            if self._models.manifest_path is not None and not self._models.manifest_path.is_file():
+                raise ConfigurationError(
+                    "Model manifest is not a file: " + str(self._models.manifest_path),
+                    context={"path": str(self._models.manifest_path)},
+                )
             for kind, path in (
                 ("chunker", self._models.chunker_dir),
                 ("aligner", self._models.aligner_dir),
@@ -206,14 +212,26 @@ class FlexAligner:
                 validate_local_model_dir(path, kind)
                 vocabulary = load_dense_token_vocab(path / "vocab.json")
                 validate_model_language(((kind, vocabulary),), self._options.language)
-            paths = [self._lexicon_path]
-            if has_validated_system_dictionary(self._models):
-                paths.append(self._models.dictionary_path)
-            if not any(path is not None for path in paths):
+            system = (
+                load_lexicon(self._models.dictionary_path, source="system")
+                if has_validated_system_dictionary(self._models)
+                and self._models.dictionary_path is not None
+                else None
+            )
+            user = (
+                load_lexicon(self._lexicon_path, source="user")
+                if self._lexicon_path is not None
+                else None
+            )
+            if system is not None and user is not None:
+                lexicon = merge_lexicons(system, user)
+            elif system is not None:
+                lexicon = system
+            elif user is not None:
+                lexicon = user
+            else:
                 raise ConfigurationError("A user or validated system lexicon is required")
-            for lexicon_file in paths:
-                if lexicon_file is not None:
-                    validate_lexicon_language(load_lexicon(lexicon_file), self._options.language)
+            validate_lexicon_language(lexicon, self._options.language)
         except FlexAlignerError as error:
             raise ConfigurationError(
                 "Batch model or dictionary configuration is invalid: " + error.message,
@@ -232,6 +250,7 @@ class FlexAligner:
             raise ConfigurationError("skip_existing must be a bool")
         with self.batch_session():
             for request in requests:
+                self._ensure_open()
                 if not isinstance(request, AlignmentRequest):
                     raise ConfigurationError("Batch requests must be AlignmentRequest instances")
                 started = time.monotonic()
@@ -263,7 +282,7 @@ class FlexAligner:
                 except FlexAlignerError as error:
                     if is_fatal_batch_error(error):
                         raise
-                    yield BatchItemResult(
+                    outcome = BatchItemResult(
                         audio_path=request.audio_path,
                         output_path=target,
                         status="conflict" if isinstance(error, ArtifactExistsError) else "failed",
@@ -272,7 +291,7 @@ class FlexAligner:
                         device=self.resolved_device,
                     )
                 else:
-                    yield BatchItemResult(
+                    outcome = BatchItemResult(
                         audio_path=request.audio_path,
                         output_path=target,
                         status="succeeded",
@@ -280,6 +299,8 @@ class FlexAligner:
                         result=result,
                         device=self.resolved_device,
                     )
+                # Leaving the handler first releases the exception and its traceback.
+                yield outcome
 
     def align_batch(
         self,

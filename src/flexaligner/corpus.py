@@ -156,6 +156,9 @@ def _item_dict(item: BatchItemResult) -> dict[str, object]:
         record["output_sha256"] = item.result.output_sha256
         record["audio_duration_s"] = item.result.audio_duration_s
         record["utterance_id"] = item.result.utterance_id
+        record["pronunciation_notices"] = [
+            notice.to_dict() for notice in item.result.pronunciation_notices
+        ]
     return record
 
 
@@ -334,6 +337,20 @@ def run_corpus(
                 counts[item.status] += 1
                 _write_item(handle, item)
                 active = None
+                if item.result is not None:
+                    for pronunciation_notice in item.result.pronunciation_notices:
+                        print(
+                            "WARNING "
+                            + json.dumps(
+                                {
+                                    **pronunciation_notice.to_dict(),
+                                    "audio_path": str(item.audio_path),
+                                },
+                                ensure_ascii=False,
+                                sort_keys=True,
+                            ),
+                            file=sys.stderr,
+                        )
                 print(f"[{index}/{len(audio)}] {item.status}: {relative}", file=sys.stderr)
         summary.update(
             status="completed", exit_code=int(bool(counts["failed"] or counts["conflict"]))

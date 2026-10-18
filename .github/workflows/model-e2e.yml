@@ -33,7 +33,7 @@ env:
 
 jobs:
   model-e2e:
-    name: Offline frozen English and Mandarin CPU paths
+    name: Offline frozen English and Mandarin CPU and CUDA paths
     runs-on:
       - self-hosted
       - linux
@@ -231,3 +231,20 @@ jobs:
             -c "$FLEXALIGNER_SOURCE_ROOT/pyproject.toml" \
             -m model_e2e \
             --disable-socket
+      - name: Require real CUDA single-file and batch acceptance
+        shell: bash
+        run: |
+          umask 077
+          cd "$RUNNER_TEMP"
+          "$FLEXALIGNER_VENV_ROOT/bin/python" \
+            "$FLEXALIGNER_SOURCE_ROOT/scripts/verify_gpu_batch.py" \
+            --asset-root "$FLEXALIGNER_E2E_ASSET_ROOT" \
+            --output-dir "$RUNNER_TEMP/flexaligner-gpu-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --cuda-index 0
+      - name: Preserve real CUDA acceptance evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cuda-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/flexaligner-gpu-${{ github.run_id }}-${{ github.run_attempt }}/gpu_batch_acceptance.json
+          if-no-files-found: warn

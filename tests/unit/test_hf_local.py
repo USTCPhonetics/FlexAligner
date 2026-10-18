@@ -1000,3 +1000,124 @@ def test_batch_owner_excludes_sessions_from_other_threads(
     assert len(errors) == 1
     assert isinstance(errors[0], ModelValidationError)
     assert factory.load_counts == {"chunker": 0, "aligner": 0}
+
+
+@pytest.mark.parametrize("outcome", ["succeeded", "failed"])
+def test_engine_close_releases_suspended_batch_cache(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, outcome: str
+) -> None:
+    import weakref
+
+    from tests.integration._support import FakeInferenceFactory, make_integration_fixture
+
+    from flexaligner import AlignmentOptions, EngineClosedError, FlexAligner, InputValidationError
+    from flexaligner.pipeline import AlignmentPipeline
+
+    fixture = make_integration_fixture(tmp_path, metadata=False)
+    result = AlignmentPipeline(inference_factory=FakeInferenceFactory()).align(
+        request=fixture.request,
+        models=fixture.models,
+        lexicon_path=fixture.lexicon_path,
+        options=AlignmentOptions(device=Device.CPU),
+    )
+    _, model_dir = _installed_runtime(monkeypatch, tmp_path)
+    factory = LocalHuggingFaceInferenceFactory()
+    engine = FlexAligner(
+        models=fixture.models,
+        lexicon_path=fixture.lexicon_path,
+        options=AlignmentOptions(device=Device.CPU),
+    )
+    engine._pipeline = AlignmentPipeline(inference_factory=factory)
+
+    def align_after_loading(request):
+        with factory.chunker_session(model_dir, num_threads=1):
+            pass
+        if outcome == "failed":
+            raise InputValidationError("item failed after model use")
+        return result
+
+    monkeypatch.setattr(engine, "align", align_after_loading)
+    iterator = engine.iter_batch([fixture.request, fixture.request])
+    assert next(iterator).status == outcome
+    reference = weakref.ref(next(iter(factory._cache.values())))
+    assert reference() is not None and factory._batch_owner is not None
+    engine.close()
+    engine.close()
+    assert not factory._cache
+    assert factory._batch_owner is None
+    assert reference() is None
+    # Even an injected align implementation must not run after engine closure.
+    try:
+        with pytest.raises(EngineClosedError):
+            next(iterator)
+    finally:
+        iterator.close()
+    assert not engine._batch_active
+
+
+def test_factory_close_during_active_session_keeps_exclusion_until_exit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from flexaligner.errors import EngineClosedError
+
+    runtime, model_dir = _installed_runtime(monkeypatch, tmp_path)
+    runtime.cuda_available, runtime.cuda_count = True, 1
+    factory = LocalHuggingFaceInferenceFactory()
+    factory.configure_device(Device.CUDA)
+    with factory.batch_session():
+        with factory.chunker_session(model_dir, num_threads=1) as session:
+            factory.close()
+            factory.close()
+            assert factory._active_kind == "chunker"
+            assert factory._batch_owner is not None
+            assert not factory._cache
+            with pytest.raises(EngineClosedError):
+                factory.configure_device(Device.CPU)
+            with pytest.raises(EngineClosedError), factory.batch_session():
+                pass
+            with (
+                pytest.raises(EngineClosedError),
+                factory.aligner_session(model_dir, num_threads=1),
+            ):
+                pass
+            assert session._model is not None
+        assert factory._active_kind is None
+        assert factory._batch_owner is None
+        assert session._model is None
+    assert runtime.model_devices[-1] == "fake-device:cpu"
+
+
+@pytest.mark.parametrize("failure", ["restore", "allocator"])
+def test_recovery_failure_poison_prevents_factory_reuse(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, failure: str
+) -> None:
+    from flexaligner.errors import RuntimeRecoveryError
+
+    runtime, model_dir = _installed_runtime(monkeypatch, tmp_path)
+    runtime.cuda_available, runtime.cuda_count = True, 1
+    factory = LocalHuggingFaceInferenceFactory()
+    factory.configure_device(Device.CUDA)
+    if failure == "restore":
+        runtime.move_errors = [None, None, RuntimeError("cannot restore")]
+    else:
+
+        def fail_cleanup():
+            raise RuntimeError("cannot clear allocator")
+
+        monkeypatch.setattr(sys.modules["torch"].cuda, "empty_cache", fail_cleanup)
+    with (
+        pytest.raises(RuntimeRecoveryError),
+        factory.batch_session(),
+        factory.chunker_session(model_dir, num_threads=1),
+    ):
+        pass
+    loads = len(runtime.load_calls)
+    with pytest.raises(RuntimeRecoveryError, match="new engine"):
+        factory.configure_device(Device.CPU)
+    with pytest.raises(RuntimeRecoveryError), factory.batch_session():
+        pass
+    with pytest.raises(RuntimeRecoveryError), factory.chunker_session(model_dir, num_threads=1):
+        pass
+    assert len(runtime.load_calls) == loads
+    factory.close()
+    factory.close()

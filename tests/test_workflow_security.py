@@ -140,3 +140,15 @@ def test_workflow_files_are_regular_utf8_files() -> None:
         assert isinstance(path, Path)
         assert path.is_file()
         path.read_text(encoding="utf-8", errors="strict")
+
+
+def test_model_release_requires_real_cuda_acceptance() -> None:
+    source = _workflow_sources()["model-e2e.yml"]
+    step = source.split("- name: Require real CUDA single-file and batch acceptance", 1)[1]
+    command = step.split("- name: Preserve real CUDA acceptance evidence", 1)[0]
+    assert "scripts/verify_gpu_batch.py" in command
+    assert '--asset-root "$FLEXALIGNER_E2E_ASSET_ROOT"' in command
+    assert "--cuda-index 0" in command
+    assert "continue-on-error" not in command
+    assert "if:" not in command
+    assert "gpu_batch_acceptance.json" in step

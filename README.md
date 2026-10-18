@@ -245,7 +245,12 @@ into reproducible research pipelines. Python API 接受明确的本地模型目�
 from pathlib import Path
 
 from flexaligner import (
-    AlignmentOptions, AlignmentRequest, Device, FlexAligner, LocalModelBundle, TextGridOutput,
+    AlignmentOptions,
+    AlignmentRequest,
+    Device,
+    FlexAligner,
+    LocalModelBundle,
+    TextGridOutput,
 )
 
 models = LocalModelBundle(

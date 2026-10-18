@@ -26,6 +26,7 @@ from .contracts import (
 from .errors import (
     ConfigurationError,
     FlexAlignerError,
+    InternalError,
     ModelCacheMissError,
     ModelValidationError,
 )
@@ -474,6 +475,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         return PLACEHOLDER_EXIT_STATUS
+    except Exception as error:
+        if args.command != "batch":
+            raise
+        failure = InternalError(
+            "Unexpected batch failure: " + str(error),
+            context={"exception_type": type(error).__name__},
+        )
+        print(json.dumps(failure.to_dict(), ensure_ascii=False, sort_keys=True), file=sys.stderr)
+        return 3
     return int(getattr(args, "batch_exit_code", 0))
 
 
