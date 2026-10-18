@@ -102,7 +102,11 @@ def test_assets_fail_closed(tmp_path: Path, issue: str) -> None:
         verifier.load_assets(path, tmp_path)
 
 
-def test_cuda_absence_is_failure_not_skip(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("python_version", [(3, 10), (3, 11), (3, 12)])
+def test_cuda_absence_is_failure_not_skip(
+    monkeypatch: pytest.MonkeyPatch, python_version: tuple[int, int]
+) -> None:
+    monkeypatch.setattr(verifier, "sys", SimpleNamespace(version_info=python_version))
     monkeypatch.setattr(
         verifier.importlib.metadata,
         "version",
@@ -111,6 +115,20 @@ def test_cuda_absence_is_failure_not_skip(monkeypatch: pytest.MonkeyPatch) -> No
     fake_torch = SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: False))
     with pytest.raises(verifier.AcceptanceError, match=r"CUDA device.*unavailable"):
         verifier.runtime_metadata(fake_torch, 0)
+
+
+@pytest.mark.parametrize("python_version", [(3, 9), (3, 13), (3, 14)])
+def test_unsupported_python_rejected_before_runtime_checks(
+    monkeypatch: pytest.MonkeyPatch, python_version: tuple[int, int]
+) -> None:
+    monkeypatch.setattr(verifier, "sys", SimpleNamespace(version_info=python_version))
+
+    def unexpected_metadata_lookup(_name: str) -> str:
+        pytest.fail("package metadata must not be accessed for unsupported Python")
+
+    monkeypatch.setattr(verifier.importlib.metadata, "version", unexpected_metadata_lookup)
+    with pytest.raises(verifier.AcceptanceError, match=r"inference requires Python 3\.10-3\.12"):
+        verifier.runtime_metadata(object(), 0)
 
 
 def test_failed_run_has_nonzero_exit_and_durable_report(

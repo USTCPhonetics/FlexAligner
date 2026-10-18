@@ -243,6 +243,8 @@ def test_no_audio_is_configuration_failure(tmp_path: Path, kind: str) -> None:
 def test_casefolded_target_collision_rejected(tmp_path: Path, monkeypatch) -> None:
     source, output = tmp_path / "in", tmp_path / "out"
     pair(source, "sample")
+    # 真实路径存在性受文件系统大小写规则影响 确保两个名字均有路径以稳定触发碰撞校验
+    (source / "sample.WAV").write_bytes(b"fake wav")
     # Simulate a case-sensitive inventory on macOS as well, so the portability
     # guard runs instead of being skipped on a case-insensitive filesystem.
     monkeypatch.setattr(
