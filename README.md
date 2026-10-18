@@ -215,14 +215,10 @@ outputs or resume interrupted work. Item reports and a summary are saved under
 只有显式 `--skip-existing` 才跳过，跳过不代表校验旧产物或恢复中断任务。
 逐项报告和汇总保存在 `aligned/_flexaligner_runs/<run-id>/`。
 
-Items run sequentially; a batch reuses CPU-cached models and keeps at most one
-model active on the GPU. A recoverable GPU out-of-memory error fails that item;
-model/runtime initialization or recovery failures stop the batch. This is not
-multi-GPU or parallel-inference scheduling.
+Files are processed sequentially on one selected device. If a recording exceeds
+available GPU memory, it is reported as failed without silently retrying on CPU.
 
-条目顺序执行，批次复用 CPU 缓存模型，GPU 上同时最多激活一个模型。
-可恢复的显存不足使当前条目失败；模型/运行时初始化或恢复失败会停止批次。
-当前不提供多 GPU 或并行推理调度。
+文件在所选设备上逐项处理。若录音超出可用显存，会记录该项失败，不会静默转到 CPU 重试。
 
 ### Audio conversion / 音频转换
 
@@ -285,31 +281,6 @@ retaining existing outputs. Explicit GPU selection in Python uses
 返回 `BatchReport`；每项包含 `status`、`result` 和 `error`。
 只有确定保留已有输出时才传入 `skip_existing=True`。
 Python 指定 GPU 使用 `AlignmentOptions(device=Device.CUDA, device_index=1)`。
-
-### Offline CUDA acceptance / 离线 CUDA 验收
-
-From a source checkout with the approved E2E assets already present:
-在源码目录中，预先准备获准的 E2E 资产后运行：
-
-```bash
-python scripts/verify_gpu_batch.py \
-  --asset-root /absolute/path/to/asset-root \
-  --output-dir /tmp/flexaligner-gpu-acceptance-new
-```
-
-This never downloads models or changes inputs. It requires real CUDA, checks the
-frozen English/Mandarin asset hashes, and compares CPU/GPU single/batch outputs:
-identical word/phone labels, complete timeline coverage, and at most 20 ms
-non-`NULL` boundary differences. A JSON report records runtime versions, timing,
-model-load counts and CUDA peak allocated/reserved memory. Missing assets/CUDA
-fail explicitly. These short fixtures do not establish long-recording capacity;
-test representative corpora separately, retaining the default 900 s audio limit.
-
-工具不下载模型、不修改输入；必须有真实 CUDA，校验冻结中英文资产 hash，并比较
-CPU/GPU 单项与批量输出的词/音素标签、完整覆盖及非 `NULL` 边界差（最多 20 ms）。
-JSON 报告记录运行时版本、耗时、模型加载次数及 CUDA allocated/reserved 显存峰值。
-缺少资产或 CUDA 时明确失败。短夹具不证明长录音容量，应另行分级验证代表性语料，
-保留默认 900 秒音频限制。
 
 ---
 

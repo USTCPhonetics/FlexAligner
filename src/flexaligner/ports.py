@@ -31,7 +31,7 @@ class CtcPosterior:
 
 @runtime_checkable
 class CtcSessionPort(Protocol):
-    """One lazily loaded, CPU-only CTC model session."""
+    """One exclusive CTC inference session on the resolved CPU/CUDA device."""
 
     @property
     def vocabulary(self) -> Mapping[str, int]:
