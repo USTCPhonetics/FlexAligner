@@ -60,7 +60,6 @@ def test_human_capabilities_are_deterministic(
 @pytest.mark.parametrize(
     ("args", "capability_id"),
     [
-        (("batch",), "alignment.batch"),
         (("serve",), "integration.web"),
     ],
 )
@@ -79,15 +78,11 @@ def test_placeholder_commands_emit_stable_json_error(
     assert payload["context"]["status"] == "placeholder"
 
 
-def test_all_placeholder_cli_commands_share_one_exit_status(
+def test_batch_requires_paths_and_web_remains_placeholder(
     run_cli: Callable[..., CompletedProcess[str]],
 ) -> None:
-    statuses = {
-        run_cli("batch").returncode,
-        run_cli("serve").returncode,
-    }
-    assert len(statuses) == 1
-    assert next(iter(statuses)) > 0
+    assert run_cli("batch").returncode == 2
+    assert run_cli("serve").returncode == 3
 
 
 def test_align_reports_strict_input_failure_without_output(

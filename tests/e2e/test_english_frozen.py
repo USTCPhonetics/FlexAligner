@@ -23,6 +23,7 @@ import pytest
 from flexaligner import (
     AlignmentOptions,
     AlignmentRequest,
+    Device,
     FlexAligner,
     LocalModelBundle,
     ResourceLimits,
@@ -244,6 +245,7 @@ def test_frozen_english_release_e2e_fixture_matches_reference(
         ),
         lexicon_path=assets.require("effective_fixture_lexicon"),
         options=AlignmentOptions(
+            device=Device.CPU,
             num_threads=1,
             limits=ResourceLimits(
                 max_audio_seconds=60.0,

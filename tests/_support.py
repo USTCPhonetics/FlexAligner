@@ -9,6 +9,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
 
 AVAILABLE_IDS = {
+    "device.gpu",
+    "alignment.batch",
     "api.python",
     "cli",
     "capabilities.discovery",
@@ -25,8 +27,6 @@ AVAILABLE_IDS = {
 }
 
 PLACEHOLDER_IDS = {
-    "device.gpu",
-    "alignment.batch",
     "integration.web",
     "models.auto_resolution.python",
     "confidence.calibration",

@@ -31,6 +31,7 @@ class ErrorCode(str, Enum):
     OUTPUT_VALIDATION_FAILED = "output_validation_failed"
     ENGINE_CLOSED = "engine_closed"
     INTERNAL_ERROR = "internal_error"
+    RUNTIME_RECOVERY_FAILED = "runtime_recovery_failed"
 
 
 class FlexAlignerError(Exception):
@@ -65,6 +66,12 @@ class FlexAlignerError(Exception):
 
 class ConfigurationError(FlexAlignerError):
     default_code = ErrorCode.CONFIGURATION_ERROR
+
+
+class RuntimeRecoveryError(FlexAlignerError):
+    """The inference runtime cannot safely execute another request."""
+
+    default_code = ErrorCode.RUNTIME_RECOVERY_FAILED
 
 
 class FeatureNotAvailableError(FlexAlignerError):

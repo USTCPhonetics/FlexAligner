@@ -45,6 +45,39 @@ from .model_download import (
 PLACEHOLDER_EXIT_STATUS = 3
 
 
+def _add_alignment_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--lexicon", type=Path)
+    parser.add_argument("--chunker-model", type=Path)
+    parser.add_argument("--aligner-model", type=Path)
+    parser.add_argument("--model-cache-dir", type=Path)
+    parser.add_argument("--model-source", choices=("mirror", "official"))
+    parser.add_argument("--yes", action="store_true", help="Authorize model download.")
+    parser.add_argument("--num-threads", type=int, default=1)
+    parser.add_argument(
+        "--audio-policy", choices=[item.value for item in AudioPolicy], default="strict"
+    )
+    parser.add_argument(
+        "--pronunciation-mode", choices=[item.value for item in PronunciationMode], default="g2p"
+    )
+    parser.add_argument("--language", choices=[item.value for item in Language], default="en")
+    parser.add_argument(
+        "--device",
+        type=_device_argument,
+        default=(Device.AUTO, 0),
+        metavar="auto|cpu|cuda:N",
+        help="Default: visible CUDA GPU 0 when available, otherwise CPU.",
+    )
+
+
+def _device_argument(value: str) -> tuple[Device, int]:
+    from .devices import parse_device_spec
+
+    try:
+        return parse_device_spec(value)
+    except ConfigurationError as error:
+        raise argparse.ArgumentTypeError(error.message) from error
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="flexaligner",
@@ -65,55 +98,18 @@ def build_parser() -> argparse.ArgumentParser:
     transcript_group = align_parser.add_mutually_exclusive_group(required=True)
     transcript_group.add_argument("--text")
     transcript_group.add_argument("--text-file", type=Path)
-    align_parser.add_argument(
-        "--lexicon",
-        type=Path,
-        help=(
-            "Optional user lexicon. Mandarin cached bundles include a reference lexicon; "
-            "English and explicit local model directories still require this option."
-        ),
-    )
-    align_parser.add_argument("--chunker-model", type=Path)
-    align_parser.add_argument("--aligner-model", type=Path)
-    align_parser.add_argument("--model-cache-dir", type=Path)
-    align_parser.add_argument(
-        "--model-source",
-        choices=("mirror", "official"),
-        help="Download from hf-mirror.com or huggingface.co after explicit confirmation.",
-    )
-    align_parser.add_argument(
-        "--yes",
-        action="store_true",
-        help="Authorize a required model download without an interactive prompt.",
-    )
+    _add_alignment_options(align_parser)
     align_parser.add_argument("--output", type=Path, required=True)
     align_parser.add_argument("--chunk-metadata", type=Path)
     align_parser.add_argument("--utterance-id")
-    align_parser.add_argument("--num-threads", type=int, default=1)
-    align_parser.add_argument(
-        "--audio-policy",
-        choices=[item.value for item in AudioPolicy],
-        default=AudioPolicy.STRICT_PCM16_WAV.value,
-        help="Keep strict WAV input (default) or explicitly enable the optional audio extra.",
+    batch_parser = subparsers.add_parser(
+        "batch", help="Align a directory of paired WAV/text files."
     )
-    align_parser.add_argument(
-        "--pronunciation-mode",
-        choices=[item.value for item in PronunciationMode],
-        default=PronunciationMode.G2P.value,
-        help="Use the selected language's local G2P for OOVs or require strict lexicon coverage.",
-    )
-    align_parser.add_argument(
-        "--language",
-        choices=[item.value for item in Language],
-        default="en",
-    )
-    align_parser.add_argument(
-        "--device",
-        choices=[item.value for item in Device],
-        default="cpu",
-    )
-
-    subparsers.add_parser("batch", help="Declared batch placeholder.")
+    batch_parser.add_argument("corpus_dir", type=Path)
+    batch_parser.add_argument("output_dir", type=Path)
+    batch_parser.add_argument("--text-extension", choices=("txt", "lab"), default="txt")
+    batch_parser.add_argument("--skip-existing", action="store_true")
+    _add_alignment_options(batch_parser)
     subparsers.add_parser("serve", help="Declared Web-service placeholder.")
 
     models_parser = subparsers.add_parser("models", help="Model cache management.")
@@ -163,7 +159,8 @@ def _print_capabilities(*, as_json: bool) -> None:
 def _run_align(args: argparse.Namespace) -> None:
     options = AlignmentOptions(
         language=Language(args.language),
-        device=Device(args.device),
+        device=args.device[0],
+        device_index=args.device[1],
         num_threads=args.num_threads,
         audio_policy=AudioPolicy(args.audio_policy),
         pronunciation_mode=PronunciationMode(args.pronunciation_mode),
@@ -404,6 +401,28 @@ def _dispatch(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None
     report = get_capabilities()
     if args.command == "batch":
         report.require(CapabilityId.BATCH)
+        from .corpus import run_corpus
+
+        options = AlignmentOptions(
+            language=Language(args.language),
+            device=args.device[0],
+            device_index=args.device[1],
+            num_threads=args.num_threads,
+            audio_policy=AudioPolicy(args.audio_policy),
+            pronunciation_mode=PronunciationMode(args.pronunciation_mode),
+        )
+        require_supported_options(options)
+        models = _resolve_cli_models(args)
+        with FlexAligner(models=models, lexicon_path=args.lexicon, options=options) as engine:
+            summary = run_corpus(
+                engine,
+                args.corpus_dir,
+                args.output_dir,
+                text_extension=args.text_extension,
+                skip_existing=args.skip_existing,
+            )
+        print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
+        args.batch_exit_code = summary["exit_code"]
         return
     if args.command == "serve":
         report.require(CapabilityId.WEB)
@@ -444,13 +463,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         _dispatch(args, parser)
+    except KeyboardInterrupt:
+        print(
+            json.dumps({"code": "interrupted", "message": "Alignment interrupted"}), file=sys.stderr
+        )
+        return 130
     except FlexAlignerError as error:
         print(
             json.dumps(error.to_dict(), ensure_ascii=False, sort_keys=True),
             file=sys.stderr,
         )
         return PLACEHOLDER_EXIT_STATUS
-    return 0
+    return int(getattr(args, "batch_exit_code", 0))
 
 
 if __name__ == "__main__":  # pragma: no cover - exercised through python -m

@@ -14,13 +14,13 @@ import flexaligner.pipeline as pipeline
 from flexaligner import (
     AlignmentOptions,
     AudioPolicy,
-    Device,
     EngineClosedError,
     FeatureNotAvailableError,
     FlexAligner,
     Language,
     LanguageMismatchError,
     LocalModelBundle,
+    ModelResolution,
     PronunciationMode,
 )
 from tests.integration._support import FakeInferenceFactory, make_integration_fixture
@@ -290,7 +290,7 @@ def test_future_option_still_fails_before_pipeline_construction(
     with pytest.raises(FeatureNotAvailableError):
         engine.align(
             fixture.request,
-            options=replace(AlignmentOptions(), device=Device.CUDA),
+            options=replace(AlignmentOptions(), model_resolution=ModelResolution.AUTO_DOWNLOAD),
         )
     assert constructed is False
     assert not fixture.request.output.path.exists()

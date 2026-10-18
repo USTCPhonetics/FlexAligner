@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import time
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
 from types import TracebackType
 
+from .batch import is_fatal_batch_error
 from .capabilities import CapabilityId, CapabilityReport, get_capabilities
 from .contracts import (
     AlignmentOptions,
     AlignmentRequest,
     AlignmentResult,
     AudioPolicy,
+    BatchItemResult,
+    BatchReport,
     CalibrationMode,
     Device,
     Language,
@@ -20,7 +25,7 @@ from .contracts import (
     ModelResolution,
     PronunciationMode,
 )
-from .errors import ConfigurationError, EngineClosedError
+from .errors import ArtifactExistsError, ConfigurationError, EngineClosedError, FlexAlignerError
 from .model_download import has_validated_system_dictionary
 from .ports import AlignmentPipelinePort
 
@@ -34,7 +39,9 @@ def require_supported_options(options: AlignmentOptions) -> None:
     if options.language is Language.ZH:
         report.require(CapabilityId.MANDARIN)
         report.require(CapabilityId.CHINESE_SEGMENTATION)
-    if options.device is not Device.CPU:
+    if options.device is Device.MPS:
+        raise ConfigurationError("MPS inference is not supported; choose auto, cpu or cuda:N")
+    if options.device is Device.CUDA:
         report.require(CapabilityId.GPU)
     if options.audio_policy is AudioPolicy.MULTI_FORMAT:
         report.require(CapabilityId.MULTI_FORMAT_AUDIO)
@@ -88,6 +95,15 @@ class FlexAligner:
         self._options = AlignmentOptions() if options is None else options
         self._pipeline: AlignmentPipelinePort | None = None
         self._closed = False
+        self._batch_active = False
+        self._resolved_device: str | None = None
+
+    @property
+    def resolved_device(self) -> str | None:
+        """The actual device used by the latest completed alignment."""
+
+        resolved = getattr(self._pipeline, "resolved_device", None)
+        return resolved if isinstance(resolved, str) else self._resolved_device
 
     def capabilities(self) -> CapabilityReport:
         """Return declared capabilities without probing the environment."""
@@ -108,6 +124,8 @@ class FlexAligner:
         if options is not None and not isinstance(options, AlignmentOptions):
             raise ConfigurationError("options must be AlignmentOptions or None")
         selected_options = self._options if options is None else options
+        if self._batch_active and selected_options != self._options:
+            raise ConfigurationError("Alignment options cannot change within a batch")
         if selected_options.algorithm_profile == "auto":
             selected_options = replace(
                 selected_options,
@@ -135,19 +153,143 @@ class FlexAligner:
             from .pipeline import AlignmentPipeline
 
             self._pipeline = AlignmentPipeline()
-        return self._pipeline.align(
+        result = self._pipeline.align(
             request=request,
             models=self._models,
             lexicon_path=self._lexicon_path,
             options=selected_options,
         )
+        self._resolved_device = (
+            f"cuda:{result.provenance.device_index}"
+            if result.provenance.device is Device.CUDA
+            else result.provenance.device.value
+        )
+        return result
 
-    def align_batch(self, requests: Iterable[AlignmentRequest]) -> tuple[AlignmentResult, ...]:
-        """Declare the batch boundary without consuming ``requests``."""
+    @contextmanager
+    def batch_session(self) -> Iterator[None]:
+        """Own one sequential batch and release cached models on every exit."""
 
         self._ensure_open()
         self.capabilities().require(CapabilityId.BATCH)
-        raise AssertionError("unreachable: placeholder capability unexpectedly available")
+        if self._batch_active:
+            raise ConfigurationError("A batch is already active on this engine")
+        require_supported_options(self._options)
+        self._validate_batch_setup()
+        if self._pipeline is None:
+            from .pipeline import AlignmentPipeline
+
+            self._pipeline = AlignmentPipeline()
+        context = getattr(self._pipeline, "batch_session", None)
+        if not callable(context):
+            raise ConfigurationError("This pipeline does not support model reuse")
+        self._batch_active = True
+        try:
+            with context(self._options):
+                yield
+        finally:
+            self._batch_active = False
+
+    def _validate_batch_setup(self) -> None:
+        from .adapters.lexicon_file import (
+            load_dense_token_vocab,
+            load_lexicon,
+            validate_local_model_dir,
+        )
+        from .language_validation import validate_lexicon_language, validate_model_language
+
+        try:
+            for kind, path in (
+                ("chunker", self._models.chunker_dir),
+                ("aligner", self._models.aligner_dir),
+            ):
+                validate_local_model_dir(path, kind)
+                vocabulary = load_dense_token_vocab(path / "vocab.json")
+                validate_model_language(((kind, vocabulary),), self._options.language)
+            paths = [self._lexicon_path]
+            if has_validated_system_dictionary(self._models):
+                paths.append(self._models.dictionary_path)
+            if not any(path is not None for path in paths):
+                raise ConfigurationError("A user or validated system lexicon is required")
+            for lexicon_file in paths:
+                if lexicon_file is not None:
+                    validate_lexicon_language(load_lexicon(lexicon_file), self._options.language)
+        except FlexAlignerError as error:
+            raise ConfigurationError(
+                "Batch model or dictionary configuration is invalid: " + error.message,
+                context={"cause_code": error.code},
+            ) from error
+
+    def iter_batch(
+        self,
+        requests: Iterable[AlignmentRequest],
+        *,
+        skip_existing: bool = False,
+    ) -> Iterator[BatchItemResult]:
+        """Yield outcomes with bounded memory; close the iterator on early exit."""
+
+        if type(skip_existing) is not bool:
+            raise ConfigurationError("skip_existing must be a bool")
+        with self.batch_session():
+            for request in requests:
+                if not isinstance(request, AlignmentRequest):
+                    raise ConfigurationError("Batch requests must be AlignmentRequest instances")
+                started = time.monotonic()
+                target = request.output.path
+                outputs = [target]
+                if request.output.chunk_metadata_path is not None:
+                    outputs.append(request.output.chunk_metadata_path)
+                temporary_conflict = any(
+                    path.with_name(path.name + ".tmp").exists()
+                    or path.with_name(path.name + ".tmp").is_symlink()
+                    for path in outputs
+                )
+                if (
+                    skip_existing
+                    and target.is_file()
+                    and not target.is_symlink()
+                    and not temporary_conflict
+                    and all(path.is_file() and not path.is_symlink() for path in outputs)
+                ):
+                    yield BatchItemResult(
+                        audio_path=request.audio_path,
+                        output_path=target,
+                        status="skipped",
+                        elapsed_seconds=time.monotonic() - started,
+                    )
+                    continue
+                try:
+                    result = self.align(request)
+                except FlexAlignerError as error:
+                    if is_fatal_batch_error(error):
+                        raise
+                    yield BatchItemResult(
+                        audio_path=request.audio_path,
+                        output_path=target,
+                        status="conflict" if isinstance(error, ArtifactExistsError) else "failed",
+                        elapsed_seconds=time.monotonic() - started,
+                        error=error.to_dict(),
+                        device=self.resolved_device,
+                    )
+                else:
+                    yield BatchItemResult(
+                        audio_path=request.audio_path,
+                        output_path=target,
+                        status="succeeded",
+                        elapsed_seconds=time.monotonic() - started,
+                        result=result,
+                        device=self.resolved_device,
+                    )
+
+    def align_batch(
+        self,
+        requests: Iterable[AlignmentRequest],
+        *,
+        skip_existing: bool = False,
+    ) -> BatchReport:
+        """Collect batch outcomes; iter_batch is preferable for large corpora."""
+
+        return BatchReport(items=tuple(self.iter_batch(requests, skip_existing=skip_existing)))
 
     def close(self) -> None:
         """Close the lazy facade and any constructed pipeline, idempotently."""

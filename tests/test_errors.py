@@ -8,7 +8,7 @@ import pytest
 
 def test_feature_error_has_machine_readable_json_shape(public_api: ModuleType) -> None:
     with pytest.raises(public_api.FeatureNotAvailableError) as caught:
-        public_api.get_capabilities().require("device.gpu")
+        public_api.get_capabilities().require("integration.web")
 
     payload = caught.value.to_dict()
 
@@ -18,7 +18,7 @@ def test_feature_error_has_machine_readable_json_shape(public_api: ModuleType) -
         "code": "feature_not_available",
         "message": payload["message"],
         "context": {
-            "capability": "device.gpu",
+            "capability": "integration.web",
             "status": "placeholder",
             "reason": payload["context"]["reason"],
         },

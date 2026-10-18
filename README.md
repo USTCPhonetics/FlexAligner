@@ -33,10 +33,10 @@ and phone boundaries within them. The result is a Praat TextGrid; unmatched
 time is represented explicitly as `NULL` rather than hidden inside neighboring
 labels.
 
-The `0.4.0a1` public alpha aligns **English and Mandarin single recordings on
-CPU** and writes word- and phone-level Praat TextGrids. GPU inference,
-corpus/batch alignment, Web services, automatic language detection, and
-calibrated confidence scores are not part of the current alpha.
+The `0.5.0a1` alpha aligns **English and Mandarin on CPU or NVIDIA CUDA**, for
+single recordings or local corpora, and writes word- and phone-level Praat
+TextGrids. Web services, automatic language detection, and calibrated confidence
+scores are not part of the current alpha.
 
 ## 🌏 简介
 
@@ -48,9 +48,9 @@ FlexAligner 先定位可靠的文本对应区域，再在其中估计词和音�
 输出为 Praat TextGrid，未匹配时段使用明确的 `NULL` 区间表示，
 而不是被隐藏在相邻标签中。
 
-`0.4.0a1` 公开 alpha 当前可在 **CPU 上对齐英语和普通话单条录音**，
-输出词级和音素级 Praat TextGrid。GPU 推理、语料库/批处理对齐、
-Web 服务、自动语言识别和经校准的置信度不属于当前 alpha 范围。
+`0.5.0a1` alpha 支持在 **CPU 或 NVIDIA CUDA 上对齐英语和普通话单条录音或本地语料库**，
+输出词级和音素级 Praat TextGrid。Web 服务、自动语言识别和经校准的置信度
+不属于当前 alpha 范围。
 
 ### 🌟 Key Features / 核心优势
 
@@ -73,14 +73,33 @@ Web 服务、自动语言识别和经校准的置信度不属于当前 alpha 范
 
 ### 1. Install / 安装
 
-For most users, install all currently supported language, inference, and audio
-features with Python 3.10–3.12:
+Use a Python 3.10–3.12 virtual environment. Install the appropriate PyTorch
+2.3.1 build first, then FlexAligner with its language and audio extras.
 
-大多数用户可在 Python 3.10–3.12 中直接安装当前全部语言、推理和音频功能：
+请使用 Python 3.10–3.12 虚拟环境。先选择对应的 PyTorch 2.3.1，
+再安装 FlexAligner 及语言、音频依赖。
 
 ```bash
-python -m pip install "flexaligner[inference,en,zh,audio]==0.4.0a1"
+python -m venv .venv
+# Linux/macOS / Linux 或 macOS
+source .venv/bin/activate
+# Windows PowerShell: .venv\Scripts\Activate.ps1
+
+# NVIDIA CUDA 12.1 wheels (Linux/Windows) / NVIDIA GPU 环境
+python -m pip install torch==2.3.1 --index-url https://download.pytorch.org/whl/cu121
+
+# OR CPU-only (Linux/Windows) / 或仅 CPU 环境，二选一
+# python -m pip install torch==2.3.1 --index-url https://download.pytorch.org/whl/cpu
+# macOS (CPU) / macOS 使用 CPU
+# python -m pip install torch==2.3.1
+
+python -m pip install "flexaligner[inference,en,zh,audio]==0.5.0a1"
 ```
+
+The CUDA build requires a compatible NVIDIA driver; macOS uses CPU (not MPS).
+These commands follow the [official PyTorch 2.3.1 installation options](https://pytorch.org/get-started/previous-versions/#v231).
+CUDA 版本需要兼容的 NVIDIA 驱动；macOS 使用 CPU，不启用 MPS。
+Torch 2.3.1 与 Transformers 4.41.2 保持固定版本。
 
 ### 2. Prepare the input / 准备输入
 
@@ -163,6 +182,48 @@ Important or ambiguous pronunciations should be specified explicitly.
 自定义词典优先于普通话内置参考词典。两者都未收录的词可由本地英语或
 带调普通话 G2P 前端处理，CLI 会同时给出警告。重要或存在歧义的发音应明确写入词典。
 
+### Device and corpus alignment / 设备与语料库对齐
+
+The default `--device auto` selects `cuda:0` when CUDA is available, otherwise
+CPU. Use `--device cpu` for reproducible CPU runs, or select a GPU explicitly
+with `--device cuda:1`; an unavailable explicit device is an error.
+
+默认 `--device auto` 在 CUDA 可用时使用 `cuda:0`，否则使用 CPU。
+需要固定 CPU 时使用 `--device cpu`；可用 `--device cuda:1` 明确指定 GPU，
+指定设备不存在时会报错。
+
+```bash
+flexaligner align --language en --device cuda:0 \
+  --audio recording.wav --text-file transcript.txt \
+  --lexicon english.dict --output recording.TextGrid
+
+flexaligner batch corpus/ aligned/ --language en --lexicon english.dict
+flexaligner batch corpus/ aligned/ --language zh --device cpu --skip-existing
+# Pair WAV with UTF-8 .lab instead of .txt / 使用同名 .lab 转写
+flexaligner batch corpus/ aligned/ --language zh --text-extension lab
+```
+
+Batch alignment recursively pairs each WAV with its same-stem `.txt` (or `.lab`)
+and mirrors relative paths into the output directory. Inputs and outputs must be
+separate, non-nested directories; symlinks are not followed. Existing outputs are
+conflicts unless `--skip-existing` is explicit; skipping does not validate old
+outputs or resume interrupted work. Item reports and a summary are saved under
+`aligned/_flexaligner_runs/<run-id>/`.
+
+批处理递归配对 WAV 与同目录、同名的 `.txt`（或 `.lab`），按相对路径镜像输出。
+输入输出目录必须分离且不能互相包含，不跟随符号链接。已有输出默认记为冲突；
+只有显式 `--skip-existing` 才跳过，跳过不代表校验旧产物或恢复中断任务。
+逐项报告和汇总保存在 `aligned/_flexaligner_runs/<run-id>/`。
+
+Items run sequentially; a batch reuses CPU-cached models and keeps at most one
+model active on the GPU. A recoverable GPU out-of-memory error fails that item;
+model/runtime initialization or recovery failures stop the batch. This is not
+multi-GPU or parallel-inference scheduling.
+
+条目顺序执行，批次复用 CPU 缓存模型，GPU 上同时最多激活一个模型。
+可恢复的显存不足使当前条目失败；模型/运行时初始化或恢复失败会停止批次。
+当前不提供多 GPU 或并行推理调度。
+
 ### Audio conversion / 音频转换
 
 ```bash
@@ -183,14 +244,20 @@ into reproducible research pipelines. Python API 接受明确的本地模型目�
 ```python
 from pathlib import Path
 
-from flexaligner import AlignmentRequest, FlexAligner, LocalModelBundle, TextGridOutput
+from flexaligner import (
+    AlignmentOptions, AlignmentRequest, Device, FlexAligner, LocalModelBundle, TextGridOutput,
+)
 
 models = LocalModelBundle(
     chunker_dir=Path("/local/models/en/chunker"),
     aligner_dir=Path("/local/models/en/aligner"),
 )
 
-with FlexAligner(models=models, lexicon_path=Path("english.dict")) as aligner:
+with FlexAligner(
+    models=models,
+    lexicon_path=Path("english.dict"),
+    options=AlignmentOptions(device=Device.AUTO),
+) as aligner:
     result = aligner.align(
         AlignmentRequest(
             audio_path=Path("recording.wav"),
@@ -202,6 +269,42 @@ with FlexAligner(models=models, lexicon_path=Path("english.dict")) as aligner:
 
 print(result.output_path)
 ```
+
+For a batch, call `aligner.align_batch(requests)` with an iterable of
+`AlignmentRequest` objects. It returns a `BatchReport`; each item has
+`status`, `result`, and `error`. Pass `skip_existing=True` only when intentionally
+retaining existing outputs. Explicit GPU selection in Python uses
+`AlignmentOptions(device=Device.CUDA, device_index=1)`.
+
+批量 API 为 `aligner.align_batch(requests)`，输入 `AlignmentRequest` 的可迭代对象，
+返回 `BatchReport`；每项包含 `status`、`result` 和 `error`。
+只有确定保留已有输出时才传入 `skip_existing=True`。
+Python 指定 GPU 使用 `AlignmentOptions(device=Device.CUDA, device_index=1)`。
+
+### Offline CUDA acceptance / 离线 CUDA 验收
+
+From a source checkout with the approved E2E assets already present:
+在源码目录中，预先准备获准的 E2E 资产后运行：
+
+```bash
+python scripts/verify_gpu_batch.py \
+  --asset-root /absolute/path/to/asset-root \
+  --output-dir /tmp/flexaligner-gpu-acceptance-new
+```
+
+This never downloads models or changes inputs. It requires real CUDA, checks the
+frozen English/Mandarin asset hashes, and compares CPU/GPU single/batch outputs:
+identical word/phone labels, complete timeline coverage, and at most 20 ms
+non-`NULL` boundary differences. A JSON report records runtime versions, timing,
+model-load counts and CUDA peak allocated/reserved memory. Missing assets/CUDA
+fail explicitly. These short fixtures do not establish long-recording capacity;
+test representative corpora separately, retaining the default 900 s audio limit.
+
+工具不下载模型、不修改输入；必须有真实 CUDA，校验冻结中英文资产 hash，并比较
+CPU/GPU 单项与批量输出的词/音素标签、完整覆盖及非 `NULL` 边界差（最多 20 ms）。
+JSON 报告记录运行时版本、耗时、模型加载次数及 CUDA allocated/reserved 显存峰值。
+缺少资产或 CUDA 时明确失败。短夹具不证明长录音容量，应另行分级验证代表性语料，
+保留默认 900 秒音频限制。
 
 ---
 
@@ -226,13 +329,13 @@ graph TD
 ## 🗓️ Roadmap / 路线图
 
 - [x] **Core Alignment Engine:** CTC chunking + local pronunciation-graph alignment
-- [x] **English and Mandarin:** CPU single-file CLI and Python API
+- [x] **English and Mandarin:** CPU/CUDA single-file CLI and Python API
 - [x] **Continuous TextGrid:** complete `words`/`phones` timeline with `NULL`
 - [x] **Model Retrieval:** local caching for English and Mandarin models
 - [x] **Local OOV G2P:** lexicon-first English and Mandarin pronunciation fallback
 - [x] **Audio Frontend:** explicit multi-format decoding, resampling, and conversion
 - [x] **PyPI Public Alpha:** `flexaligner==0.4.0a1`
-- [ ] **GPU and Corpus/Batch Processing**
+- [x] **GPU and Corpus/Batch Processing:** implemented in `0.5.0a1` (release pending)
 - [ ] **Web Service and Confidence Calibration**
 
 ## 👨‍💻 Authors & Affiliation / 作者与机构

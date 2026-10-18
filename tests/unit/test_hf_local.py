@@ -16,6 +16,7 @@ from tests._support import SRC_ROOT
 
 from flexaligner.adapters import hf_local
 from flexaligner.adapters.hf_local import LocalHuggingFaceInferenceFactory
+from flexaligner.contracts import Device
 from flexaligner.errors import AlignmentError, ModelCompatibilityError, ModelValidationError
 from flexaligner.ports import LocalInferenceFactoryPort
 
@@ -95,6 +96,10 @@ class _Model:
 
     def to(self, device: object) -> _Model:
         self.runtime.model_devices.append(device)
+        if self.runtime.move_errors:
+            error = self.runtime.move_errors.pop(0)
+            if error is not None:
+                raise error
         return self
 
     def eval(self) -> _Model:
@@ -156,6 +161,10 @@ class _FakeRuntime:
         self.inference_entries = 0
         self.tensor_cpu_calls = 0
         self.gc_calls = 0
+        self.cuda_available = False
+        self.cuda_count = 0
+        self.empty_cache_calls = 0
+        self.move_errors: list[Exception | None] = []
 
     def install(self, monkeypatch: pytest.MonkeyPatch) -> None:
         torch_module = ModuleType("torch")
@@ -187,6 +196,25 @@ class _FakeRuntime:
         torch_module.device = device
         torch_module.inference_mode = inference_mode
         torch_module.log_softmax = log_softmax
+
+        class OutOfMemoryError(RuntimeError):
+            pass
+
+        def empty_cache() -> None:
+            self.empty_cache_calls += 1
+
+        @contextmanager
+        def cuda_device(index: int) -> Iterator[None]:
+            assert 0 <= index < self.cuda_count
+            yield
+
+        torch_module.cuda = SimpleNamespace(
+            is_available=lambda: self.cuda_available,
+            device_count=lambda: self.cuda_count,
+            empty_cache=empty_cache,
+            OutOfMemoryError=OutOfMemoryError,
+            device=cuda_device,
+        )
 
         transformers_module = ModuleType("transformers")
         transformers_module.AutoProcessor = _Loader(self, "processor")
@@ -706,3 +734,269 @@ def test_processor_output_mapping_is_strictly_validated(
         pytest.raises(AlignmentError),
     ):
         session.infer(np.ones(32, dtype=np.float32), 16_000)
+
+
+def test_device_resolution_and_explicit_cuda_validation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from flexaligner.errors import ConfigurationError
+
+    runtime, _ = _installed_runtime(monkeypatch, tmp_path)
+    factory = LocalHuggingFaceInferenceFactory()
+    assert factory.configure_device(Device.AUTO) == (Device.CPU, None)
+    runtime.cuda_available = True
+    runtime.cuda_count = 2
+    assert factory.configure_device(Device.AUTO) == (Device.CUDA, 0)
+    assert factory.configure_device(Device.CUDA, 1) == (Device.CUDA, 1)
+    for device, index in [(Device.CUDA, 2), (Device.CPU, 1), (Device.AUTO, 1), (Device.MPS, 0)]:
+        with pytest.raises(ConfigurationError):
+            factory.configure_device(device, index)
+
+
+def test_batch_cache_loads_each_kind_once_and_closes_sessions(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    runtime, model_dir = _installed_runtime(monkeypatch, tmp_path)
+    factory = LocalHuggingFaceInferenceFactory()
+    sessions = []
+    with factory.batch_session():
+        for _ in range(2):
+            for method in [factory.chunker_session, factory.aligner_session]:
+                with method(model_dir, num_threads=1) as session:
+                    sessions.append(session)
+                    session.infer(np.ones(32, dtype=np.float32), 16_000)
+                with pytest.raises(AlignmentError, match="closed"):
+                    _ = session.sample_rate
+        assert len(runtime.load_calls) == 4
+        assert factory.load_counts == {"chunker": 1, "aligner": 1}
+    assert not factory._cache
+    with factory.chunker_session(model_dir, num_threads=1):
+        pass
+    assert len(runtime.load_calls) == 6
+
+
+def test_cuda_sessions_move_only_active_model_and_restore_cpu(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    runtime, model_dir = _installed_runtime(monkeypatch, tmp_path)
+    runtime.cuda_available, runtime.cuda_count = True, 2
+    factory = LocalHuggingFaceInferenceFactory()
+    factory.configure_device(Device.CUDA, 1)
+    with factory.batch_session():
+        for method in [factory.chunker_session, factory.aligner_session, factory.chunker_session]:
+            with method(model_dir, num_threads=1) as session:
+                session.infer(np.ones(32, dtype=np.float32), 16_000)
+    assert runtime.model_devices == [
+        "fake-device:cpu",
+        "fake-device:cuda:1",
+        "fake-device:cpu",
+        "fake-device:cpu",
+        "fake-device:cuda:1",
+        "fake-device:cpu",
+        "fake-device:cuda:1",
+        "fake-device:cpu",
+    ]
+    assert runtime.tensor_devices == ["fake-device:cuda:1"] * 3
+
+
+@pytest.mark.parametrize("failure", ["forward", "move"])
+def test_cuda_oom_evicts_resource_and_next_item_reloads(
+    failure: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from flexaligner.errors import ResourceLimitError
+
+    runtime, model_dir = _installed_runtime(monkeypatch, tmp_path)
+    runtime.cuda_available, runtime.cuda_count = True, 1
+    factory = LocalHuggingFaceInferenceFactory()
+    factory.configure_device(Device.CUDA)
+    oom = sys.modules["torch"].cuda.OutOfMemoryError("oom")
+    if failure == "forward":
+        runtime.model_error = oom
+    else:
+        runtime.move_errors = [None, oom]
+    with factory.batch_session():
+        with (
+            pytest.raises(ResourceLimitError),
+            factory.chunker_session(model_dir, num_threads=1) as session,
+        ):
+            session.infer(np.ones(32, dtype=np.float32), 16_000)
+        assert not factory._cache
+        assert factory._active_kind is None
+        runtime.model_error = None
+        with factory.chunker_session(model_dir, num_threads=1) as session:
+            session.infer(np.ones(32, dtype=np.float32), 16_000)
+    assert len(runtime.load_calls) == 4
+    assert runtime.model_devices[-1] == "fake-device:cpu"
+
+
+def test_cuda_restore_failure_is_fatal_and_clears_cache(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from flexaligner.errors import RuntimeRecoveryError
+
+    runtime, model_dir = _installed_runtime(monkeypatch, tmp_path)
+    runtime.cuda_available, runtime.cuda_count = True, 1
+    runtime.move_errors = [None, None, RuntimeError("cannot return to CPU")]
+    factory = LocalHuggingFaceInferenceFactory()
+    factory.configure_device(Device.CUDA)
+    with (
+        pytest.raises(RuntimeRecoveryError),
+        factory.batch_session(),
+        factory.chunker_session(model_dir, num_threads=1),
+    ):
+        pass
+    assert factory._active_kind is None
+    assert not factory._cache
+
+
+def test_batch_context_is_exclusive(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _, model_dir = _installed_runtime(monkeypatch, tmp_path)
+    factory = LocalHuggingFaceInferenceFactory()
+    with factory.batch_session():
+        with pytest.raises(ModelValidationError), factory.batch_session():
+            pass
+        with (
+            factory.chunker_session(model_dir, num_threads=1),
+            pytest.raises(ModelValidationError),
+        ):
+            factory.configure_device(Device.CPU)
+
+
+def test_batch_device_configuration_is_idempotent_without_reprobing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    runtime, model_dir = _installed_runtime(monkeypatch, tmp_path)
+    factory = LocalHuggingFaceInferenceFactory()
+    with factory.batch_session():
+        assert factory.configure_device(Device.AUTO) == (Device.CPU, None)
+        with factory.chunker_session(model_dir, num_threads=1):
+            pass
+        runtime.cuda_available, runtime.cuda_count = True, 1
+        assert factory.configure_device(Device.AUTO) == (Device.CPU, None)
+        with factory.chunker_session(model_dir, num_threads=1):
+            pass
+    assert factory.load_counts == {"chunker": 1, "aligner": 0}
+
+
+def test_forward_exception_chain_does_not_retain_heavy_locals(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    runtime, model_dir = _installed_runtime(monkeypatch, tmp_path)
+    runtime.model_error = RuntimeError("forward failed")
+    factory = LocalHuggingFaceInferenceFactory()
+    with factory.batch_session():
+        with (
+            pytest.raises(AlignmentError) as caught,
+            factory.chunker_session(model_dir, num_threads=1) as session,
+        ):
+            session.infer(np.ones(32, dtype=np.float32), 16_000)
+        assert not factory._cache
+    forbidden = {id(runtime.model), id(runtime.processor), id(sys.modules["torch"])}
+    error: BaseException | None = caught.value
+    seen = set()
+    while error is not None and id(error) not in seen:
+        seen.add(id(error))
+        cursor = error.__traceback__
+        while cursor is not None:
+            frame = cursor.tb_frame
+            if Path(frame.f_code.co_filename).resolve() == Path(hf_local.__file__).resolve():
+                assert {id(value) for value in frame.f_locals.values()}.isdisjoint(forbidden)
+            cursor = cursor.tb_next
+        error = error.__cause__ if error.__cause__ is not None else error.__context__
+
+
+def test_finished_batch_does_not_retain_model_resource_in_session_closure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import weakref
+
+    _, model_dir = _installed_runtime(monkeypatch, tmp_path)
+    factory = LocalHuggingFaceInferenceFactory()
+    with factory.batch_session():
+        context = factory.chunker_session(model_dir, num_threads=1)
+        with context as session:
+            resource_reference = weakref.ref(next(iter(factory._cache.values())))
+        assert resource_reference() is not None
+    assert resource_reference() is None
+    assert session._model is None
+    assert session._processor is None
+
+
+def test_non_oom_forward_failure_evicts_even_if_caller_catches_inside_session(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    runtime, model_dir = _installed_runtime(monkeypatch, tmp_path)
+    runtime.model_error = RuntimeError("bad forward")
+    factory = LocalHuggingFaceInferenceFactory()
+    with factory.batch_session():
+        with (
+            factory.chunker_session(model_dir, num_threads=1) as session,
+            pytest.raises(AlignmentError),
+        ):
+            session.infer(np.ones(32, dtype=np.float32), 16_000)
+        assert not factory._cache
+
+
+def test_cuda_cache_cleanup_failure_is_fatal(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from flexaligner.errors import RuntimeRecoveryError
+
+    runtime, model_dir = _installed_runtime(monkeypatch, tmp_path)
+    runtime.cuda_available, runtime.cuda_count = True, 1
+    factory = LocalHuggingFaceInferenceFactory()
+    factory.configure_device(Device.CUDA)
+
+    def broken_cleanup() -> None:
+        raise RuntimeError("allocator failed")
+
+    monkeypatch.setattr(sys.modules["torch"].cuda, "empty_cache", broken_cleanup)
+    with (
+        pytest.raises(RuntimeRecoveryError, match="allocator"),
+        factory.batch_session(),
+        factory.chunker_session(model_dir, num_threads=1),
+    ):
+        pass
+    assert factory._active_kind is None
+    assert not factory._cache
+
+
+def test_cache_capacity_is_one_resource_per_stage(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _, model_dir = _installed_runtime(monkeypatch, tmp_path)
+    second_dir = tmp_path / "second-model"
+    second_dir.mkdir()
+    factory = LocalHuggingFaceInferenceFactory()
+    with factory.batch_session():
+        for path in [model_dir, second_dir, model_dir]:
+            with factory.chunker_session(path, num_threads=1):
+                pass
+            assert len(factory._cache) == 1
+    assert factory.load_counts == {"chunker": 3, "aligner": 0}
+
+
+def test_batch_owner_excludes_sessions_from_other_threads(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import threading
+
+    _, model_dir = _installed_runtime(monkeypatch, tmp_path)
+    factory = LocalHuggingFaceInferenceFactory()
+    errors: list[BaseException] = []
+
+    def other_thread() -> None:
+        try:
+            with factory.chunker_session(model_dir, num_threads=1):
+                raise AssertionError("session should not open")
+        except BaseException as exc:
+            errors.append(exc)
+
+    with factory.batch_session():
+        thread = threading.Thread(target=other_thread)
+        thread.start()
+        thread.join(timeout=5)
+        assert not thread.is_alive()
+    assert len(errors) == 1
+    assert isinstance(errors[0], ModelValidationError)
+    assert factory.load_counts == {"chunker": 0, "aligner": 0}

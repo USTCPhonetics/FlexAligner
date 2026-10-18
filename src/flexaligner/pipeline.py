@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import math
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import replace
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -118,6 +119,7 @@ class AlignmentPipeline:
     ) -> None:
         self._inference_factory = inference_factory
         self._closed = False
+        self.resolved_device: str | None = None
 
     def align(
         self,
@@ -209,6 +211,12 @@ class AlignmentPipeline:
                 require_wav_container=options.audio_policy is AudioPolicy.AUTO_RESAMPLE,
             )
         utterance_id = request.utterance_id or request.audio_path.stem or "utterance"
+        requested_device = (
+            f"cuda:{options.device_index}"
+            if options.device is Device.CUDA
+            else options.device.value
+        )
+        options = self._configure_device(options)
 
         try:
             chunks, word_spans = self._run_chunker(
@@ -281,7 +289,36 @@ class AlignmentPipeline:
             metadata_path=request.output.chunk_metadata_path,
             metadata=(metadata if request.output.chunk_metadata_path is not None else None),
         )
-        return replace(prepared_result, output_sha256=output_sha256)
+        return replace(
+            prepared_result,
+            output_sha256=output_sha256,
+            provenance=replace(prepared_result.provenance, requested_device=requested_device),
+        )
+
+    def _configure_device(self, options: AlignmentOptions) -> AlignmentOptions:
+        factory = self._get_inference_factory()
+        configure = getattr(factory, "configure_device", None)
+        if callable(configure):
+            device, index = configure(options.device, options.device_index)
+        elif options.device in {Device.CPU, Device.AUTO}:
+            # Existing injected CPU-only factories retain their original port.
+            device, index = Device.CPU, None
+        else:
+            raise ConfigurationError("This inference factory does not support CUDA")
+        self.resolved_device = f"cuda:{index}" if device is Device.CUDA else "cpu"
+        return replace(options, device=device, device_index=0 if index is None else index)
+
+    @contextmanager
+    def batch_session(self, options: AlignmentOptions) -> Iterator[None]:
+        self._ensure_open()
+        self._configure_device(options)
+        factory = self._get_inference_factory()
+        batch = getattr(factory, "batch_session", None)
+        if callable(batch):
+            with batch():
+                yield
+        else:
+            yield
 
     def _run_chunker(
         self,
@@ -455,8 +492,8 @@ def _validate_pipeline_contracts(
         raise ConfigurationError("lexicon_path must be a pathlib.Path or None")
     if not isinstance(options, AlignmentOptions):
         raise ConfigurationError("options must be AlignmentOptions")
-    if options.language not in {Language.EN, Language.ZH} or options.device is not Device.CPU:
-        raise ConfigurationError("Pipeline accepts only the guarded English/Mandarin CPU profiles")
+    if options.language not in {Language.EN, Language.ZH} or options.device is Device.MPS:
+        raise ConfigurationError("Pipeline accepts English/Mandarin on auto, CPU or CUDA")
     if lexicon_path is None and not (
         options.language is Language.ZH and has_validated_system_dictionary(models)
     ):
@@ -1012,6 +1049,7 @@ def _public_result(
             language=options.language,
             device=options.device,
             model_fingerprints=(),
+            device_index=options.device_index if options.device is Device.CUDA else None,
         ),
         pronunciation_notices=pronunciation_notices,
     )

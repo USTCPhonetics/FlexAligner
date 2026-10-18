@@ -113,15 +113,13 @@ _CAPABILITIES = (
     ),
     Capability(
         id=CapabilityId.GPU,
-        status=CapabilityStatus.PLACEHOLDER,
-        summary="CUDA or MPS inference backend.",
-        reason="Only a future GPU boundary is declared.",
+        status=CapabilityStatus.AVAILABLE,
+        summary="Optional NVIDIA CUDA inference; auto selects GPU 0 or falls back to CPU.",
     ),
     Capability(
         id=CapabilityId.BATCH,
-        status=CapabilityStatus.PLACEHOLDER,
-        summary="Batch alignment orchestration.",
-        reason="Batch execution is outside the first implementation milestone.",
+        status=CapabilityStatus.AVAILABLE,
+        summary="Sequential corpus alignment with model reuse and per-file outcomes.",
     ),
     Capability(
         id=CapabilityId.WEB,

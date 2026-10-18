@@ -22,6 +22,8 @@ from .contracts import (
     AlignmentRequest,
     AlignmentResult,
     AudioPolicy,
+    BatchItemResult,
+    BatchReport,
     CalibrationMode,
     ChunkResult,
     Device,
@@ -59,6 +61,7 @@ from .errors import (
     OutputValidationError,
     PronunciationGenerationError,
     ResourceLimitError,
+    RuntimeRecoveryError,
     UnreachableAlignmentError,
 )
 
@@ -70,6 +73,8 @@ __all__ = [
     "ArtifactExistsError",
     "AudioFormatError",
     "AudioPolicy",
+    "BatchItemResult",
+    "BatchReport",
     "CalibrationMode",
     "Capability",
     "CapabilityId",
@@ -103,6 +108,7 @@ __all__ = [
     "ResourceLimitError",
     "ResourceLimits",
     "RunProvenance",
+    "RuntimeRecoveryError",
     "Score",
     "ScoreKind",
     "TextGridOutput",

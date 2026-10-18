@@ -16,6 +16,7 @@ from flexaligner import (
     AlignmentOptions,
     AlignmentRequest,
     AlignmentResult,
+    Device,
     FlexAligner,
     Language,
     LocalModelBundle,
@@ -138,6 +139,7 @@ def _run_case(
         models=models,
         lexicon_path=lexicon_path,
         options=AlignmentOptions(
+            device=Device.CPU,
             language=Language.ZH,
             pronunciation_mode=pronunciation_mode,
             num_threads=1,

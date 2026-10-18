@@ -57,6 +57,7 @@ def test_required_record_field_names(public_api: ModuleType) -> None:
         "AlignmentOptions": {
             "language",
             "device",
+            "device_index",
             "algorithm_profile",
             "num_threads",
             "audio_policy",

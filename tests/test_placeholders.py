@@ -98,7 +98,6 @@ def test_arbitrary_mandarin_dictionary_cannot_satisfy_lexicon_contract(
 @pytest.mark.parametrize(
     ("field_name", "future_names", "capability_id"),
     [
-        ("device", ("gpu", "cuda"), "device.gpu"),
         (
             "model_resolution",
             ("auto_download", "remote", "download"),
@@ -131,15 +130,12 @@ def test_future_alignment_options_fail_before_core_or_input_io(
     assert not request.output.path.exists()
 
 
-def test_align_batch_fails_without_consuming_iterable(
+def test_align_batch_validates_global_config_before_consuming_iterable(
     public_api: ModuleType, lazy_engine_and_request: tuple[Any, Any]
 ) -> None:
     engine, _request = lazy_engine_and_request
-    _assert_feature_error(
-        public_api,
-        "alignment.batch",
-        lambda: engine.align_batch(ExplodingIterable()),
-    )
+    with pytest.raises(public_api.ConfigurationError, match="Batch model or dictionary"):
+        engine.align_batch(ExplodingIterable())
 
 
 def test_engine_capabilities_match_root_report(

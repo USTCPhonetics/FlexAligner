@@ -1,4 +1,4 @@
-"""Offline, CPU-only Hugging Face CTC inference adapter.
+"""Offline Hugging Face CTC inference with exclusive CPU/CUDA model sessions.
 
 The optional inference dependencies are deliberately imported only while a
 session context is being entered.  Importing :mod:`flexaligner` therefore does
@@ -14,17 +14,41 @@ import threading
 import traceback
 from collections.abc import Iterator, Mapping
 from contextlib import AbstractContextManager, contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType, ModuleType
 from typing import Any, cast
 
 import numpy as np
 
-from flexaligner.errors import AlignmentError, ModelCompatibilityError, ModelValidationError
+from flexaligner.contracts import Device
+from flexaligner.errors import (
+    AlignmentError,
+    ConfigurationError,
+    ModelCompatibilityError,
+    ModelValidationError,
+    ResourceLimitError,
+    RuntimeRecoveryError,
+)
 from flexaligner.ports import CtcPosterior, CtcSessionPort, Float32Array
 
 _TARGET_SAMPLE_RATE = 16_000
 _ALIGNER_NOMINAL_STRIDE_SAMPLES = 160
+
+
+@dataclass
+class _LocalCtcResource:
+    """Validated CPU-owned resources; never exposed directly to callers."""
+
+    kind: str
+    torch_module: ModuleType
+    processor: Any
+    tokenizer: Any
+    model: Any
+    vocabulary: Mapping[str, int]
+    model_vocab_size: int
+    sample_rate: int
+    pad_token: str | None
 
 
 class _LocalCtcSession:
@@ -32,26 +56,20 @@ class _LocalCtcSession:
 
     def __init__(
         self,
-        *,
-        kind: str,
-        torch_module: ModuleType,
-        processor: Any,
-        tokenizer: Any,
-        model: Any,
-        vocabulary: Mapping[str, int],
-        model_vocab_size: int,
-        sample_rate: int,
-        pad_token: str | None,
+        resource: _LocalCtcResource,
+        device: str,
     ) -> None:
-        self._kind = kind
-        self._torch: ModuleType | None = torch_module
-        self._processor: Any | None = processor
-        self._tokenizer: Any | None = tokenizer
-        self._model: Any | None = model
-        self._vocabulary: Mapping[str, int] | None = MappingProxyType(dict(vocabulary))
-        self._model_vocab_size: int | None = model_vocab_size
-        self._sample_rate: int | None = sample_rate
-        self._pad_token = pad_token
+        self._kind = resource.kind
+        self._torch: ModuleType | None = resource.torch_module
+        self._processor: Any | None = resource.processor
+        self._tokenizer: Any | None = resource.tokenizer
+        self._model: Any | None = resource.model
+        self._vocabulary: Mapping[str, int] | None = resource.vocabulary
+        self._model_vocab_size: int | None = resource.model_vocab_size
+        self._sample_rate: int | None = resource.sample_rate
+        self._pad_token = resource.pad_token
+        self._device = device
+        self.failed = False
 
     def _require_open(self) -> None:
         if self._model is None or self._processor is None or self._torch is None:
@@ -84,6 +102,22 @@ class _LocalCtcSession:
         return self._pad_token
 
     def infer(self, audio: Float32Array, sample_rate: int) -> CtcPosterior:
+        """Do not let saved inference exceptions keep tensors or models alive."""
+
+        try:
+            return self._infer(audio, sample_rate)
+        except BaseException as exc:
+            self.failed = True
+            oom = _is_cuda_oom(exc, self._torch) and self._device.startswith("cuda")
+            _clear_exception_traceback_frames(exc)
+            if oom:
+                raise ResourceLimitError(
+                    "CUDA out of memory during inference.",
+                    context={"session": self._kind, "device": self._device},
+                ) from exc
+            raise
+
+    def _infer(self, audio: Float32Array, sample_rate: int) -> CtcPosterior:
         """Return finite contiguous float32 log probabilities for one waveform."""
 
         self._require_open()
@@ -121,7 +155,7 @@ class _LocalCtcSession:
         torch_module = cast(Any, self._torch)
         processor = cast(Any, self._processor)
         model = cast(Any, self._model)
-        cpu = torch_module.device("cpu")
+        device = torch_module.device(self._device)
         waveform = np.ascontiguousarray(audio, dtype=np.float32)
 
         try:
@@ -144,13 +178,13 @@ class _LocalCtcSession:
                             "Processor input names must be strings.",
                             context={"session": self._kind},
                         )
-                    move_to_cpu = getattr(value, "to", None)
-                    if not callable(move_to_cpu):
+                    move_to_device = getattr(value, "to", None)
+                    if not callable(move_to_device):
                         raise AlignmentError(
-                            "Processor returned a value that cannot be moved to CPU.",
+                            "Processor returned a value that cannot be moved to the inference device.",
                             context={"session": self._kind, "input": name},
                         )
-                    inputs[name] = move_to_cpu(cpu)
+                    inputs[name] = move_to_device(device)
 
                 output = model(**inputs)
                 logits = getattr(output, "logits", None)
@@ -259,6 +293,79 @@ class LocalHuggingFaceInferenceFactory:
         self._state_lock = threading.Lock()
         self._active_kind: str | None = None
         self._active_session: _LocalCtcSession | None = None
+        self._device = Device.CPU
+        self._device_index: int | None = None
+        self._requested_device: tuple[Device, int] | None = None
+        self._batch_owner: int | None = None
+        self._cache: dict[tuple[str, Path], _LocalCtcResource] = {}
+        self.load_counts: dict[str, int] = {"chunker": 0, "aligner": 0}
+
+    def configure_device(
+        self,
+        device: Device,
+        device_index: int = 0,
+    ) -> tuple[Device, int | None]:
+        """Resolve one execution device before entering model sessions."""
+
+        with self._state_lock:
+            if self._active_kind is not None:
+                raise ModelValidationError("Cannot configure devices during an active session.")
+            if not isinstance(device, Device) or type(device_index) is not int or device_index < 0:
+                raise ConfigurationError("Invalid device or device index.")
+            if device in (Device.CPU, Device.AUTO) and device_index != 0:
+                raise ConfigurationError("CPU and AUTO only accept device_index=0.")
+            if device is Device.MPS:
+                raise ConfigurationError("MPS inference is unsupported.")
+            if self._batch_owner is not None:
+                if self._batch_owner != threading.get_ident():
+                    raise ModelValidationError("Cannot configure another thread's active batch.")
+                if self._requested_device == (device, device_index):
+                    return self._device, self._device_index
+                if self._requested_device is not None or self._cache:
+                    raise ModelValidationError("Cannot change devices during an active batch.")
+            if device is Device.CPU:
+                resolved, index = Device.CPU, None
+            else:
+                try:
+                    torch_api = cast(Any, importlib.import_module("torch"))
+                    available = bool(torch_api.cuda.is_available())
+                    count = int(torch_api.cuda.device_count()) if available else 0
+                except Exception as exc:
+                    _clear_exception_traceback_frames(exc)
+                    raise ModelValidationError(
+                        "Device resolution requires the 'inference' optional dependencies.",
+                        context={"extra": "inference"},
+                    ) from exc
+                finally:
+                    torch_api = None
+                if device is Device.CUDA and (not available or device_index >= count):
+                    raise ConfigurationError(
+                        "Requested CUDA device is unavailable.",
+                        context={"device_index": device_index, "cuda_device_count": count},
+                    )
+                resolved = Device.CUDA if available and count > 0 else Device.CPU
+                index = device_index if resolved is Device.CUDA else None
+            self._device, self._device_index = resolved, index
+            self._requested_device = device, device_index
+            return resolved, index
+
+    @contextmanager
+    def batch_session(self) -> Iterator[None]:
+        """Cache two CPU model bundles only within an exclusive batch."""
+
+        with self._state_lock:
+            if self._batch_owner is not None or self._active_kind is not None:
+                raise ModelValidationError(
+                    "Batch and single-file inference contexts may not overlap."
+                )
+            self._batch_owner = threading.get_ident()
+        try:
+            yield
+        finally:
+            with self._state_lock:
+                self._cache.clear()
+                self._batch_owner = None
+            gc.collect()
 
     def chunker_session(
         self,
@@ -285,7 +392,11 @@ class LocalHuggingFaceInferenceFactory:
         num_threads: int,
     ) -> Iterator[CtcSessionPort]:
         session: _LocalCtcSession | None = None
+        resource: _LocalCtcResource | None = None
         claimed = False
+        cache_key: tuple[str, Path] | None = None
+        on_cuda = False
+        restore_required = False
         try:
             if type(num_threads) is not int or num_threads <= 0:
                 raise ModelValidationError(
@@ -306,7 +417,9 @@ class LocalHuggingFaceInferenceFactory:
                 )
 
             with self._state_lock:
-                if self._active_kind is not None:
+                if self._active_kind is not None or (
+                    self._batch_owner is not None and self._batch_owner != threading.get_ident()
+                ):
                     raise ModelValidationError(
                         "Chunker and Aligner sessions may not overlap.",
                         context={"active_session": self._active_kind, "requested_session": kind},
@@ -314,19 +427,31 @@ class LocalHuggingFaceInferenceFactory:
                 self._active_kind = kind
                 claimed = True
 
+            cache_key = (kind, path.resolve())
+            resource = self._cache.get(cache_key)
+
             try:
-                torch_module, transformers_module = _import_inference_dependencies(kind)
-                try:
-                    torch_api = cast(Any, torch_module)
-                    torch_api.set_num_threads(num_threads)
-                    session = _load_local_session(
-                        kind=kind,
-                        model_dir=path,
-                        torch_module=torch_module,
-                        transformers_module=transformers_module,
-                    )
-                finally:
-                    del torch_api, torch_module, transformers_module
+                if resource is None:
+                    torch_module, transformers_module = _import_inference_dependencies(kind)
+                    try:
+                        cast(Any, torch_module).set_num_threads(num_threads)
+                        resource = _load_local_session(
+                            kind=kind,
+                            model_dir=path,
+                            torch_module=torch_module,
+                            transformers_module=transformers_module,
+                        )
+                        self.load_counts[kind] += 1
+                    finally:
+                        del torch_module, transformers_module
+                    if self._batch_owner is not None:
+                        # Bound host RAM to one validated bundle per stage.
+                        for previous_key in tuple(self._cache):
+                            if previous_key[0] == kind and previous_key != cache_key:
+                                del self._cache[previous_key]
+                        self._cache[cache_key] = resource
+                else:
+                    cast(Any, resource.torch_module).set_num_threads(num_threads)
             except (ModelValidationError, ModelCompatibilityError, AlignmentError):
                 raise
             except Exception as exc:
@@ -334,18 +459,98 @@ class LocalHuggingFaceInferenceFactory:
                     f"Could not initialize the local {kind} model.",
                     context={"session": kind, "model_dir": str(model_dir)},
                 ) from exc
+            on_cuda = self._device is Device.CUDA
+            device_spec = f"cuda:{self._device_index}" if on_cuda else "cpu"
+            if on_cuda:
+                restore_required = True
+                try:
+                    _move_resource(resource, device_spec)
+                except Exception as exc:
+                    self._cache.pop(cache_key, None)
+                    _clear_exception_traceback_frames(exc)
+                    if _is_cuda_oom(exc, resource.torch_module):
+                        raise ResourceLimitError(
+                            "CUDA out of memory while moving the model.",
+                            context={"session": kind, "device": device_spec},
+                        ) from exc
+                    raise ModelValidationError(
+                        "Could not move the model to CUDA.",
+                        context={"session": kind, "device": device_spec},
+                    ) from exc
+            session = _LocalCtcSession(resource, device_spec)
             with self._state_lock:
                 self._active_session = session
             yield session
+        except BaseException as exc:
+            if cache_key is not None:
+                self._cache.pop(cache_key, None)
+            _clear_exception_traceback_frames(exc)
+            raise
         finally:
+            recovery_error: RuntimeRecoveryError | None = None
+            if restore_required and resource is not None:
+                try:
+                    _move_resource(resource, "cpu")
+                except Exception as exc:
+                    self._cache.clear()
+                    _clear_exception_traceback_frames(exc)
+                    recovery_error = RuntimeRecoveryError(
+                        "Could not restore the CUDA model to CPU; stop this batch.",
+                        context={"session": kind, "reason": str(exc)},
+                    )
             if session is not None:
+                if session.failed and cache_key is not None:
+                    self._cache.pop(cache_key, None)
                 session.close()
             session = None
+            # Clear locals before collection: the generator can remain in a saved traceback.
+            torch_for_cleanup = resource.torch_module if resource is not None and on_cuda else None
+            resource = None
+            gc.collect()
+            if torch_for_cleanup is not None:
+                try:
+                    _empty_cuda_cache(torch_for_cleanup, self._device_index)
+                except Exception as exc:
+                    self._cache.clear()
+                    _clear_exception_traceback_frames(exc)
+                    recovery_error = RuntimeRecoveryError(
+                        "Could not clear the CUDA allocator; stop this batch.",
+                        context={"session": kind, "reason": str(exc)},
+                    )
+                finally:
+                    torch_for_cleanup = None
             if claimed:
                 with self._state_lock:
                     self._active_session = None
                     self._active_kind = None
-            gc.collect()
+            if recovery_error is not None:
+                raise recovery_error from None
+
+
+def _move_resource(resource: _LocalCtcResource, device_spec: str) -> None:
+    torch_api = cast(Any, resource.torch_module)
+    moved = resource.model.to(torch_api.device(device_spec))
+    if moved is not None:
+        resource.model = moved
+
+
+def _empty_cuda_cache(torch_module: ModuleType, device_index: int | None) -> None:
+    cuda = cast(Any, torch_module).cuda
+    with cuda.device(device_index):
+        cuda.empty_cache()
+
+
+def _is_cuda_oom(exc: BaseException, torch_module: ModuleType | None) -> bool:
+    cuda = getattr(torch_module, "cuda", None)
+    oom_type = getattr(cuda, "OutOfMemoryError", None)
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(oom_type, type) and isinstance(current, oom_type):
+            return True
+        current = current.__cause__ if current.__cause__ is not None else current.__context__
+    return False
 
 
 def _import_inference_dependencies(kind: str) -> tuple[ModuleType, ModuleType]:
@@ -366,7 +571,7 @@ def _load_local_session(
     model_dir: Path,
     torch_module: ModuleType,
     transformers_module: ModuleType,
-) -> _LocalCtcSession:
+) -> _LocalCtcResource:
     """Load a session without retaining heavyweight locals on failure tracebacks."""
 
     try:
@@ -400,7 +605,7 @@ def _load_local_session_impl(
     model_dir: Path,
     torch_module: ModuleType,
     transformers_module: ModuleType,
-) -> _LocalCtcSession:
+) -> _LocalCtcResource:
     transformers_api = cast(Any, transformers_module)
     torch_api = cast(Any, torch_module)
     load_options = {"local_files_only": True, "trust_remote_code": False}
@@ -477,13 +682,13 @@ def _load_local_session_impl(
             context={"session": kind},
         )
 
-    return _LocalCtcSession(
+    return _LocalCtcResource(
         kind=kind,
         torch_module=torch_module,
         processor=processor,
         tokenizer=tokenizer,
         model=model,
-        vocabulary=vocabulary,
+        vocabulary=MappingProxyType(dict(vocabulary)),
         model_vocab_size=model_vocab_size,
         sample_rate=sample_rate,
         pad_token=pad_token,

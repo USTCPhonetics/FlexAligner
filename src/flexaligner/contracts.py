@@ -24,6 +24,7 @@ class Language(StringEnum):
 
 
 class Device(StringEnum):
+    AUTO = "auto"
     CPU = "cpu"
     CUDA = "cuda"
     MPS = "mps"
@@ -168,7 +169,8 @@ class AlignmentRequest:
 @dataclass(frozen=True, slots=True, kw_only=True)
 class AlignmentOptions:
     language: Language = Language.EN
-    device: Device = Device.CPU
+    device: Device = Device.AUTO
+    device_index: int = 0
     algorithm_profile: str = "auto"
     num_threads: int = 1
     audio_policy: AudioPolicy = AudioPolicy.STRICT_PCM16_WAV
@@ -198,6 +200,10 @@ class AlignmentOptions:
                 )
         if not isinstance(self.algorithm_profile, str) or not self.algorithm_profile.strip():
             raise ConfigurationError("algorithm_profile must not be empty")
+        if type(self.device_index) is not int or self.device_index < 0:
+            raise ConfigurationError("device_index must be a non-negative integer")
+        if self.device in {Device.AUTO, Device.CPU} and self.device_index != 0:
+            raise ConfigurationError("Only an explicit CUDA device accepts a nonzero index")
         if isinstance(self.num_threads, bool) or not isinstance(self.num_threads, int):
             raise ConfigurationError(
                 "num_threads must be an integer",
@@ -255,6 +261,8 @@ class RunProvenance:
     language: Language
     device: Device
     model_fingerprints: tuple[tuple[str, str], ...] = ()
+    device_index: int | None = None
+    requested_device: str = "cpu"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -292,3 +300,32 @@ class AlignmentResult:
     provenance: RunProvenance
     pronunciation_notices: tuple[PronunciationNotice, ...] = ()
     schema_version: str = "1"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class BatchItemResult:
+    """One serializable outcome; failures never retain exception objects."""
+
+    audio_path: Path
+    output_path: Path
+    status: str
+    elapsed_seconds: float
+    result: AlignmentResult | None = None
+    error: dict[str, object] | None = None
+    device: str | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class BatchReport:
+    items: tuple[BatchItemResult, ...]
+
+    @property
+    def counts(self) -> dict[str, int]:
+        return {
+            status: sum(item.status == status for item in self.items)
+            for status in ("succeeded", "failed", "skipped", "conflict")
+        }
+
+    @property
+    def exit_code(self) -> int:
+        return int(bool(self.counts["failed"] or self.counts["conflict"]))
